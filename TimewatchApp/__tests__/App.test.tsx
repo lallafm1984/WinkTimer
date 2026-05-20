@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import ReactTestRenderer from 'react-test-renderer';
 import App from '../App';
 
@@ -18,4 +19,15 @@ test('renders correctly', async () => {
   } finally {
     warn.mockRestore();
   }
+});
+
+test('mounts safe area provider at the app root', async () => {
+  let renderer: ReactTestRenderer.ReactTestRenderer | undefined;
+
+  await ReactTestRenderer.act(() => {
+    renderer = ReactTestRenderer.create(<App />);
+  });
+
+  expect(renderer).toBeDefined();
+  expect(renderer!.root.findByType(SafeAreaProvider)).toBeTruthy();
 });
