@@ -47,7 +47,7 @@ export function startTimer(
 }
 
 export function tickTimer(state: TimerState, nowMs: number, sensitivity: Sensitivity = 'normal'): TimerState {
-  const advanced = accumulate(state, nowMs);
+  const advanced = accumulate(state, nowMs, sensitivity);
   return resolveLookGrace(advanced, nowMs, sensitivity);
 }
 
@@ -56,7 +56,7 @@ export function applyDetection(
   reading: DetectionReading,
   sensitivity: Sensitivity = 'normal',
 ): TimerState {
-  const advanced = accumulate(state, reading.atMs);
+  const advanced = accumulate(state, reading.atMs, sensitivity);
   const next: TimerState = {
     ...advanced,
     detectionStatus: reading.status,
@@ -84,7 +84,7 @@ export function endTimer(
   sensitivity: Sensitivity,
   normalTimerMode: boolean,
 ): SessionSummary {
-  const finalState = accumulate(state, nowMs);
+  const finalState = accumulate(state, nowMs, sensitivity);
   const startedAtMs = finalState.startedAtMs ?? nowMs;
   const targetEnabled = finalState.targetDurationMs !== null;
 
@@ -105,7 +105,7 @@ export function endTimer(
   };
 }
 
-function accumulate(state: TimerState, nowMs: number): TimerState {
+function accumulate(state: TimerState, nowMs: number, sensitivity: Sensitivity = 'normal'): TimerState {
   if (nowMs <= state.lastUpdatedAtMs) {
     return state;
   }
@@ -119,6 +119,23 @@ function accumulate(state: TimerState, nowMs: number): TimerState {
     return {
       ...state,
       lookPausedDurationMs: state.lookPausedDurationMs + deltaMs,
+      lastUpdatedAtMs: nowMs,
+    };
+  }
+
+  if (state.detectionStatus === 'looking' && state.lookingStartedAtMs !== null) {
+    const pauseStartedAtMs = state.lookingStartedAtMs + sensitivityConfig[sensitivity].lookGraceMs;
+    const focusUntilMs = Math.min(nowMs, pauseStartedAtMs);
+    const focusDeltaMs = Math.max(0, focusUntilMs - state.lastUpdatedAtMs);
+    const pauseDeltaMs = Math.max(0, nowMs - Math.max(state.lastUpdatedAtMs, pauseStartedAtMs));
+    const becameLookPaused = !state.isLookPaused && nowMs >= pauseStartedAtMs;
+
+    return {
+      ...state,
+      focusDurationMs: state.focusDurationMs + focusDeltaMs,
+      lookPausedDurationMs: state.lookPausedDurationMs + pauseDeltaMs,
+      lookPauseCount: state.lookPauseCount + (becameLookPaused ? 1 : 0),
+      isLookPaused: state.isLookPaused || becameLookPaused,
       lastUpdatedAtMs: nowMs,
     };
   }
