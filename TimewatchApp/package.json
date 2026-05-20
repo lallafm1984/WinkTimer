@@ -7,7 +7,7 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest --config package.json"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.0.3",
@@ -39,5 +39,14 @@
   },
   "engines": {
     "node": ">= 22.11.0"
+  },
+  "jest": {
+    "preset": "react-native",
+    "setupFiles": [
+      "./jest.setup.ts"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules[\\\\/](?!((jest-)?react-native|@react-native(-community)?|@react-native-async-storage)[\\\\/])"
+    ]
   }
 }
