@@ -13,6 +13,7 @@ function AppStateHarness() {
       <Text>{`screen:${app.screen}`}</Text>
       <Text>{`phase:${app.timer.phase}`}</Text>
       <Text>{`focus:${app.timer.focusDurationMs}`}</Text>
+      <Text>{`mode:${app.statusDisplayMode}`}</Text>
       <Text>{`summaryFocus:${app.lastSummary?.focusDurationMs ?? 'none'}`}</Text>
       <Text>{`error:${app.finishError ?? 'none'}`}</Text>
       <Text
@@ -127,6 +128,14 @@ describe('AppStateProvider app flow', () => {
     });
   }
 
+  it('defaults to minimal status display mode', async () => {
+    const renderer = await renderHarness();
+
+    expect(hasText(renderer, 'mode:minimal')).toBe(true);
+
+    await unmount(renderer);
+  });
+
   it('pauses an active timer on app background even when another screen is selected', async () => {
     const renderer = await renderHarness();
 
@@ -182,6 +191,30 @@ describe('AppStateProvider app flow', () => {
     expect(
       hasText(renderer, 'error:세션 저장에 실패했습니다. 다시 시도해 주세요.'),
     ).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('completes the session when save succeeds even if refreshing the session list fails', async () => {
+    const renderer = await renderHarness();
+
+    jest
+      .spyOn(AsyncStorage, 'getItem')
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('list unavailable'));
+
+    nowMs = 1000;
+    await press(renderer, 'go-timer');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 61000;
+    await press(renderer, 'finish');
+
+    expect(hasText(renderer, 'screen:summary')).toBe(true);
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(hasText(renderer, 'summaryFocus:60000')).toBe(true);
+    expect(hasText(renderer, 'error:none')).toBe(true);
 
     await unmount(renderer);
   });

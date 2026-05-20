@@ -1,9 +1,11 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {PrimaryButton} from '../components/PrimaryButton';
 import {formatDuration} from '../components/TimerDisplay';
 import type {SessionSummary} from '../domain/session';
 import {useAppState} from '../state/AppState';
+
+const HISTORY_ERROR_MESSAGE = '기록을 불러오지 못했습니다.';
 
 function formatSessionDate(value: string) {
   return new Date(value).toLocaleString('ko-KR', {
@@ -33,15 +35,24 @@ function HistoryItem({session}: {session: SessionSummary}) {
 
 export function HistoryScreen() {
   const {repository, sessions, setScreen, setSessions} = useAppState();
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    repository.list().then(items => {
-      if (isMounted) {
-        setSessions(items);
-      }
-    });
+    setHistoryError(null);
+    repository
+      .list()
+      .then(items => {
+        if (isMounted) {
+          setSessions(items);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setHistoryError(HISTORY_ERROR_MESSAGE);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -62,7 +73,14 @@ export function HistoryScreen() {
         />
       </View>
 
-      {sessions.length === 0 ? (
+      {historyError ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>{historyError}</Text>
+          <Text style={styles.emptyCopy}>
+            잠시 후 다시 돌아오면 저장된 기록을 다시 불러옵니다.
+          </Text>
+        </View>
+      ) : sessions.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>아직 저장된 세션이 없습니다.</Text>
           <Text style={styles.emptyCopy}>

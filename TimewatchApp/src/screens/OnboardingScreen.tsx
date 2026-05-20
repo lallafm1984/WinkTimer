@@ -23,6 +23,9 @@ export function OnboardingScreen() {
           세션 기록은 이 기기에만 저장됩니다.
         </Text>
         <Text style={styles.copy}>
+          영상, 이미지, 얼굴 데이터는 저장하거나 업로드하지 않습니다.
+        </Text>
+        <Text style={styles.copy}>
           카메라 기능이 연결되더라도 시선 처리와 타이머 판단은 기기 안에서
           다루는 방향으로 설계합니다.
         </Text>

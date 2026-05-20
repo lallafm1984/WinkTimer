@@ -113,7 +113,7 @@ export function AppStateProvider({children}: AppStateProviderProps) {
   const [lastSummary, setLastSummary] = useState<SessionSummary | null>(null);
   const [sensitivity, setSensitivity] = useState<Sensitivity>('normal');
   const [statusDisplayMode, setStatusDisplayMode] =
-    useState<StatusDisplayMode>('text');
+    useState<StatusDisplayMode>('minimal');
   const [normalTimerMode, setNormalTimerMode] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
   const [isFinishingSession, setIsFinishingSession] = useState(false);
@@ -265,12 +265,16 @@ export function AppStateProvider({children}: AppStateProviderProps) {
 
     try {
       await repository.save(summary);
-      const nextSessions = await repository.list();
 
-      setSessions(nextSessions);
       setLastSummary(summary);
       setTimer(markTimerEnded(timerForSummary, now, activeSensitivity));
       setScreen('summary');
+      repository
+        .list()
+        .then(nextSessions => {
+          setSessions(nextSessions);
+        })
+        .catch(() => undefined);
     } catch {
       setFinishError(FINISH_ERROR_MESSAGE);
     } finally {
