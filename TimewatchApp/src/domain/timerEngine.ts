@@ -33,15 +33,14 @@ export function createInitialTimerState(nowMs: number): TimerState {
 }
 
 export function startTimer(
-  state: TimerState,
+  _state: TimerState,
   nowMs: number,
   targetDurationMs: number | undefined,
 ): TimerState {
   return {
-    ...state,
+    ...createInitialTimerState(nowMs),
     phase: 'active',
     startedAtMs: nowMs,
-    lastUpdatedAtMs: nowMs,
     targetDurationMs: targetDurationMs ?? null,
   };
 }
@@ -56,6 +55,10 @@ export function applyDetection(
   reading: DetectionReading,
   sensitivity: Sensitivity = 'normal',
 ): TimerState {
+  if (state.phase !== 'active') {
+    return state;
+  }
+
   const advanced = accumulate(state, reading.atMs, sensitivity);
   const next: TimerState = {
     ...advanced,
@@ -68,6 +71,23 @@ export function applyDetection(
   };
 
   return resolveLookGrace(next, reading.atMs, sensitivity);
+}
+
+export function markTimerEnded(
+  state: TimerState,
+  nowMs: number,
+  sensitivity: Sensitivity = 'normal',
+): TimerState {
+  const finalState = accumulate(state, nowMs, sensitivity);
+
+  return {
+    ...finalState,
+    phase: 'ended',
+    lastUpdatedAtMs: nowMs,
+    detectionStatus: 'unknown',
+    lookingStartedAtMs: null,
+    isLookPaused: false,
+  };
 }
 
 export function pauseTimer(state: TimerState, nowMs: number, sensitivity: Sensitivity = 'normal'): TimerState {

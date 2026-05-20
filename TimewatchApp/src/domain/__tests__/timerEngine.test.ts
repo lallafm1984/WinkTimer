@@ -2,6 +2,7 @@ import {
   applyDetection,
   createInitialTimerState,
   endTimer,
+  markTimerEnded,
   pauseTimer,
   resumeTimer,
   startTimer,
@@ -100,6 +101,53 @@ describe('timerEngine', () => {
     expect(state.focusDurationMs).toBe(500);
     expect(state.lookPausedDurationMs).toBe(0);
     expect(state.lookPauseCount).toBe(0);
+  });
+
+  it('ignores detection before a timer starts', () => {
+    const idle = createInitialTimerState(0);
+
+    const next = applyDetection(idle, {status: 'looking', confidence: 0.95, atMs: 5000});
+
+    expect(next).toEqual(idle);
+  });
+
+  it('starts a fresh session without stale counters or detection', () => {
+    let prior = createInitialTimerState(0);
+    prior = startTimer(prior, 0, 25 * 60 * 1000);
+    prior = applyDetection(prior, {status: 'notLooking', confidence: 0.9, atMs: 0});
+    prior = tickTimer(prior, 2000);
+    prior = applyDetection(prior, {status: 'looking', confidence: 0.95, atMs: 2000});
+    prior = tickTimer(prior, 4000);
+
+    const next = startTimer(prior, 10000, undefined);
+
+    expect(next).toEqual({
+      phase: 'active',
+      startedAtMs: 10000,
+      lastUpdatedAtMs: 10000,
+      focusDurationMs: 0,
+      lookPausedDurationMs: 0,
+      lookPauseCount: 0,
+      targetDurationMs: null,
+      detectionStatus: 'unknown',
+      lookingStartedAtMs: null,
+      isLookPaused: false,
+    });
+  });
+
+  it('marks an active timer ended through a public state transition', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 1000, undefined);
+    state = applyDetection(state, {status: 'notLooking', confidence: 0.9, atMs: 1000});
+
+    const ended = markTimerEnded(state, 61000);
+
+    expect(ended.phase).toBe('ended');
+    expect(ended.lastUpdatedAtMs).toBe(61000);
+    expect(ended.focusDurationMs).toBe(60000);
+    expect(ended.detectionStatus).toBe('unknown');
+    expect(ended.lookingStartedAtMs).toBeNull();
+    expect(ended.isLookPaused).toBe(false);
   });
 
   it('creates a session summary when ended', () => {
