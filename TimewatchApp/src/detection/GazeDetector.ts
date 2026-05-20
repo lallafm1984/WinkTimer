@@ -10,25 +10,30 @@ export type GazeDetector = {
   start(): Promise<void>;
   stop(): Promise<void>;
   getLatestReading(nowMs: number): DetectionReading;
+};
+
+export type MockGazeDetector = GazeDetector & {
   setMockStatus(status: DetectionStatus): void;
 };
 
-const NativeGazeDetection = NativeModules.NativeGazeDetection as
-  | NativeGazeDetectionModule
-  | undefined;
+function getNativeGazeDetection(): NativeGazeDetectionModule | undefined {
+  return NativeModules.NativeGazeDetection as
+    | NativeGazeDetectionModule
+    | undefined;
+}
 
 export function createMockGazeDetector(
   initialStatus: DetectionStatus = 'unknown',
-): GazeDetector {
+): MockGazeDetector {
   let status = initialStatus;
 
   return {
     async start() {
-      await NativeGazeDetection?.start?.();
+      await getNativeGazeDetection()?.start?.();
     },
 
     async stop() {
-      await NativeGazeDetection?.stop?.();
+      await getNativeGazeDetection()?.stop?.();
     },
 
     getLatestReading(nowMs) {
