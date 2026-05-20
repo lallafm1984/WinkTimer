@@ -164,22 +164,18 @@ function accumulate(state: TimerState, nowMs: number, sensitivity: Sensitivity =
 
   if (state.detectionStatus === 'looking' && state.lookingStartedAtMs !== null) {
     const pauseStartedAtMs = state.lookingStartedAtMs + sensitivityConfig[sensitivity].lookGraceMs;
-    const focusUntilMs = Math.min(nowMs, pauseStartedAtMs);
-    const focusDeltaMs = Math.max(0, focusUntilMs - state.lastUpdatedAtMs);
-    const pauseDeltaMs = Math.max(0, nowMs - Math.max(state.lastUpdatedAtMs, pauseStartedAtMs));
     const becameLookPaused = !state.isLookPaused && nowMs >= pauseStartedAtMs;
 
     return {
       ...state,
-      focusDurationMs: state.focusDurationMs + focusDeltaMs,
-      lookPausedDurationMs: state.lookPausedDurationMs + pauseDeltaMs,
+      lookPausedDurationMs: state.lookPausedDurationMs + deltaMs,
       lookPauseCount: state.lookPauseCount + (becameLookPaused ? 1 : 0),
       isLookPaused: state.isLookPaused || becameLookPaused,
       lastUpdatedAtMs: nowMs,
     };
   }
 
-  if (state.detectionStatus === 'notLooking' || state.detectionStatus === 'looking') {
+  if (state.detectionStatus === 'notLooking') {
     return {
       ...state,
       focusDurationMs: state.focusDurationMs + deltaMs,

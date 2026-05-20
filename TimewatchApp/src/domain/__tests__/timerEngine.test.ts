@@ -43,14 +43,26 @@ describe('timerEngine', () => {
     expect(state.isLookPaused).toBe(true);
   });
 
+  it('counts looking during grace as paused time without marking sustained look pause', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 1000, undefined);
+    state = applyDetection(state, {status: 'looking', confidence: 0.95, atMs: 1000});
+    state = tickTimer(state, 1500);
+
+    expect(state.focusDurationMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(500);
+    expect(state.lookPauseCount).toBe(0);
+    expect(state.isLookPaused).toBe(false);
+  });
+
   it('moves sustained looking time after grace into look pause duration', () => {
     let state = createInitialTimerState(0);
     state = startTimer(state, 1000, undefined);
     state = applyDetection(state, {status: 'looking', confidence: 0.95, atMs: 1000});
     state = tickTimer(state, 5000);
 
-    expect(state.focusDurationMs).toBe(1200);
-    expect(state.lookPausedDurationMs).toBe(2800);
+    expect(state.focusDurationMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(4000);
     expect(state.lookPauseCount).toBe(1);
     expect(state.isLookPaused).toBe(true);
   });
@@ -62,8 +74,8 @@ describe('timerEngine', () => {
     state = pauseTimer(state, 800, 'strict');
 
     expect(state.phase).toBe('manualPaused');
-    expect(state.focusDurationMs).toBe(600);
-    expect(state.lookPausedDurationMs).toBe(200);
+    expect(state.focusDurationMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(800);
     expect(state.lookPauseCount).toBe(1);
     expect(state.isLookPaused).toBe(true);
   });
@@ -98,8 +110,8 @@ describe('timerEngine', () => {
 
     state = tickTimer(state, 7000);
 
-    expect(state.focusDurationMs).toBe(500);
-    expect(state.lookPausedDurationMs).toBe(0);
+    expect(state.focusDurationMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(500);
     expect(state.lookPauseCount).toBe(0);
   });
 
