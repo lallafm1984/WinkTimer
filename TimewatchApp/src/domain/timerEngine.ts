@@ -70,12 +70,27 @@ export function applyDetection(
   return resolveLookGrace(next, reading.atMs, sensitivity);
 }
 
-export function pauseTimer(state: TimerState, nowMs: number): TimerState {
-  return {...accumulate(state, nowMs), phase: 'manualPaused', lastUpdatedAtMs: nowMs};
+export function pauseTimer(state: TimerState, nowMs: number, sensitivity: Sensitivity = 'normal'): TimerState {
+  if (state.phase !== 'active') {
+    return state;
+  }
+
+  return {...accumulate(state, nowMs, sensitivity), phase: 'manualPaused', lastUpdatedAtMs: nowMs};
 }
 
 export function resumeTimer(state: TimerState, nowMs: number): TimerState {
-  return {...state, phase: 'active', lastUpdatedAtMs: nowMs};
+  if (state.phase !== 'manualPaused') {
+    return state;
+  }
+
+  return {
+    ...state,
+    phase: 'active',
+    lastUpdatedAtMs: nowMs,
+    detectionStatus: 'unknown',
+    lookingStartedAtMs: null,
+    isLookPaused: false,
+  };
 }
 
 export function endTimer(
