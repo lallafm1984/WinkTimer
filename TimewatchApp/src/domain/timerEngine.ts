@@ -59,6 +59,10 @@ export function applyDetection(
     return state;
   }
 
+  if (reading.atMs < state.lastUpdatedAtMs) {
+    return state;
+  }
+
   const advanced = accumulate(state, reading.atMs, sensitivity);
   const next: TimerState = {
     ...advanced,

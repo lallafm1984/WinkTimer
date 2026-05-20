@@ -150,6 +150,30 @@ describe('timerEngine', () => {
     expect(ended.isLookPaused).toBe(false);
   });
 
+  it('ignores stale looking readings after newer notLooking state', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetection(state, {status: 'notLooking', confidence: 0.9, atMs: 1000});
+    state = tickTimer(state, 5000);
+
+    const current = state;
+    const next = applyDetection(state, {status: 'looking', confidence: 0.95, atMs: 2000});
+
+    expect(next).toEqual(current);
+  });
+
+  it('ignores stale notLooking readings after newer look-paused state', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetection(state, {status: 'looking', confidence: 0.95, atMs: 0});
+    state = tickTimer(state, 5000);
+
+    const current = state;
+    const next = applyDetection(state, {status: 'notLooking', confidence: 0.9, atMs: 1000});
+
+    expect(next).toEqual(current);
+  });
+
   it('creates a session summary when ended', () => {
     let state = createInitialTimerState(0);
     state = startTimer(state, 1000, 25 * 60 * 1000);
