@@ -37,4 +37,38 @@ describe('sessionRepository', () => {
 
     await expect(repository.list()).resolves.toEqual([]);
   });
+
+  it('clears storage and returns an empty list when stored JSON is invalid', async () => {
+    const repository = createSessionRepository();
+
+    await AsyncStorage.setItem('@timewatch:sessions:v1', 'not-json');
+
+    await expect(repository.list()).resolves.toEqual([]);
+    await expect(AsyncStorage.getItem('@timewatch:sessions:v1')).resolves.toBeNull();
+  });
+
+  it('clears storage and returns an empty list when stored JSON is not an array', async () => {
+    const repository = createSessionRepository();
+
+    await AsyncStorage.setItem('@timewatch:sessions:v1', JSON.stringify({sessions: [session]}));
+
+    await expect(repository.list()).resolves.toEqual([]);
+    await expect(AsyncStorage.getItem('@timewatch:sessions:v1')).resolves.toBeNull();
+  });
+
+  it('replaces an existing session with the same id', async () => {
+    const repository = createSessionRepository();
+    const replacement: SessionSummary = {
+      ...session,
+      focusDurationMs: 1500000,
+      lookPausedDurationMs: 0,
+      lookPauseCount: 0,
+      targetCompleted: true,
+    };
+
+    await repository.save(session);
+    await repository.save(replacement);
+
+    await expect(repository.list()).resolves.toEqual([replacement]);
+  });
 });

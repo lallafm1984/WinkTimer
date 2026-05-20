@@ -8,20 +8,34 @@ export type SessionRepository = {
   save(session: SessionSummary): Promise<void>;
 };
 
+async function readSessions(): Promise<SessionSummary[]> {
+  const raw = await AsyncStorage.getItem(SESSION_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      await AsyncStorage.removeItem(SESSION_KEY);
+      return [];
+    }
+
+    return parsed.sort((a, b) => b.startedAt.localeCompare(a.startedAt)) as SessionSummary[];
+  } catch {
+    await AsyncStorage.removeItem(SESSION_KEY);
+    return [];
+  }
+}
+
 export function createSessionRepository(): SessionRepository {
   return {
     async list() {
-      const raw = await AsyncStorage.getItem(SESSION_KEY);
-      if (!raw) {
-        return [];
-      }
-
-      const parsed = JSON.parse(raw) as SessionSummary[];
-      return parsed.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+      return readSessions();
     },
 
     async save(session) {
-      const existing = await this.list();
+      const existing = await readSessions();
       const withoutDuplicate = existing.filter(item => item.id !== session.id);
       const next = [session, ...withoutDuplicate].sort((a, b) =>
         b.startedAt.localeCompare(a.startedAt),
