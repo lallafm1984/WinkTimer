@@ -1,25 +1,10 @@
-import React, {useCallback, useEffect, useRef} from 'react';
-import {
-  AppState as NativeAppState,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React from 'react';
+import {StyleSheet, Text, View} from 'react-native';
 import {PrimaryButton} from '../components/PrimaryButton';
 import {StatusIndicator} from '../components/StatusIndicator';
 import {TimerDisplay} from '../components/TimerDisplay';
 import type {DetectionStatus} from '../domain/detection';
-import {
-  applyDetection,
-  createInitialTimerState,
-  endTimer,
-  markTimerEnded,
-  pauseTimer,
-  resumeTimer,
-  startTimer,
-  tickTimer,
-  type TimerState,
-} from '../domain/timerEngine';
+import type {TimerState} from '../domain/timerEngine';
 import {useAppState} from '../state/AppState';
 
 function canFinishTimer(timer: TimerState) {
@@ -43,141 +28,27 @@ function phaseLabel(phase: TimerState['phase']) {
 export function TimerScreen() {
   const {
     timer,
-    setTimer,
     setScreen,
-    setSessions,
-    setLastSummary,
-    sensitivity,
     statusDisplayMode,
-    normalTimerMode,
-    repository,
-    gazeDetector,
+    finishError,
+    isFinishingSession,
+    startTimerSession,
+    resumeTimerSession,
+    finishTimerSession,
+    setMockDetectionStatus,
   } = useAppState();
-  const timerRef = useRef(timer);
-  const sensitivityRef = useRef(sensitivity);
-  const normalTimerModeRef = useRef(normalTimerMode);
-  const gazeDetectorRef = useRef(gazeDetector);
-  const isFinishingRef = useRef(false);
 
-  useEffect(() => {
-    timerRef.current = timer;
-  }, [timer]);
+  const handleFinish = () => {
+    finishTimerSession();
+  };
 
-  useEffect(() => {
-    sensitivityRef.current = sensitivity;
-  }, [sensitivity]);
-
-  useEffect(() => {
-    normalTimerModeRef.current = normalTimerMode;
-  }, [normalTimerMode]);
-
-  useEffect(() => {
-    gazeDetectorRef.current = gazeDetector;
-  }, [gazeDetector]);
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      const now = Date.now();
-
-      setTimer(current => {
-        if (current.phase !== 'active') {
-          return current;
-        }
-
-        const activeSensitivity = sensitivityRef.current;
-        const reading = normalTimerModeRef.current
-          ? {status: 'notLooking' as const, confidence: 1, atMs: now}
-          : gazeDetectorRef.current.getLatestReading(now);
-
-        return tickTimer(
-          applyDetection(current, reading, activeSensitivity),
-          now,
-          activeSensitivity,
-        );
-      });
-    }, 500);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [setTimer]);
-
-  useEffect(() => {
-    const subscription = NativeAppState.addEventListener('change', nextState => {
-      if (nextState !== 'active') {
-        const now = Date.now();
-
-        setTimer(current =>
-          pauseTimer(current, now, sensitivityRef.current),
-        );
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [setTimer]);
-
-  const handleStart = useCallback(() => {
-    const now = Date.now();
-    setTimer(startTimer(createInitialTimerState(now), now, undefined));
-  }, [setTimer]);
-
-  const handleResume = useCallback(() => {
-    const now = Date.now();
-    setTimer(current => resumeTimer(current, now));
-  }, [setTimer]);
-
-  const handleFinish = useCallback(async () => {
-    const currentTimer = timerRef.current;
-
-    if (!canFinishTimer(currentTimer) || isFinishingRef.current) {
-      return;
-    }
-
-    isFinishingRef.current = true;
-
-    const now = Date.now();
-    const activeSensitivity = sensitivityRef.current;
-    const summary = endTimer(
-      currentTimer,
-      now,
-      activeSensitivity,
-      normalTimerModeRef.current,
-    );
-
-    setTimer(markTimerEnded(currentTimer, now, activeSensitivity));
-
-    try {
-      await repository.save(summary);
-      const nextSessions = await repository.list();
-
-      setSessions(nextSessions);
-      setLastSummary(summary);
-      setScreen('summary');
-    } finally {
-      isFinishingRef.current = false;
-    }
-  }, [repository, setLastSummary, setScreen, setSessions, setTimer]);
-
-  const handleMockStatus = useCallback(
-    (status: DetectionStatus) => {
-      const now = Date.now();
-
-      gazeDetector.setMockStatus(status);
-      setTimer(current =>
-        applyDetection(
-          current,
-          {status, confidence: status === 'unknown' ? 0 : 1, atMs: now},
-          sensitivityRef.current,
-        ),
-      );
-    },
-    [gazeDetector, setTimer],
-  );
+  const handleMockStatus = (status: DetectionStatus) => {
+    setMockDetectionStatus(status);
+  };
 
   const startLabel = timer.phase === 'ended' ? '새 타이머 시작' : '시작';
   const showResume = timer.phase === 'manualPaused';
+  const canFinish = canFinishTimer(timer) && !isFinishingSession;
 
   return (
     <View style={styles.container}>
@@ -207,23 +78,24 @@ export function TimerScreen() {
           mode={statusDisplayMode}
           status={timer.detectionStatus}
         />
+        {finishError ? <Text style={styles.error}>{finishError}</Text> : null}
       </View>
 
       <View style={styles.controls}>
         {showResume ? (
-          <PrimaryButton label="계속" onPress={handleResume} />
+          <PrimaryButton label="계속" onPress={resumeTimerSession} />
         ) : (
           <PrimaryButton
             label={startLabel}
-            onPress={handleStart}
-            disabled={timer.phase === 'active'}
+            onPress={startTimerSession}
+            disabled={timer.phase === 'active' || isFinishingSession}
           />
         )}
         <PrimaryButton
-          label="종료"
+          label={isFinishingSession ? '저장 중' : '종료'}
           onPress={handleFinish}
           variant="secondary"
-          disabled={!canFinishTimer(timer)}
+          disabled={!canFinish}
         />
       </View>
 
@@ -279,6 +151,13 @@ const styles = StyleSheet.create({
     color: '#5D6A62',
     fontSize: 15,
     fontWeight: '700',
+  },
+  error: {
+    color: '#B42318',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   controls: {
     gap: 10,
