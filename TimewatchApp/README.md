@@ -1,97 +1,119 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# TimewatchApp
 
-# Getting Started
+React Native Android app for Timewatch.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Quick Mobile Check
 
-## Step 1: Start Metro
+Use a real Android phone for camera permission and native module checks. Expo Go is not used for the main development loop because the gaze detection path needs the app's own native Android shell.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+Prerequisites:
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- Android Studio / Android SDK installed
+- USB debugging enabled on the phone
+- Phone authorized in `adb devices`
+
+Run from this directory:
 
 ```sh
-# Using npm
+npm run mobile:android
+```
+
+The command:
+
+- starts Metro in the background if it is not already running
+- runs `adb reverse tcp:8081 tcp:8081`
+- builds `app-debug.apk`
+- installs it on the connected phone
+- grants `android.permission.CAMERA`
+- launches `com.timewatchapp/.MainActivity`
+
+## Standalone APK
+
+Use this when you want to install an APK file directly without Metro.
+
+```sh
+npm run apk:android
+```
+
+The standalone APK is copied here:
+
+```text
+dist/android/timewatch-release.apk
+```
+
+The debug APK at `android/app/build/outputs/apk/debug/app-debug.apk` is for React Native development and expects Metro or `adb reverse tcp:8081 tcp:8081`. If you install that file directly, Android can show `Unable to load script`.
+
+## Focus Wink Design System
+
+The main timer screen uses the Arcade Ghost Console theme:
+
+- Timer format: `MM:SS.CS`
+- Default mode shown first: Look Pause
+- Mascot states: ready, looking, left wink, right wink, wink hold, reset flash
+- Single wink mode is marked as Beta in the UI
+
+Design-system verification:
+
+```powershell
+npm test -- --runInBand
+npx tsc --noEmit
+npm run lint
+npm run apk:android
+```
+
+## Gaze Detection
+
+Watch mode uses the Android front camera through CameraX and ML Kit Face Detection. When the timer starts, Android asks for camera permission. Allow it, then look toward the screen to trigger the watch pause behavior.
+
+The current detection is face-orientation based. It treats a front-facing face as `looking` even when the eyes are closed, and no face or a turned-away face as `notLooking`.
+
+Head tilt is allowed up to about 45 degrees, so tilting your head left or right should still pause the timer as long as your face remains directed toward the front camera.
+
+If both eyes are detectable and exactly one eye stays closed for 3 seconds, the active timer resets once. Keeping the same eye closed will not repeatedly reset the timer; open both eyes or move out of the one-eye-closed state before triggering it again.
+
+If more than one Android device is connected:
+
+```sh
+npm run mobile:android -- -DeviceId <adb-device-id>
+```
+
+If you need to restart Metro:
+
+```sh
+npm run mobile:android -- -RestartMetro
+```
+
+If the install fails because an app with a different signature is already installed:
+
+```sh
+npm run mobile:android -- -CleanInstall
+```
+
+## Manual Commands
+
+Start Metro:
+
+```sh
 npm start
-
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+Build and run with the React Native CLI:
 
 ```sh
-# Using npm
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+## Verification
 
 ```sh
-bundle install
+npm test -- --runInBand
+npx tsc --noEmit
+npm run lint
 ```
 
-Then, and every time you update your native dependencies, run:
+For Android build verification:
 
 ```sh
-bundle exec pod install
+cd android
+.\gradlew.bat :app:assembleDebug
 ```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.

@@ -1,5 +1,6 @@
 import {
   applyDetection,
+  applyDetectionWithBehavior,
   createInitialTimerState,
   endTimer,
   markTimerEnded,
@@ -7,6 +8,7 @@ import {
   resumeTimer,
   startTimer,
   tickTimer,
+  tickTimerWithBehavior,
 } from '../timerEngine';
 
 describe('timerEngine', () => {
@@ -65,6 +67,133 @@ describe('timerEngine', () => {
     expect(state.lookPausedDurationMs).toBe(4000);
     expect(state.lookPauseCount).toBe(1);
     expect(state.isLookPaused).toBe(true);
+  });
+
+  it('keeps counting focus while looking when look pause is disabled', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetectionWithBehavior(
+      state,
+      {status: 'looking', confidence: 0.95, atMs: 0},
+      'normal',
+      {lookPauseEnabled: false},
+    );
+    state = tickTimerWithBehavior(state, 3000, 'normal', {
+      lookPauseEnabled: false,
+    });
+
+    expect(state.focusDurationMs).toBe(3000);
+    expect(state.lookPausedDurationMs).toBe(0);
+    expect(state.lookPauseCount).toBe(0);
+    expect(state.isLookPaused).toBe(false);
+  });
+
+  it('treats both closed eyes as looking without resetting the timer', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 1000, undefined);
+    state = applyDetection(state, {
+      status: 'looking',
+      confidence: 0.8,
+      eyeState: 'bothClosed',
+      atMs: 1000,
+    });
+    state = tickTimer(state, 5000);
+
+    expect(state.focusDurationMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(4000);
+    expect(state.lookPauseCount).toBe(1);
+    expect(state.isLookPaused).toBe(true);
+  });
+
+  it('does not reset from holding one eye closed while look-paused', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 1000, 60000);
+    state = applyDetection(state, {
+      status: 'notLooking',
+      confidence: 1,
+      eyeState: 'bothOpen',
+      atMs: 1000,
+    });
+    state = tickTimer(state, 2500);
+    state = applyDetection(state, {
+      status: 'looking',
+      confidence: 0.8,
+      eyeState: 'oneEyeClosed',
+      atMs: 2500,
+    });
+    state = tickTimer(state, 5499);
+
+    expect(state.focusDurationMs).toBe(1500);
+    expect(state.lookPausedDurationMs).toBe(2999);
+
+    state = tickTimer(state, 5500);
+
+    expect(state.phase).toBe('active');
+    expect(state.startedAtMs).toBe(1000);
+    expect(state.lastUpdatedAtMs).toBe(5500);
+    expect(state.focusDurationMs).toBe(1500);
+    expect(state.lookPausedDurationMs).toBe(3000);
+    expect(state.lookPauseCount).toBe(1);
+    expect(state.targetDurationMs).toBe(60000);
+    expect(state.detectionStatus).toBe('looking');
+    expect(state.eyeState).toBe('oneEyeClosed');
+    expect(state.oneEyeClosedStartedAtMs).toBe(2500);
+  });
+
+  it('keeps running while the same one-eye closure continues', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetection(state, {
+      status: 'looking',
+      confidence: 0.8,
+      eyeState: 'oneEyeClosed',
+      atMs: 0,
+    });
+    state = tickTimer(state, 3000);
+    state = tickTimer(state, 8000);
+
+    expect(state.phase).toBe('active');
+    expect(state.startedAtMs).toBe(0);
+    expect(state.focusDurationMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(8000);
+  });
+
+  it('does not reset from a wink hold while the timer is still running', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetectionWithBehavior(
+      state,
+      {
+        status: 'looking',
+        confidence: 0.8,
+        eyeState: 'oneEyeClosed',
+        atMs: 0,
+      },
+      'normal',
+      {lookPauseEnabled: false},
+    );
+    state = tickTimerWithBehavior(state, 4000, 'normal', {
+      lookPauseEnabled: false,
+    });
+
+    expect(state.phase).toBe('active');
+    expect(state.startedAtMs).toBe(0);
+    expect(state.focusDurationMs).toBe(4000);
+  });
+
+  it('does not reset when eye state is unknown even if looking lasts 3 seconds', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetection(state, {
+      status: 'looking',
+      confidence: 0.8,
+      eyeState: 'unknown',
+      atMs: 0,
+    });
+    state = tickTimer(state, 3000);
+
+    expect(state.startedAtMs).toBe(0);
+    expect(state.lookPausedDurationMs).toBe(3000);
   });
 
   it('uses requested sensitivity when pausing during sustained looking', () => {
@@ -142,8 +271,14 @@ describe('timerEngine', () => {
       lookPauseCount: 0,
       targetDurationMs: null,
       detectionStatus: 'unknown',
+      eyeState: 'unknown',
+      winkSide: null,
+      recentWinkSide: null,
+      recentWinkAtMs: null,
       lookingStartedAtMs: null,
       isLookPaused: false,
+      oneEyeClosedStartedAtMs: null,
+      oneEyeResetArmed: true,
     });
   });
 

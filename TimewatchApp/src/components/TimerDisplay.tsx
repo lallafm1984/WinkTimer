@@ -1,5 +1,6 @@
 import React from 'react';
 import {StyleSheet, Text} from 'react-native';
+import {arcadeTheme} from '../theme/arcadeTheme';
 
 type TimerDisplayProps = {
   durationMs: number;
@@ -7,34 +8,39 @@ type TimerDisplayProps = {
 };
 
 export function formatDuration(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const clampedMs = Math.max(0, Math.floor(durationMs));
+  const totalSeconds = Math.floor(clampedMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
+  const centiseconds = Math.floor((clampedMs % 1000) / 10);
 
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(
+    2,
+    '0',
+  )}.${String(centiseconds).padStart(2, '0')}`;
 }
 
 export function TimerDisplay({durationMs, size = 'large'}: TimerDisplayProps) {
+  const formatted = formatDuration(durationMs);
+
   return (
     <Text
-      accessibilityLabel={`타이머 ${formatDuration(durationMs)}`}
+      adjustsFontSizeToFit
+      minimumFontScale={0.72}
+      numberOfLines={1}
+      accessibilityLabel={`타이머 ${formatted}`}
       style={[styles.time, size === 'medium' && styles.medium]}>
-      {formatDuration(durationMs)}
+      {formatted}
     </Text>
   );
 }
 
 const styles = StyleSheet.create({
   time: {
-    color: '#121A14',
-    fontSize: 64,
-    fontVariant: ['tabular-nums'],
-    fontWeight: '800',
-    letterSpacing: 0,
-    lineHeight: 74,
+    ...arcadeTheme.typography.timerLarge,
+    textAlign: 'center',
   },
   medium: {
-    fontSize: 32,
-    lineHeight: 40,
+    ...arcadeTheme.typography.timerMedium,
   },
 });

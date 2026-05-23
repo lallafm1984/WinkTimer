@@ -1,8 +1,18 @@
-import type {DetectionReading, DetectionStatus, Sensitivity} from './detection';
+import type {
+  DetectionReading,
+  DetectionStatus,
+  EyeState,
+  Sensitivity,
+  WinkSide,
+} from './detection';
 import {sensitivityConfig} from './detection';
 import {createSessionId, type SessionSummary} from './session';
 
 export type TimerPhase = 'idle' | 'active' | 'manualPaused' | 'ended';
+
+export type TimerBehavior = {
+  lookPauseEnabled: boolean;
+};
 
 export type TimerState = {
   phase: TimerPhase;
@@ -13,8 +23,14 @@ export type TimerState = {
   lookPauseCount: number;
   targetDurationMs: number | null;
   detectionStatus: DetectionStatus;
+  eyeState: EyeState;
+  winkSide: WinkSide | null;
+  recentWinkSide: WinkSide | null;
+  recentWinkAtMs: number | null;
   lookingStartedAtMs: number | null;
   isLookPaused: boolean;
+  oneEyeClosedStartedAtMs: number | null;
+  oneEyeResetArmed: boolean;
 };
 
 export function createInitialTimerState(nowMs: number): TimerState {
@@ -27,8 +43,14 @@ export function createInitialTimerState(nowMs: number): TimerState {
     lookPauseCount: 0,
     targetDurationMs: null,
     detectionStatus: 'unknown',
+    eyeState: 'unknown',
+    winkSide: null,
+    recentWinkSide: null,
+    recentWinkAtMs: null,
     lookingStartedAtMs: null,
     isLookPaused: false,
+    oneEyeClosedStartedAtMs: null,
+    oneEyeResetArmed: true,
   };
 }
 
@@ -46,14 +68,37 @@ export function startTimer(
 }
 
 export function tickTimer(state: TimerState, nowMs: number, sensitivity: Sensitivity = 'normal'): TimerState {
-  const advanced = accumulate(state, nowMs, sensitivity);
-  return resolveLookGrace(advanced, nowMs, sensitivity);
+  return tickTimerWithBehavior(state, nowMs, sensitivity, DEFAULT_TIMER_BEHAVIOR);
+}
+
+export function tickTimerWithBehavior(
+  state: TimerState,
+  nowMs: number,
+  sensitivity: Sensitivity = 'normal',
+  behavior: TimerBehavior = DEFAULT_TIMER_BEHAVIOR,
+): TimerState {
+  const advanced = accumulate(state, nowMs, sensitivity, behavior);
+  return resolveLookGrace(advanced, nowMs, sensitivity, behavior);
 }
 
 export function applyDetection(
   state: TimerState,
   reading: DetectionReading,
   sensitivity: Sensitivity = 'normal',
+): TimerState {
+  return applyDetectionWithBehavior(
+    state,
+    reading,
+    sensitivity,
+    DEFAULT_TIMER_BEHAVIOR,
+  );
+}
+
+export function applyDetectionWithBehavior(
+  state: TimerState,
+  reading: DetectionReading,
+  sensitivity: Sensitivity = 'normal',
+  behavior: TimerBehavior = DEFAULT_TIMER_BEHAVIOR,
 ): TimerState {
   if (state.phase !== 'active') {
     return state;
@@ -63,18 +108,28 @@ export function applyDetection(
     return state;
   }
 
-  const advanced = accumulate(state, reading.atMs, sensitivity);
+  const advanced = accumulate(state, reading.atMs, sensitivity, behavior);
+  const eyeState = reading.eyeState ?? 'unknown';
+  const tracksOneEyeClosure =
+    reading.status === 'looking' && eyeState === 'oneEyeClosed';
+  const tracksLookPause = behavior.lookPauseEnabled && reading.status === 'looking';
   const next: TimerState = {
     ...advanced,
     detectionStatus: reading.status,
+    eyeState,
+    winkSide: tracksOneEyeClosure ? reading.winkSide ?? null : null,
     lookingStartedAtMs:
-      reading.status === 'looking'
+      tracksLookPause
         ? advanced.lookingStartedAtMs ?? reading.atMs
         : null,
-    isLookPaused: reading.status === 'looking' ? advanced.isLookPaused : false,
+    isLookPaused: tracksLookPause ? advanced.isLookPaused : false,
+    oneEyeClosedStartedAtMs: tracksOneEyeClosure
+      ? advanced.oneEyeClosedStartedAtMs ?? reading.atMs
+      : null,
+    oneEyeResetArmed: tracksOneEyeClosure ? advanced.oneEyeResetArmed : true,
   };
 
-  return resolveLookGrace(next, reading.atMs, sensitivity);
+  return resolveLookGrace(next, reading.atMs, sensitivity, behavior);
 }
 
 export function markTimerEnded(
@@ -89,8 +144,14 @@ export function markTimerEnded(
     phase: 'ended',
     lastUpdatedAtMs: nowMs,
     detectionStatus: 'unknown',
+    eyeState: 'unknown',
+    winkSide: null,
+    recentWinkSide: null,
+    recentWinkAtMs: null,
     lookingStartedAtMs: null,
     isLookPaused: false,
+    oneEyeClosedStartedAtMs: null,
+    oneEyeResetArmed: true,
   };
 }
 
@@ -112,8 +173,29 @@ export function resumeTimer(state: TimerState, nowMs: number): TimerState {
     phase: 'active',
     lastUpdatedAtMs: nowMs,
     detectionStatus: 'unknown',
+    eyeState: 'unknown',
+    winkSide: null,
+    recentWinkSide: null,
+    recentWinkAtMs: null,
     lookingStartedAtMs: null,
     isLookPaused: false,
+    oneEyeClosedStartedAtMs: null,
+    oneEyeResetArmed: true,
+  };
+}
+
+export function resetTimer(state: TimerState, nowMs: number): TimerState {
+  return {
+    ...createInitialTimerState(nowMs),
+    targetDurationMs: state.targetDurationMs,
+    detectionStatus: state.detectionStatus,
+    eyeState: state.eyeState,
+    winkSide: state.eyeState === 'oneEyeClosed' ? state.winkSide : null,
+    recentWinkSide: state.recentWinkSide,
+    recentWinkAtMs: state.recentWinkAtMs,
+    oneEyeClosedStartedAtMs:
+      state.eyeState === 'oneEyeClosed' ? nowMs : null,
+    oneEyeResetArmed: state.eyeState !== 'oneEyeClosed',
   };
 }
 
@@ -144,7 +226,12 @@ export function endTimer(
   };
 }
 
-function accumulate(state: TimerState, nowMs: number, sensitivity: Sensitivity = 'normal'): TimerState {
+function accumulate(
+  state: TimerState,
+  nowMs: number,
+  sensitivity: Sensitivity = 'normal',
+  behavior: TimerBehavior = DEFAULT_TIMER_BEHAVIOR,
+): TimerState {
   if (nowMs <= state.lastUpdatedAtMs) {
     return state;
   }
@@ -162,7 +249,11 @@ function accumulate(state: TimerState, nowMs: number, sensitivity: Sensitivity =
     };
   }
 
-  if (state.detectionStatus === 'looking' && state.lookingStartedAtMs !== null) {
+  if (
+    behavior.lookPauseEnabled &&
+    state.detectionStatus === 'looking' &&
+    state.lookingStartedAtMs !== null
+  ) {
     const pauseStartedAtMs = state.lookingStartedAtMs + sensitivityConfig[sensitivity].lookGraceMs;
     const becameLookPaused = !state.isLookPaused && nowMs >= pauseStartedAtMs;
 
@@ -175,7 +266,10 @@ function accumulate(state: TimerState, nowMs: number, sensitivity: Sensitivity =
     };
   }
 
-  if (state.detectionStatus === 'notLooking') {
+  if (
+    state.detectionStatus === 'notLooking' ||
+    (!behavior.lookPauseEnabled && state.detectionStatus === 'looking')
+  ) {
     return {
       ...state,
       focusDurationMs: state.focusDurationMs + deltaMs,
@@ -186,7 +280,16 @@ function accumulate(state: TimerState, nowMs: number, sensitivity: Sensitivity =
   return {...state, lastUpdatedAtMs: nowMs};
 }
 
-function resolveLookGrace(state: TimerState, nowMs: number, sensitivity: Sensitivity): TimerState {
+function resolveLookGrace(
+  state: TimerState,
+  nowMs: number,
+  sensitivity: Sensitivity,
+  behavior: TimerBehavior = DEFAULT_TIMER_BEHAVIOR,
+): TimerState {
+  if (!behavior.lookPauseEnabled) {
+    return state;
+  }
+
   if (state.phase !== 'active' || state.detectionStatus !== 'looking' || state.lookingStartedAtMs === null) {
     return state;
   }
@@ -204,3 +307,7 @@ function resolveLookGrace(state: TimerState, nowMs: number, sensitivity: Sensiti
     lookPauseCount: state.lookPauseCount + 1,
   };
 }
+
+const DEFAULT_TIMER_BEHAVIOR: TimerBehavior = {
+  lookPauseEnabled: true,
+};

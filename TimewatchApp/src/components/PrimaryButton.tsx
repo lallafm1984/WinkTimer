@@ -12,6 +12,12 @@ type PrimaryButtonProps = {
   onPress: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
+  testID?: string;
+  accessibilityLabel?: string;
+  accessibilityState?: {
+    selected?: boolean;
+    expanded?: boolean;
+  };
   style?: StyleProp<ViewStyle>;
 };
 
@@ -20,13 +26,21 @@ export function PrimaryButton({
   onPress,
   variant = 'primary',
   disabled = false,
+  testID,
+  accessibilityLabel,
+  accessibilityState,
   style,
 }: PrimaryButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityRole="button"
+      accessibilityState={
+        disabled ? {...accessibilityState, disabled} : accessibilityState
+      }
       disabled={disabled}
       onPress={onPress}
+      testID={testID}
       style={({pressed}) => [
         styles.button,
         variant === 'secondary' ? styles.secondary : styles.primary,

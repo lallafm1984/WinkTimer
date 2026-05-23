@@ -7,6 +7,8 @@ import {OnboardingScreen} from './screens/OnboardingScreen';
 import {SessionSummaryScreen} from './screens/SessionSummaryScreen';
 import {SettingsScreen} from './screens/SettingsScreen';
 import {TimerScreen} from './screens/TimerScreen';
+import {preloadMascotImages} from './components/mascotImages';
+import {arcadeTheme} from './theme/arcadeTheme';
 
 function CurrentScreen() {
   const {screen} = useAppState();
@@ -27,6 +29,10 @@ function CurrentScreen() {
 }
 
 export default function App() {
+  React.useEffect(() => {
+    preloadMascotImages().catch(() => undefined);
+  }, []);
+
   return (
     <SafeAreaProvider>
       <AppStateProvider>
@@ -42,6 +48,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7F4',
+    backgroundColor: arcadeTheme.colors.background,
   },
 });

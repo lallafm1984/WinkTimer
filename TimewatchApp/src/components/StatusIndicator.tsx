@@ -1,30 +1,36 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {DetectionStatus, StatusDisplayMode} from '../domain/detection';
+import {arcadeTheme} from '../theme/arcadeTheme';
 
 type StatusIndicatorProps = {
   status: DetectionStatus;
   mode: StatusDisplayMode;
 };
 
-const statusConfig: Record<
-  DetectionStatus,
-  {label: string; color: string; backgroundColor: string}
-> = {
+type StatusConfig = {
+  label: string;
+  color: string;
+  backgroundColor: string;
+};
+
+const ACCESSIBILITY_LABEL_PREFIX = '\uAC10\uC9C0 \uC0C1\uD0DC';
+
+const statusConfig: Record<DetectionStatus, StatusConfig> = {
   notLooking: {
-    label: '집중 중',
-    color: '#1D4D3A',
-    backgroundColor: '#E4F3EA',
+    label: 'FOCUS RUN',
+    color: arcadeTheme.colors.success,
+    backgroundColor: arcadeTheme.colors.panel,
   },
   looking: {
-    label: '화면 봄',
-    color: '#B45309',
-    backgroundColor: '#FFF0D8',
+    label: 'LOOK PAUSE',
+    color: arcadeTheme.colors.warning,
+    backgroundColor: '#FFF7E8',
   },
   unknown: {
-    label: '상태 불명',
-    color: '#667085',
-    backgroundColor: '#EEF1F4',
+    label: 'SCANNING',
+    color: arcadeTheme.colors.mutedInk,
+    backgroundColor: arcadeTheme.colors.panelMuted,
   },
 };
 
@@ -33,7 +39,7 @@ export function StatusIndicator({status, mode}: StatusIndicatorProps) {
 
   return (
     <View
-      accessibilityLabel={`감지 상태: ${config.label}`}
+      accessibilityLabel={`${ACCESSIBILITY_LABEL_PREFIX}: ${config.label}`}
       accessibilityRole="summary"
       style={[
         styles.container,
@@ -41,7 +47,9 @@ export function StatusIndicator({status, mode}: StatusIndicatorProps) {
         {backgroundColor: config.backgroundColor},
       ]}>
       <View style={[styles.dot, {backgroundColor: config.color}]} />
-      {mode === 'text' ? <Text style={styles.label}>{config.label}</Text> : null}
+      {mode === 'text' ? (
+        <Text style={[styles.label, {color: config.color}]}>{config.label}</Text>
+      ) : null}
     </View>
   );
 }
@@ -49,30 +57,30 @@ export function StatusIndicator({status, mode}: StatusIndicatorProps) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
+    borderColor: arcadeTheme.colors.heavyLine,
+    borderWidth: 2,
     flexDirection: 'row',
     justifyContent: 'center',
   },
   minimalContainer: {
-    borderRadius: 14,
+    borderRadius: arcadeTheme.radii.round,
     height: 28,
-    paddingHorizontal: 10,
+    paddingHorizontal: arcadeTheme.spacing.sm,
     width: 44,
   },
   textContainer: {
-    borderRadius: 8,
-    gap: 8,
+    borderRadius: arcadeTheme.radii.control,
+    gap: arcadeTheme.spacing.sm,
     minHeight: 36,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: arcadeTheme.spacing.md,
+    paddingVertical: arcadeTheme.spacing.sm,
   },
   dot: {
-    borderRadius: 5,
+    borderRadius: arcadeTheme.radii.round,
     height: 10,
     width: 10,
   },
   label: {
-    color: '#17201A',
-    fontSize: 14,
-    fontWeight: '700',
+    ...arcadeTheme.typography.label,
   },
 });
