@@ -21,6 +21,8 @@ type NativeGazeDetectionModuleForTest = {
     [number, number, number, number]
   >;
   setWinkDistanceLevel?: jest.Mock<Promise<void>, [number]>;
+  setSmileThreshold?: jest.Mock<Promise<void>, [number]>;
+  setSmileDistanceLevel?: jest.Mock<Promise<void>, [number]>;
   setLookAngleLevel?: jest.Mock<Promise<void>, [number]>;
   setFaceHeightAngleLevel?: jest.Mock<Promise<void>, [number]>;
   setAnalysisResolution?: jest.Mock<Promise<void>, [number, number]>;
@@ -33,6 +35,16 @@ type NativeTimerAlertModuleForTest = {
     Promise<void>,
     [string, boolean, boolean, string, string]
   >;
+  scheduleTimerEndAlert?: jest.Mock<
+    Promise<void>,
+    [number, string, boolean, boolean, string, string]
+  >;
+  cancelScheduledTimerEndAlert?: jest.Mock<Promise<void>, []>;
+  showTimekeepingNotification?: jest.Mock<
+    Promise<void>,
+    [string, number, boolean, boolean, string]
+  >;
+  hideTimekeepingNotification?: jest.Mock<Promise<void>, []>;
   stopTimerEndAlert?: jest.Mock<Promise<void>, []>;
 };
 
@@ -74,6 +86,8 @@ function AppStateHarness() {
       <Text>{`leftGap:${app.winkLeftEyeProbabilityGapThreshold}`}</Text>
       <Text>{`rightGap:${app.winkRightEyeProbabilityGapThreshold}`}</Text>
       <Text>{`winkDistance:${app.winkDistanceLevel}`}</Text>
+      <Text>{`smileThreshold:${app.smileThreshold}`}</Text>
+      <Text>{`smileDistance:${app.smileDistanceLevel}`}</Text>
       <Text>{`lookAngle:${app.lookAngleLevel}`}</Text>
       <Text>{`faceHeightAngle:${app.faceHeightAngleLevel}`}</Text>
       <Text>{`resolution:${app.detectionResolutionLevel}`}</Text>
@@ -204,6 +218,14 @@ function AppStateHarness() {
       </Text>
       <Text
         accessibilityRole="button"
+        accessibilityLabel="look-pause-mode"
+        onPress={() => {
+          app.setTimerModeId('lookPause');
+        }}>
+        look pause
+      </Text>
+      <Text
+        accessibilityRole="button"
         accessibilityLabel="basic-mode"
         onPress={() => {
           app.setTimerModeId('basicTimer');
@@ -225,6 +247,14 @@ function AppStateHarness() {
           app.setTimerModeId('winkControl');
         }}>
         wink control
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="smile-mode"
+        onPress={() => {
+          app.setTimerModeId('smileMode');
+        }}>
+        smile
       </Text>
       <Text
         accessibilityRole="button"
@@ -260,6 +290,22 @@ function AppStateHarness() {
           app.setWinkDistanceLevel(3);
         }}>
         wink distance 3
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="smile-threshold-custom"
+        onPress={() => {
+          app.setSmileThreshold(0.82);
+        }}>
+        smile threshold custom
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="smile-distance-3"
+        onPress={() => {
+          app.setSmileDistanceLevel(3);
+        }}>
+        smile distance 3
       </Text>
       <Text
         accessibilityRole="button"
@@ -458,6 +504,8 @@ describe('AppStateProvider app flow', () => {
       status: 'looking' | 'notLooking' | 'unknown';
       eyeState: 'bothOpen' | 'bothClosed' | 'oneEyeClosed' | 'unknown';
       winkSide?: 'left' | 'right';
+      smileDetected?: boolean;
+      smileProbability?: number;
     },
   ) {
     nowMs = atMs;
@@ -514,9 +562,11 @@ describe('AppStateProvider app flow', () => {
   it('defaults to minimal status display mode', async () => {
     const renderer = await renderHarness();
 
+    expect(hasText(renderer, 'screen:timer')).toBe(true);
     expect(hasText(renderer, 'mode:minimal')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
     expect(hasText(renderer, 'timerTarget:300000')).toBe(true);
+    expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
     expect(hasText(renderer, 'timerAlertVibration:true')).toBe(true);
     expect(hasText(renderer, 'timerAlertSound:true')).toBe(true);
     expect(hasText(renderer, 'timerAlertSoundId:alarm')).toBe(true);
@@ -758,6 +808,8 @@ describe('AppStateProvider app flow', () => {
         winkLeftEyeProbabilityGapThreshold: 0.4,
         winkRightEyeProbabilityGapThreshold: 0.2,
         winkDistanceLevel: 4,
+        smileThreshold: 0.82,
+        smileDistanceLevel: 4,
         lookAngleLevel: 3,
         faceHeightAngleLevel: 1,
         detectionResolutionLevel: 1,
@@ -767,6 +819,8 @@ describe('AppStateProvider app flow', () => {
     );
     const setWinkThresholds = jest.fn().mockResolvedValue(undefined);
     const setWinkDistanceLevel = jest.fn().mockResolvedValue(undefined);
+    const setSmileThreshold = jest.fn().mockResolvedValue(undefined);
+    const setSmileDistanceLevel = jest.fn().mockResolvedValue(undefined);
     const setLookAngleLevel = jest.fn().mockResolvedValue(undefined);
     const setFaceHeightAngleLevel = jest.fn().mockResolvedValue(undefined);
     const setAnalysisResolution = jest.fn().mockResolvedValue(undefined);
@@ -777,6 +831,8 @@ describe('AppStateProvider app flow', () => {
       stop: jest.fn().mockResolvedValue(undefined),
       setWinkThresholds,
       setWinkDistanceLevel,
+      setSmileThreshold,
+      setSmileDistanceLevel,
       setLookAngleLevel,
       setFaceHeightAngleLevel,
       setAnalysisResolution,
@@ -792,7 +848,7 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'normalTimerMode:true')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
     expect(hasText(renderer, 'timerTarget:60000')).toBe(true);
-    expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
     expect(hasText(renderer, 'timerAlertVibration:false')).toBe(true);
     expect(hasText(renderer, 'timerAlertSound:true')).toBe(true);
     expect(
@@ -810,6 +866,8 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'leftGap:0.4')).toBe(true);
     expect(hasText(renderer, 'rightGap:0.2')).toBe(true);
     expect(hasText(renderer, 'winkDistance:5')).toBe(true);
+    expect(hasText(renderer, 'smileThreshold:0.82')).toBe(true);
+    expect(hasText(renderer, 'smileDistance:5')).toBe(true);
     expect(hasText(renderer, 'lookAngle:3')).toBe(true);
     expect(hasText(renderer, 'faceHeightAngle:1')).toBe(true);
     expect(hasText(renderer, 'resolution:1')).toBe(true);
@@ -822,6 +880,8 @@ describe('AppStateProvider app flow', () => {
       0.2,
     );
     expect(setWinkDistanceLevel).toHaveBeenLastCalledWith(5);
+    expect(setSmileThreshold).toHaveBeenLastCalledWith(0.82);
+    expect(setSmileDistanceLevel).toHaveBeenLastCalledWith(5);
     expect(setLookAngleLevel).toHaveBeenLastCalledWith(3);
     expect(setFaceHeightAngleLevel).toHaveBeenLastCalledWith(1);
     expect(setAnalysisResolution).toHaveBeenLastCalledWith(480, 360);
@@ -851,6 +911,8 @@ describe('AppStateProvider app flow', () => {
     await press(renderer, 'timer-alert-long-repeat');
     await press(renderer, 'wink-thresholds-custom');
     await press(renderer, 'wink-distance-3');
+    await press(renderer, 'smile-threshold-custom');
+    await press(renderer, 'smile-distance-3');
     await press(renderer, 'look-angle-3');
     await press(renderer, 'face-height-1');
     await press(renderer, 'resolution-1');
@@ -879,6 +941,8 @@ describe('AppStateProvider app flow', () => {
       winkLeftEyeProbabilityGapThreshold: 0.4,
       winkRightEyeProbabilityGapThreshold: 0.2,
       winkDistanceLevel: 3,
+      smileThreshold: 0.82,
+      smileDistanceLevel: 3,
       lookAngleLevel: 3,
       faceHeightAngleLevel: 1,
       detectionResolutionLevel: 1,
@@ -889,12 +953,11 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('pauses an active timer on app background even when another screen is selected', async () => {
+  it('keeps an active stopwatch running when the app moves to background', async () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
     await press(renderer, 'start');
-    await press(renderer, 'not-looking');
     await press(renderer, 'go-settings');
 
     nowMs = 2000;
@@ -903,7 +966,268 @@ describe('AppStateProvider app flow', () => {
     });
 
     expect(hasText(renderer, 'screen:settings')).toBe(true);
-    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    nowMs = 11000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10000);
+    });
+
+    expect(hasText(renderer, 'focus:0')).toBe(false);
+
+    await unmount(renderer);
+  });
+
+  it('shows stopwatch time in a background notification while the app is backgrounded', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    const hideTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      showTimekeepingNotification,
+      hideTimekeepingNotification,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'start');
+
+    expect(showTimekeepingNotification).not.toHaveBeenCalled();
+
+    nowMs = 2000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(showTimekeepingNotification).toHaveBeenLastCalledWith(
+      'stopwatch',
+      1000,
+      false,
+      true,
+      '',
+    );
+
+    nowMs = 3000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('active'));
+    });
+
+    expect(hideTimekeepingNotification).toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('shows remaining timer time in a countdown notification while backgrounded', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      showTimekeepingNotification,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+
+    nowMs = 2000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(showTimekeepingNotification).toHaveBeenLastCalledWith(
+      'timer',
+      61000,
+      true,
+      true,
+      '',
+    );
+
+    await unmount(renderer);
+  });
+
+  it('keeps paused stopwatch time in a static background notification', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      showTimekeepingNotification,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'start');
+
+    nowMs = 11000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10000);
+    });
+    await press(renderer, 'pause');
+
+    nowMs = 12000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(showTimekeepingNotification).toHaveBeenLastCalledWith(
+      'stopwatch',
+      12000,
+      false,
+      false,
+      '00:10',
+    );
+
+    await unmount(renderer);
+  });
+
+  it('keeps paused countdown time in a static background notification', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      showTimekeepingNotification,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+
+    nowMs = 11000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10000);
+    });
+    await press(renderer, 'pause');
+
+    nowMs = 12000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(showTimekeepingNotification).toHaveBeenLastCalledWith(
+      'timer',
+      12000,
+      true,
+      false,
+      '00:50',
+    );
+
+    await unmount(renderer);
+  });
+
+  it('keeps look-pause countdown time in a static background notification', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      showTimekeepingNotification,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'look-pause-mode');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 11000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10000);
+    });
+
+    await press(renderer, 'looking');
+
+    nowMs = 12000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(hasText(renderer, 'lookPaused:true')).toBe(true);
+
+    nowMs = 13000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(showTimekeepingNotification).toHaveBeenLastCalledWith(
+      'timer',
+      13000,
+      true,
+      false,
+      '00:50',
+    );
+
+    await unmount(renderer);
+  });
+
+  it('schedules a native timer alert and avoids duplicate JS playback while backgrounded', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const scheduleTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      scheduleTimerEndAlert,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+
+    expect(scheduleTimerEndAlert).toHaveBeenLastCalledWith(
+      61000,
+      'alarm',
+      true,
+      true,
+      'seconds:4',
+      'double',
+    );
+
+    nowMs = 2000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    nowMs = 62000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(60 * 1000);
+    });
+
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(hasText(renderer, 'focus:60000')).toBe(true);
+    expect(playTimerEndAlert).not.toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('cancels the scheduled native timer alert when the countdown is paused', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const scheduleTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const cancelScheduledTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      scheduleTimerEndAlert,
+      cancelScheduledTimerEndAlert,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+
+    expect(scheduleTimerEndAlert).toHaveBeenCalledTimes(1);
+
+    nowMs = 2000;
+    await press(renderer, 'pause');
+
+    expect(cancelScheduledTimerEndAlert).toHaveBeenCalled();
 
     await unmount(renderer);
   });
@@ -931,6 +1255,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await press(renderer, 'not-looking');
     await press(renderer, 'go-settings');
@@ -956,6 +1281,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
     emitGazeReading(1000, {
@@ -1076,7 +1402,6 @@ describe('AppStateProvider app flow', () => {
     nowMs = 61000;
     await press(renderer, 'finish');
 
-    expect(hasText(renderer, 'screen:onboarding')).toBe(false);
     expect(hasText(renderer, 'screen:summary')).toBe(false);
     expect(hasText(renderer, 'phase:active')).toBe(true);
     expect(hasText(renderer, 'error:none')).toBe(false);
@@ -1123,6 +1448,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
@@ -1153,6 +1479,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
@@ -1320,6 +1647,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
@@ -1511,6 +1839,38 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('pushes the configured smile threshold and distance to native gaze detection', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    const setSmileThreshold = jest.fn().mockResolvedValue(undefined);
+    const setSmileDistanceLevel = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {
+      start,
+      stop,
+      setSmileThreshold,
+      setSmileDistanceLevel,
+    };
+    const renderer = await renderHarness();
+
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'smileThreshold:0.7')).toBe(true);
+    expect(hasText(renderer, 'smileDistance:5')).toBe(true);
+    expect(setSmileThreshold).toHaveBeenCalledWith(0.7);
+    expect(setSmileDistanceLevel).toHaveBeenCalledWith(5);
+
+    await press(renderer, 'smile-threshold-custom');
+    await press(renderer, 'smile-distance-3');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'smileThreshold:0.82')).toBe(true);
+    expect(hasText(renderer, 'smileDistance:3')).toBe(true);
+    expect(setSmileThreshold).toHaveBeenLastCalledWith(0.82);
+    expect(setSmileDistanceLevel).toHaveBeenLastCalledWith(3);
+
+    await unmount(renderer);
+  });
+
   it('pushes the configured look angle level to native gaze detection', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
@@ -1567,6 +1927,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
@@ -1596,6 +1957,7 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
@@ -1707,6 +2069,182 @@ describe('AppStateProvider app flow', () => {
 
     expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
     expect(hasText(renderer, 'history:STOP:3150:3150')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('starts Smile Mode from a detected smile and records button stops in history', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'smile-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'timerMode:smileMode')).toBe(true);
+    expect(hasText(renderer, 'phase:idle')).toBe(true);
+    expect(start).toHaveBeenCalledTimes(1);
+
+    emitGazeReading(1100, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.92,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    nowMs = 4100;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(3000);
+    });
+    await press(renderer, 'pause');
+
+    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
+    expect(getHistoryText(renderer)).toContain('history:STOP:');
+
+    await unmount(renderer);
+  });
+
+  it('pauses Smile Mode from a new detected smile while running', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'smile-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    emitGazeReading(1100, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.92,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    emitGazeReading(1500, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: false,
+      smileProbability: 0.2,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    nowMs = 4100;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(2600);
+    });
+
+    emitGazeReading(4100, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.93,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
+    expect(getHistoryText(renderer)).toContain('history:STOP:');
+
+    await unmount(renderer);
+  });
+
+  it('resumes Smile Mode from a new detected smile after release while paused', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'smile-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    emitGazeReading(1100, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.92,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    emitGazeReading(1500, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: false,
+      smileProbability: 0.2,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    emitGazeReading(2500, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.93,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
+
+    emitGazeReading(3000, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: false,
+      smileProbability: 0.2,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    emitGazeReading(3600, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.94,
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(getHistoryText(renderer)).toContain('RESUME:');
 
     await unmount(renderer);
   });

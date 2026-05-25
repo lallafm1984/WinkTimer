@@ -13,6 +13,8 @@ const mockSetWinkRightEyeClosedThreshold = jest.fn();
 const mockSetWinkLeftEyeProbabilityGapThreshold = jest.fn();
 const mockSetWinkRightEyeProbabilityGapThreshold = jest.fn();
 const mockSetWinkDistanceLevel = jest.fn();
+const mockSetSmileThreshold = jest.fn();
+const mockSetSmileDistanceLevel = jest.fn();
 const mockSetLookAngleLevel = jest.fn();
 const mockSetFaceHeightAngleLevel = jest.fn();
 const mockSetDetectionResolutionLevel = jest.fn();
@@ -70,6 +72,52 @@ function createWinkReading({
   };
 }
 
+function createSmileReading({
+  status = 'looking',
+  smileProbability = 0.78,
+  smileDetected = true,
+}: {
+  status?: 'looking' | 'notLooking' | 'unknown';
+  smileProbability?: number | null;
+  smileDetected?: boolean;
+}) {
+  return {
+    status,
+    confidence: status === 'unknown' ? 0 : 0.82,
+    eyeState: (status === 'looking' ? 'bothOpen' : 'unknown') as
+      | 'bothOpen'
+      | 'unknown',
+    winkSide: 'left' as const,
+    smileDetected,
+    atMs: 1200,
+    winkDebug: {
+      leftEyeOpenProbability: 0.92,
+      rightEyeOpenProbability: 0.91,
+      eyeProbabilityGap: 0.01,
+      faceAreaRatio: 0.12,
+      minFaceAreaRatio: 0,
+      minEyeOpenProbability: 0.25,
+      maxWinkEyeOpenProbability: 0.2,
+      minWinkEyeProbabilityGap: 0.3,
+      minOpenEyeProbabilityForWink: 0.62,
+      leftEyeClosedThreshold: 0.1,
+      rightEyeClosedThreshold: 0.1,
+      leftEyeProbabilityGapThreshold: 0.3,
+      rightEyeProbabilityGapThreshold: 0.3,
+      facePitchDegrees: -8.4,
+      faceYawDegrees: 2.1,
+      faceRollDegrees: -1.3,
+      maxFacePitchDegrees: 16,
+      maxFaceYawDegrees: 18,
+      maxFaceRollDegrees: 50,
+      analysisDurationMs: 24,
+      smileProbability,
+      minSmileProbability: 0.7,
+      minSmileFaceAreaRatio: 0.04,
+    },
+  };
+}
+
 const mockGazeDetector = {
   start: jest.fn().mockResolvedValue(undefined),
   stop: jest.fn().mockResolvedValue(undefined),
@@ -78,6 +126,8 @@ const mockGazeDetector = {
   suppressSingleWinkUntilOpen: jest.fn(),
   setWinkThresholds: jest.fn().mockResolvedValue(undefined),
   setWinkDistanceLevel: jest.fn().mockResolvedValue(undefined),
+  setSmileThreshold: jest.fn().mockResolvedValue(undefined),
+  setSmileDistanceLevel: jest.fn().mockResolvedValue(undefined),
   setLookAngleLevel: jest.fn().mockResolvedValue(undefined),
   setDetectionResolutionLevel: jest.fn().mockResolvedValue(undefined),
   setDetectionFrameIntervalLevel: jest.fn().mockResolvedValue(undefined),
@@ -104,6 +154,10 @@ const mockState = {
     mockSetWinkRightEyeProbabilityGapThreshold,
   winkDistanceLevel: 5,
   setWinkDistanceLevel: mockSetWinkDistanceLevel,
+  smileThreshold: 0.7,
+  setSmileThreshold: mockSetSmileThreshold,
+  smileDistanceLevel: 5,
+  setSmileDistanceLevel: mockSetSmileDistanceLevel,
   lookAngleLevel: 2,
   setLookAngleLevel: mockSetLookAngleLevel,
   faceHeightAngleLevel: 2,
@@ -159,6 +213,19 @@ function getRenderedText(renderer: ReactTestRenderer.ReactTestRenderer) {
     .join(' ');
 }
 
+function getSettingsAccordionTitles(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
+  return renderer.root
+    .findAll(
+      node =>
+        typeof node.props.testID === 'string' &&
+        node.props.testID.endsWith('-accordion') &&
+        typeof node.props.onPress === 'function',
+    )
+    .map(node => flattenText(node.findAllByType(Text)[0].props.children));
+}
+
 function pressByTestID(
   renderer: ReactTestRenderer.ReactTestRenderer,
   testID: string,
@@ -193,6 +260,21 @@ function getNodeStyle(
   return StyleSheet.flatten(renderer.root.findByProps({testID}).props.style);
 }
 
+function getTextStyle(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  text: string,
+) {
+  const node = renderer.root
+    .findAllByType(Text)
+    .find(textNode => flattenText(textNode.props.children) === text);
+
+  if (node === undefined) {
+    throw new Error(`Text node not found: ${text}`);
+  }
+
+  return StyleSheet.flatten(node.props.style);
+}
+
 function getUppercaseValueTextNodes(
   renderer: ReactTestRenderer.ReactTestRenderer,
 ) {
@@ -214,6 +296,15 @@ function getCalibrationCount(renderer: ReactTestRenderer.ReactTestRenderer) {
   );
 }
 
+function getSmileCalibrationCount(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
+  return flattenText(
+    renderer.root.findByProps({testID: 'smile-calibration-count'}).props
+      .children,
+  );
+}
+
 function getCalibrationUnavailableMessage(
   renderer: ReactTestRenderer.ReactTestRenderer,
 ) {
@@ -229,6 +320,14 @@ function queueCalibrationWink(
 ) {
   mockGazeDetector.getLatestReading.mockReturnValueOnce(
     createWinkReading(params),
+  );
+}
+
+function queueCalibrationSmile(
+  params: Parameters<typeof createSmileReading>[0],
+) {
+  mockGazeDetector.getLatestReading.mockReturnValueOnce(
+    createSmileReading(params),
   );
 }
 
@@ -273,20 +372,64 @@ describe('SettingsScreen', () => {
     mockGazeDetector.consumeSingleWink.mockReturnValue(null);
   });
 
-  it('renders the reorganized settings as collapsed accordions with wink test at the bottom', () => {
+  it('renders the settings menu in the requested order without wink test', () => {
     const renderer = renderSettingsScreen();
     const text = getRenderedText(renderer);
 
-    expect(text).toContain('LOOK MODE');
-    expect(text).toContain('WINK MODE');
-    expect(text).toContain('CAMERA');
-    expect(text).toContain('TIMER');
-    expect(text).toContain('WINK TEST');
-    expect(text.indexOf('TIMER')).toBeGreaterThan(text.indexOf('CAMERA'));
-    expect(text.indexOf('WINK TEST')).toBeGreaterThan(text.indexOf('TIMER'));
+    expect(getSettingsAccordionTitles(renderer)).toEqual([
+      'REMOVE ADS',
+      'TIMER',
+      'LOOK MODE',
+      'WINK MODE',
+      'SMILE MODE',
+      'CAMERA',
+      'LANGUAGE',
+    ]);
+    expect(text).not.toContain('WINK TEST');
+    expect(renderer.root.findAllByProps({testID: 'wink-test-accordion'}))
+      .toHaveLength(0);
     expect(text).not.toContain('SENSITIVITY');
     expect(text).not.toContain('FACE DIRECTION');
     expect(text).not.toContain('LEFT EYE CLOSED');
+  });
+
+  it('emphasizes only the remove ads settings item', () => {
+    const renderer = renderSettingsScreen();
+    const removeAdsStyle = getNodeStyle(
+      renderer,
+      'remove-ads-settings-accordion',
+    );
+    const timerStyle = getNodeStyle(renderer, 'timer-alert-settings-accordion');
+    const lookStyle = getNodeStyle(renderer, 'look-settings-accordion');
+
+    expect(removeAdsStyle.backgroundColor).toBe('#FFF4D8');
+    expect(timerStyle.backgroundColor).not.toBe('#FFF4D8');
+    expect(lookStyle.backgroundColor).not.toBe('#FFF4D8');
+  });
+
+  it('makes settings category titles larger than expanded content text', async () => {
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'timer-alert-settings-accordion');
+
+    const categoryTitleStyle = getTextStyle(renderer, 'TIMER');
+    const categorySummaryStyle = getTextStyle(
+      renderer,
+      'Completion alert controls',
+    );
+    const contentTitleStyle = getTextStyle(renderer, 'VIBRATION');
+    const selectedSoundStyle = getNodeStyle(
+      renderer,
+      'timer-alert-selected-sound-name',
+    );
+
+    expect(categoryTitleStyle.fontSize).toBe(18);
+    expect(categorySummaryStyle.fontSize).toBe(12);
+    expect(contentTitleStyle.fontSize).toBe(14);
+    expect(selectedSoundStyle.fontSize).toBe(12);
+    expect(categoryTitleStyle.fontSize).toBeGreaterThan(
+      contentTitleStyle.fontSize,
+    );
   });
 
   it('expands look mode settings without exposing the fixed sensitivity control', () => {
@@ -384,6 +527,87 @@ describe('SettingsScreen', () => {
     pressToggleOption(renderer, 'wink-distance-levels', 3);
 
     expect(mockSetWinkDistanceLevel).toHaveBeenCalledWith(3);
+  });
+
+  it('uses smile mode camera calibration and distance controls', () => {
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'smile-settings-accordion');
+
+    const text = getRenderedText(renderer);
+
+    expect(text).toContain('SMILE CALIBRATION');
+    expect(text).toContain('SMILE SETTING');
+    expect(text).toContain('CURRENT VALUE 70%');
+    expect(text).toContain('FACE DISTANCE');
+    expect(text).toContain('CLOSE');
+    expect(text).toContain('MID');
+    expect(text).toContain('FAR');
+    expect(renderer.root.findAllByProps({testID: 'smile-threshold-levels'}))
+      .toHaveLength(0);
+
+    pressToggleOption(renderer, 'smile-distance-levels', 3);
+
+    expect(mockSetSmileThreshold).not.toHaveBeenCalled();
+    expect(mockSetSmileDistanceLevel).toHaveBeenCalledWith(3);
+  });
+
+  it('calibrates smile threshold from three smiles using the maximum smile value minus 0.01', async () => {
+    jest.useFakeTimers();
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'smile-settings-accordion');
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({testID: 'calibrate-smile'})
+        .props.onPress();
+    });
+
+    expect(getRenderedText(renderer)).toContain(
+      'LOOK AT CAMERA AND PRESS START',
+    );
+    expect(mockGazeDetector.start).not.toHaveBeenCalled();
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({testID: 'start-smile-calibration'})
+        .props.onPress();
+    });
+
+    expect(mockGazeDetector.start).toHaveBeenCalledTimes(1);
+
+    await advanceCalibrationTimersByTime(3000);
+
+    expect(getRenderedText(renderer)).toContain('SMILE 3 TIMES');
+    expect(getSmileCalibrationCount(renderer)).toBe('3');
+    expect(mockSetSmileThreshold).not.toHaveBeenCalled();
+
+    queueCalibrationSmile({smileProbability: 0.74});
+    await advanceCalibrationTimersByTime(100);
+    expect(getSmileCalibrationCount(renderer)).toBe('2');
+
+    queueCalibrationSmile({smileProbability: 0.21, smileDetected: false});
+    await advanceCalibrationTimersByTime(100);
+
+    queueCalibrationSmile({smileProbability: 0.86});
+    await advanceCalibrationTimersByTime(100);
+    expect(getSmileCalibrationCount(renderer)).toBe('1');
+
+    queueCalibrationSmile({smileProbability: 0.2, smileDetected: false});
+    await advanceCalibrationTimersByTime(100);
+
+    queueCalibrationSmile({smileProbability: 0.79});
+    await advanceCalibrationTimersByTime(100);
+    expect(getSmileCalibrationCount(renderer)).toBe('0');
+
+    queueCalibrationSmile({smileProbability: 0.2, smileDetected: false});
+    await advanceCalibrationTimersByTime(100);
+
+    expect(mockSetSmileThreshold).toHaveBeenCalledWith(0.85);
+    expect(renderer.root.findAllByProps({
+      testID: 'smile-calibration-popup',
+    })).toHaveLength(0);
+    expect(mockGazeDetector.stop).toHaveBeenCalledTimes(1);
   });
 
   it('keeps camera settings in an accordion with button controls', () => {
@@ -597,63 +821,6 @@ describe('SettingsScreen', () => {
     pressByTestID(renderer, 'timer-alert-duration-untilStopped');
 
     expect(mockSetTimerAlertDurationId).toHaveBeenCalledWith('seconds:4');
-  });
-
-  it('shows wink test eye values in user-facing left and right positions', async () => {
-    jest.useFakeTimers();
-    const renderer = renderSettingsScreen();
-
-    pressByTestID(renderer, 'wink-test-accordion');
-
-    await ReactTestRenderer.act(async () => {
-      renderer.root.findByProps({testID: 'wink-test-toggle'}).props.onPress();
-    });
-
-    mockGazeDetector.getLatestReading.mockReturnValue(
-      createWinkReading({
-        side: 'left',
-        leftEye: 0.07,
-        rightEye: 0.18,
-        gap: 0.29,
-      }),
-    );
-    ReactTestRenderer.act(() => {
-      jest.advanceTimersByTime(100);
-    });
-
-    expect(getRenderedText(renderer)).toContain(
-      'LEFT EYE 0.07 RIGHT EYE 0.18',
-    );
-
-    expect(renderer.root.findAllByProps({
-      testID: 'apply-left-wink-settings',
-    })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({
-      testID: 'apply-right-wink-settings',
-    })).toHaveLength(0);
-
-    ReactTestRenderer.act(() => {
-      renderer.unmount();
-    });
-
-    expect(mockGazeDetector.stop).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows saved wink calibration values in the wink test panel', () => {
-    mockState.winkLeftEyeClosedThreshold = 0.067;
-    mockState.winkRightEyeClosedThreshold = 0.142;
-    mockState.winkLeftEyeProbabilityGapThreshold = 0.783;
-    mockState.winkRightEyeProbabilityGapThreshold = 0.314;
-    const renderer = renderSettingsScreen();
-
-    pressByTestID(renderer, 'wink-test-accordion');
-
-    const text = getRenderedText(renderer);
-
-    expect(text).toContain('SAVED LEFT 0.07');
-    expect(text).toContain('SAVED RIGHT 0.14');
-    expect(text).toContain('SAVED LEFT GAP 0.78');
-    expect(text).toContain('SAVED RIGHT GAP 0.31');
   });
 
   it('counts three selected wink events before saving calibration', async () => {

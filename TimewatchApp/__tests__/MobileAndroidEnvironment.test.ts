@@ -110,6 +110,10 @@ describe('mobile Android verification environment', () => {
     expect(nativeModule).toContain('setLookAngleLevel');
     expect(nativeModule).toContain('setPerformanceMode');
     expect(nativeModule).toContain('setWinkThresholds');
+    expect(nativeModule).toContain('setSmileThreshold');
+    expect(nativeModule).toContain('setSmileDistanceLevel');
+    expect(nativeModule).toContain('smilingProbability');
+    expect(nativeModule).toContain('putBoolean("smileDetected"');
     expect(nativeModule).toContain('PERFORMANCE_MODE_ACCURATE');
     expect(nativeModule).toContain('getLookingAngleThresholds');
   });
@@ -197,7 +201,9 @@ describe('mobile Android verification environment', () => {
     expect(nativeModule).toContain('putDouble("facePitchDegrees"');
     expect(nativeModule).toContain('putDouble("maxFacePitchDegrees"');
     expect(nativeModule).toContain('putDouble("analysisDurationMs"');
-    expect(nativeModule).toContain('return EyeReading("unknown", null, debug)');
+    expect(nativeModule).toContain(
+      'return EyeReading("unknown", null, smileDetected, debug)',
+    );
   });
 
   test('native gaze module only allows wink classification when the face is facing the screen', () => {
@@ -221,7 +227,7 @@ describe('mobile Android verification environment', () => {
       /val rawEyeReading =\s*resolveEyeReading\(/,
     );
     expect(nativeModule).toMatch(
-      /val eyeReading =\s*if \(facingScreen\) \{\s*rawEyeReading\s*\} else \{\s*EyeReading\("unknown", null, rawEyeReading\.debug\)\s*\}/,
+      /val eyeReading =\s*if \(facingScreen\) \{\s*rawEyeReading\s*\} else \{\s*EyeReading\("unknown", null, null, rawEyeReading\.debug\)\s*\}/,
     );
   });
 });

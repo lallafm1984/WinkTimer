@@ -16,16 +16,22 @@ import {
   DEFAULT_TIMER_ALERT_VIBRATION_ENABLED,
   DEFAULT_TIMER_ALERT_DURATION_ID,
   DEFAULT_TIMER_ALERT_VIBRATION_PATTERN_ID,
+  cancelScheduledTimerEndAlert,
   getTimerAlertDurationMs,
   normalizeTimerAlertDurationId,
   normalizeTimerAlertSoundId,
   normalizeTimerAlertVibrationPatternId,
   playTimerEndAlert,
+  scheduleTimerEndAlert,
   stopTimerEndAlert as stopNativeTimerEndAlert,
   type TimerAlertDurationId,
   type TimerAlertSoundId,
   type TimerAlertVibrationPatternId,
 } from '../alerts/timerAlert';
+import {
+  hideBackgroundTimekeepingNotification,
+  showBackgroundTimekeepingNotification,
+} from '../notifications/timekeepingNotification';
 import type {
   DevicePosture,
   DevicePostureDetector,
@@ -42,6 +48,8 @@ import type {
   FaceHeightAngleLevel,
   LookAngleLevel,
   Sensitivity,
+  SmileDistanceLevel,
+  SmileThreshold,
   StatusDisplayMode,
   WinkDistanceLevel,
   WinkEyeClosedThreshold,
@@ -49,6 +57,8 @@ import type {
 } from '../domain/detection';
 import {
   DEFAULT_LOOK_ANGLE_LEVEL,
+  DEFAULT_SMILE_DISTANCE_LEVEL,
+  DEFAULT_SMILE_THRESHOLD,
   DEFAULT_FACE_HEIGHT_ANGLE_LEVEL,
   DEFAULT_DETECTION_FRAME_INTERVAL_LEVEL,
   DEFAULT_DETECTION_PERFORMANCE_MODE,
@@ -61,6 +71,8 @@ import {
   normalizeDetectionResolutionLevel,
   normalizeFaceHeightAngleLevel,
   normalizeLookAngleLevel,
+  normalizeSmileDistanceLevel,
+  normalizeSmileThreshold,
   normalizeWinkDistanceLevel,
   normalizeWinkEyeClosedThreshold,
   normalizeWinkEyeProbabilityGapThreshold,
@@ -94,13 +106,15 @@ import {
   modeUsesLookPause,
   modeHasLap,
   modeRunsWithoutGaze,
+  modeUsesSmilePause,
+  modeUsesSmileResume,
   modeUsesDeviceFlip,
+  modeUsesSmileStart,
   modeUsesWinkLap,
   modeUsesWinkPause,
   modeUsesWinkReset,
   modeUsesWinkResume,
   modeUsesWinkStart,
-  timerModePresets,
   type TimerModeId,
   type WinkGestureSide,
 } from '../domain/timerMode';
@@ -108,11 +122,11 @@ import type { SessionRepository } from '../storage/sessionRepository';
 import { createSessionRepository } from '../storage/sessionRepository';
 
 const SETTINGS_STORAGE_KEY = '@timewatch:settings:v1';
+const DEFAULT_TIMER_MODE_ID: TimerModeId = 'basicTimer';
 
 const FINISH_ERROR_MESSAGE = '세션 저장에 실패했습니다. 다시 시도해 주세요.';
 
 export type AppScreen =
-  | 'onboarding'
   | 'timer'
   | 'summary'
   | 'history'
@@ -148,6 +162,12 @@ type AppStateValue = {
   >;
   winkDistanceLevel: WinkDistanceLevel;
   setWinkDistanceLevel: React.Dispatch<React.SetStateAction<WinkDistanceLevel>>;
+  smileThreshold: SmileThreshold;
+  setSmileThreshold: React.Dispatch<React.SetStateAction<SmileThreshold>>;
+  smileDistanceLevel: SmileDistanceLevel;
+  setSmileDistanceLevel: React.Dispatch<
+    React.SetStateAction<SmileDistanceLevel>
+  >;
   lookAngleLevel: LookAngleLevel;
   setLookAngleLevel: React.Dispatch<React.SetStateAction<LookAngleLevel>>;
   faceHeightAngleLevel: FaceHeightAngleLevel;
@@ -238,6 +258,8 @@ type PersistedSettings = {
   winkLeftEyeProbabilityGapThreshold: WinkEyeProbabilityGapThreshold;
   winkRightEyeProbabilityGapThreshold: WinkEyeProbabilityGapThreshold;
   winkDistanceLevel: WinkDistanceLevel;
+  smileThreshold: SmileThreshold;
+  smileDistanceLevel: SmileDistanceLevel;
   lookAngleLevel: LookAngleLevel;
   faceHeightAngleLevel: FaceHeightAngleLevel;
   detectionResolutionLevel: DetectionResolutionLevel;
@@ -261,10 +283,8 @@ function normalizeStoredBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function normalizeStoredTimerModeId(value: unknown): TimerModeId {
-  return timerModePresets.some(mode => mode.id === value)
-    ? (value as TimerModeId)
-    : 'lookPause';
+function normalizeStoredTimerModeId(_value: unknown): TimerModeId {
+  return DEFAULT_TIMER_MODE_ID;
 }
 
 function normalizeStoredSettings(value: unknown): PersistedSettings | null {
@@ -330,6 +350,15 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
         DEFAULT_WINK_DISTANCE_LEVEL,
       ),
     ),
+    smileThreshold: normalizeSmileThreshold(
+      normalizeStoredNumber(value.smileThreshold, DEFAULT_SMILE_THRESHOLD),
+    ),
+    smileDistanceLevel: normalizeSmileDistanceLevel(
+      normalizeStoredNumber(
+        value.smileDistanceLevel,
+        DEFAULT_SMILE_DISTANCE_LEVEL,
+      ),
+    ),
     lookAngleLevel: normalizeLookAngleLevel(
       normalizeStoredNumber(value.lookAngleLevel, DEFAULT_LOOK_ANGLE_LEVEL),
     ),
@@ -359,6 +388,25 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
 
 function formatsAsZeroHistoryDuration(durationMs: number) {
   return Math.floor(Math.max(0, durationMs) / 10) === 0;
+}
+
+function formatBackgroundNotificationDuration(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(
+      seconds,
+    ).padStart(2, '0')}`;
+  }
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(
+    2,
+    '0',
+  )}`;
 }
 
 function canFinishTimer(timer: TimerState) {
@@ -398,6 +446,7 @@ function normalizeNormalTimerState(
     detectionStatus: 'notLooking',
     eyeState: 'unknown',
     winkSide: null,
+    smileDetected: null,
     lookingStartedAtMs: null,
     isLookPaused: false,
     oneEyeClosedStartedAtMs: null,
@@ -425,6 +474,8 @@ function applyPassiveWinkDetectionState(
     detectionStatus: reading.status,
     eyeState,
     winkSide: tracksOneEyeClosure ? reading.winkSide ?? null : null,
+    smileDetected:
+      reading.status === 'looking' ? reading.smileDetected ?? null : null,
     oneEyeClosedStartedAtMs: tracksOneEyeClosure
       ? state.oneEyeClosedStartedAtMs ?? reading.atMs
       : null,
@@ -547,6 +598,7 @@ function applyWinkActionGesture(
         detectionStatus: reading.status,
         eyeState,
         winkSide: reading.winkSide ?? null,
+        smileDetected: reading.smileDetected ?? null,
         oneEyeClosedStartedAtMs: null,
         oneEyeResetArmed: false,
       },
@@ -565,6 +617,7 @@ function applyWinkActionGesture(
         detectionStatus: reading.status,
         eyeState,
         winkSide: reading.winkSide ?? null,
+        smileDetected: reading.smileDetected ?? null,
         oneEyeClosedStartedAtMs: null,
         oneEyeResetArmed: false,
       },
@@ -586,10 +639,72 @@ function applyWinkResetGesture(
         detectionStatus: reading.status,
         eyeState: reading.eyeState ?? 'unknown',
         winkSide: reading.winkSide ?? null,
+        smileDetected: reading.smileDetected ?? null,
       },
       reading.atMs,
     ),
     reading,
+  );
+}
+
+function canListenForSmileStart(timer: TimerState, modeId: TimerModeId) {
+  return (
+    modeUsesSmileStart(modeId) &&
+    (timer.phase === 'idle' || timer.phase === 'ended')
+  );
+}
+
+function canPauseFromSmile(timer: TimerState, modeId: TimerModeId) {
+  return modeUsesSmilePause(modeId) && timer.phase === 'active';
+}
+
+function canResumeFromSmile(timer: TimerState, modeId: TimerModeId) {
+  return modeUsesSmileResume(modeId) && timer.phase === 'manualPaused';
+}
+
+function applySmileStartGesture(
+  state: TimerState,
+  reading: DetectionReading,
+): TimerState {
+  if (reading.atMs < state.lastUpdatedAtMs || reading.smileDetected !== true) {
+    return state;
+  }
+
+  return {
+    ...startTimer(
+      createInitialTimerState(reading.atMs),
+      reading.atMs,
+      state.targetDurationMs ?? undefined,
+    ),
+    detectionStatus: reading.status,
+    eyeState: reading.eyeState ?? 'unknown',
+    winkSide: null,
+    smileDetected: true,
+  };
+}
+
+function applySmileResumeGesture(
+  state: TimerState,
+  reading: DetectionReading,
+): TimerState {
+  if (!isNewSmileGesture(state, reading)) {
+    return state;
+  }
+
+  return {
+    ...resumeTimer(state, reading.atMs),
+    detectionStatus: reading.status,
+    eyeState: reading.eyeState ?? 'unknown',
+    winkSide: null,
+    smileDetected: true,
+  };
+}
+
+function isNewSmileGesture(state: TimerState, reading: DetectionReading) {
+  return (
+    reading.atMs >= state.lastUpdatedAtMs &&
+    reading.smileDetected === true &&
+    state.smileDetected !== true
   );
 }
 
@@ -620,29 +735,6 @@ function applyDeviceFlipAction(
   return state;
 }
 
-function handleAppBackgroundTimerState(
-  state: TimerState,
-  nowMs: number,
-  sensitivity: Sensitivity,
-  normalTimerMode: boolean,
-  modeId: TimerModeId,
-): TimerState {
-  if (
-    normalTimerMode ||
-    modeUsesLookPause(modeId) ||
-    modeRunsWithoutGaze(modeId)
-  ) {
-    return pauseTimer(state, nowMs, sensitivity);
-  }
-
-  return applyDetectionWithBehavior(
-    state,
-    { status: 'unknown', confidence: 0, atMs: nowMs },
-    sensitivity,
-    getTimerBehavior(modeId),
-  );
-}
-
 export function AppStateProvider({ children }: AppStateProviderProps) {
   const repositoryRef = useRef<SessionRepository | null>(null);
   const gazeDetectorRef = useRef<MockGazeDetector | null>(null);
@@ -663,7 +755,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const repository = repositoryRef.current;
   const gazeDetector = gazeDetectorRef.current;
   const devicePostureDetector = devicePostureDetectorRef.current;
-  const [screen, setScreen] = useState<AppScreen>('onboarding');
+  const [screen, setScreen] = useState<AppScreen>('timer');
   const [timer, setTimerInternal] = useState<TimerState>(() =>
     createInitialTimerState(Date.now()),
   );
@@ -692,6 +784,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const [winkDistanceLevel, setWinkDistanceLevel] = useState<WinkDistanceLevel>(
     DEFAULT_WINK_DISTANCE_LEVEL,
   );
+  const [smileThreshold, setSmileThreshold] = useState<SmileThreshold>(
+    DEFAULT_SMILE_THRESHOLD,
+  );
+  const [smileDistanceLevel, setSmileDistanceLevel] =
+    useState<SmileDistanceLevel>(DEFAULT_SMILE_DISTANCE_LEVEL);
   const [lookAngleLevel, setLookAngleLevel] = useState<LookAngleLevel>(
     DEFAULT_LOOK_ANGLE_LEVEL,
   );
@@ -713,7 +810,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const [timerTargetDurationMs, setTimerTargetDurationMsState] =
     useState(DEFAULT_TIMER_TARGET_DURATION_MS);
   const [timerModeId, setTimerModeIdState] =
-    useState<TimerModeId>('lookPause');
+    useState<TimerModeId>(DEFAULT_TIMER_MODE_ID);
   const [
     timerAlertVibrationEnabled,
     setTimerAlertVibrationEnabled,
@@ -746,6 +843,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const timerTargetDurationMsRef = useRef(timerTargetDurationMs);
   const timerModeIdRef = useRef(timerModeId);
   const lastTimerAlertKeyRef = useRef<string | null>(null);
+  const scheduledTimerAlertKeyRef = useRef<string | null>(null);
+  const backgroundTimekeepingNotificationKeyRef = useRef<string | null>(null);
   const isTimerAlertActiveRef = useRef(false);
   const timerAlertAutoClearTimeoutRef = useRef<ReturnType<
     typeof setTimeout
@@ -788,11 +887,36 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     setIsTimerAlertActiveState(active);
   }, []);
 
+  const cancelScheduledTimerEndAlertIfNeeded = useCallback(() => {
+    if (scheduledTimerAlertKeyRef.current === null) {
+      return;
+    }
+
+    scheduledTimerAlertKeyRef.current = null;
+    cancelScheduledTimerEndAlert().catch(() => undefined);
+  }, []);
+
+  const hideBackgroundTimekeepingNotificationIfNeeded = useCallback(() => {
+    if (backgroundTimekeepingNotificationKeyRef.current === null) {
+      return;
+    }
+
+    backgroundTimekeepingNotificationKeyRef.current = null;
+    hideBackgroundTimekeepingNotification().catch(() => undefined);
+  }, []);
+
   const stopTimerEndAlert = useCallback(() => {
     clearTimerAlertAutoClearTimeout();
+    cancelScheduledTimerEndAlertIfNeeded();
+    hideBackgroundTimekeepingNotificationIfNeeded();
     setTimerAlertActive(false);
     stopNativeTimerEndAlert().catch(() => undefined);
-  }, [clearTimerAlertAutoClearTimeout, setTimerAlertActive]);
+  }, [
+    cancelScheduledTimerEndAlertIfNeeded,
+    clearTimerAlertAutoClearTimeout,
+    hideBackgroundTimekeepingNotificationIfNeeded,
+    setTimerAlertActive,
+  ]);
 
   const scheduleTimerAlertAutoClear = useCallback(
     (durationId: TimerAlertDurationId) => {
@@ -814,9 +938,15 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   useEffect(() => {
     return () => {
       clearTimerAlertAutoClearTimeout();
+      cancelScheduledTimerEndAlertIfNeeded();
+      hideBackgroundTimekeepingNotificationIfNeeded();
       stopNativeTimerEndAlert().catch(() => undefined);
     };
-  }, [clearTimerAlertAutoClearTimeout]);
+  }, [
+    cancelScheduledTimerEndAlertIfNeeded,
+    clearTimerAlertAutoClearTimeout,
+    hideBackgroundTimekeepingNotificationIfNeeded,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -876,6 +1006,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           nextSettings.winkRightEyeProbabilityGapThreshold,
         );
         setWinkDistanceLevel(nextSettings.winkDistanceLevel);
+        setSmileThreshold(nextSettings.smileThreshold);
+        setSmileDistanceLevel(nextSettings.smileDistanceLevel);
         setLookAngleLevel(nextSettings.lookAngleLevel);
         setFaceHeightAngleLevel(nextSettings.faceHeightAngleLevel);
         setDetectionResolutionLevel(nextSettings.detectionResolutionLevel);
@@ -923,6 +1055,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       winkLeftEyeProbabilityGapThreshold,
       winkRightEyeProbabilityGapThreshold,
       winkDistanceLevel,
+      smileThreshold,
+      smileDistanceLevel,
       lookAngleLevel,
       faceHeightAngleLevel,
       detectionResolutionLevel,
@@ -942,6 +1076,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     normalTimerMode,
     sensitivity,
     settingsLoaded,
+    smileDistanceLevel,
+    smileThreshold,
     statusDisplayMode,
     timerAlertDurationId,
     timerAlertSoundEnabled,
@@ -1016,6 +1152,154 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   }, [appendSessionHistoryEvent, timer, timerModeId]);
 
   useEffect(() => {
+    const alertEnabled = timerAlertVibrationEnabled || timerAlertSoundEnabled;
+    const targetDurationMs = timer.targetDurationMs;
+    const canScheduleAlert =
+      alertEnabled &&
+      timekeepingMode === 'timer' &&
+      timer.phase === 'active' &&
+      !timer.isLookPaused &&
+      targetDurationMs !== null;
+
+    if (!canScheduleAlert) {
+      cancelScheduledTimerEndAlertIfNeeded();
+      return;
+    }
+
+    const remainingMs = targetDurationMs - timer.focusDurationMs;
+    if (remainingMs <= 0) {
+      cancelScheduledTimerEndAlertIfNeeded();
+      return;
+    }
+
+    const triggerAtMs = Math.round(timer.lastUpdatedAtMs + remainingMs);
+    const scheduleKey = [
+      timer.startedAtMs ?? 'none',
+      triggerAtMs,
+      timerAlertVibrationEnabled,
+      timerAlertSoundEnabled,
+      timerAlertSoundId,
+      timerAlertDurationId,
+      timerAlertVibrationPatternId,
+    ].join(':');
+
+    if (scheduledTimerAlertKeyRef.current === scheduleKey) {
+      return;
+    }
+
+    scheduledTimerAlertKeyRef.current = scheduleKey;
+    scheduleTimerEndAlert({
+      triggerAtMs,
+      vibrationEnabled: timerAlertVibrationEnabled,
+      soundEnabled: timerAlertSoundEnabled,
+      soundId: timerAlertSoundId,
+      durationId: timerAlertDurationId,
+      vibrationPatternId: timerAlertVibrationPatternId,
+    }).catch(() => {
+      if (scheduledTimerAlertKeyRef.current === scheduleKey) {
+        scheduledTimerAlertKeyRef.current = null;
+      }
+    });
+  }, [
+    cancelScheduledTimerEndAlertIfNeeded,
+    timekeepingMode,
+    timer.focusDurationMs,
+    timer.isLookPaused,
+    timer.lastUpdatedAtMs,
+    timer.phase,
+    timer.startedAtMs,
+    timer.targetDurationMs,
+    timerAlertDurationId,
+    timerAlertSoundEnabled,
+    timerAlertSoundId,
+    timerAlertVibrationEnabled,
+    timerAlertVibrationPatternId,
+  ]);
+
+  useEffect(() => {
+    const canShowBackgroundTime =
+      !isAppForeground &&
+      (timer.phase === 'active' || timer.phase === 'manualPaused');
+
+    if (!canShowBackgroundTime) {
+      hideBackgroundTimekeepingNotificationIfNeeded();
+      return;
+    }
+
+    const isRunningNotification =
+      timer.phase === 'active' && !timer.isLookPaused;
+    let notificationMode: 'stopwatch' | 'timer' = 'stopwatch';
+    let notificationWhenMs = Math.round(
+      timer.lastUpdatedAtMs - timer.focusDurationMs,
+    );
+    let notificationCountsDown = false;
+    let notificationDisplayText = '';
+
+    if (timekeepingMode === 'timer' && timer.targetDurationMs !== null) {
+      const remainingMs = timer.targetDurationMs - timer.focusDurationMs;
+
+      if (remainingMs <= 0) {
+        hideBackgroundTimekeepingNotificationIfNeeded();
+        return;
+      }
+
+      notificationMode = 'timer';
+      notificationWhenMs = Math.round(timer.lastUpdatedAtMs + remainingMs);
+      notificationCountsDown = true;
+      if (!isRunningNotification) {
+        notificationDisplayText =
+          formatBackgroundNotificationDuration(remainingMs);
+      }
+    } else if (!isRunningNotification) {
+      notificationDisplayText = formatBackgroundNotificationDuration(
+        timer.focusDurationMs,
+      );
+    }
+
+    if (!isRunningNotification) {
+      notificationWhenMs = Date.now();
+    }
+
+    const notificationKey = [
+      timer.startedAtMs ?? 'none',
+      notificationMode,
+      notificationWhenMs,
+      notificationCountsDown,
+      isRunningNotification,
+      notificationDisplayText,
+    ].join(':');
+
+    if (backgroundTimekeepingNotificationKeyRef.current === notificationKey) {
+      return;
+    }
+
+    backgroundTimekeepingNotificationKeyRef.current = notificationKey;
+    showBackgroundTimekeepingNotification(
+      notificationMode,
+      notificationWhenMs,
+      notificationCountsDown,
+      isRunningNotification,
+      notificationDisplayText,
+    ).catch(() => {
+      if (
+        backgroundTimekeepingNotificationKeyRef.current === notificationKey
+      ) {
+        backgroundTimekeepingNotificationKeyRef.current = null;
+      }
+    });
+  }, [
+    hideBackgroundTimekeepingNotificationIfNeeded,
+    isAppForeground,
+    timekeepingMode,
+    timer.focusDurationMs,
+    timer.isLookPaused,
+    timer.lastUpdatedAtMs,
+    timer.phase,
+    timer.startedAtMs,
+    timer.targetDurationMs,
+  ]);
+
+  useEffect(() => {
     if (timer.phase !== 'ended') {
       lastTimerAlertKeyRef.current = null;
       if (isTimerAlertActiveRef.current) {
@@ -1052,6 +1336,12 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     setTimerAlertActive(true);
     scheduleTimerAlertAutoClear(timerAlertDurationId);
 
+    if (!isAppForeground) {
+      return;
+    }
+
+    cancelScheduledTimerEndAlertIfNeeded();
+
     playTimerEndAlert({
       vibrationEnabled: timerAlertVibrationEnabled,
       soundEnabled: timerAlertSoundEnabled,
@@ -1060,6 +1350,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       vibrationPatternId: timerAlertVibrationPatternId,
     }).catch(() => undefined);
   }, [
+    cancelScheduledTimerEndAlertIfNeeded,
+    isAppForeground,
     scheduleTimerAlertAutoClear,
     setTimerAlertActive,
     stopTimerEndAlert,
@@ -1100,6 +1392,16 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   useEffect(() => {
     gazeDetector.setWinkDistanceLevel(winkDistanceLevel).catch(() => undefined);
   }, [gazeDetector, winkDistanceLevel]);
+
+  useEffect(() => {
+    gazeDetector.setSmileThreshold(smileThreshold).catch(() => undefined);
+  }, [gazeDetector, smileThreshold]);
+
+  useEffect(() => {
+    gazeDetector
+      .setSmileDistanceLevel(smileDistanceLevel)
+      .catch(() => undefined);
+  }, [gazeDetector, smileDistanceLevel]);
 
   useEffect(() => {
     gazeDetector.setLookAngleLevel(lookAngleLevel).catch(() => undefined);
@@ -1225,21 +1527,36 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
             activeTimerModeId,
             'right',
           );
+          const listensForSmileAction = canListenForSmileStart(
+            currentForTick,
+            activeTimerModeId,
+          );
+          const listensForSmileResume = canResumeFromSmile(
+            currentForTick,
+            activeTimerModeId,
+          );
           const listensForAnyWink =
             listensForLeftWinkAction ||
             listensForRightWinkAction ||
             listensForLeftWinkReset ||
             listensForRightWinkReset;
 
-          if (!listensForAnyWink) {
+          if (
+            !listensForAnyWink &&
+            !listensForSmileAction &&
+            !listensForSmileResume
+          ) {
             return currentForTick;
           }
 
-          const consumedSingleWink = gazeDetector.consumeSingleWink(now);
+          const consumedSingleWink = listensForAnyWink
+            ? gazeDetector.consumeSingleWink(now)
+            : null;
+          const passiveGestureReading = gazeDetector.getLatestReading(now);
           const passiveWinkReading =
-            consumedSingleWink ?? gazeDetector.getLatestReading(now);
+            consumedSingleWink ?? passiveGestureReading;
           const liveWinkActionReading =
-            consumedSingleWink === null
+            listensForAnyWink && consumedSingleWink === null
               ? getLiveWinkActionReading(currentForTick, passiveWinkReading)
               : null;
           const winkActionReading =
@@ -1249,6 +1566,26 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
               gazeDetector.suppressSingleWinkUntilOpen();
             }
           };
+
+          if (
+            listensForSmileAction &&
+            passiveGestureReading.smileDetected === true
+          ) {
+            return applySmileStartGesture(
+              currentForTick,
+              passiveGestureReading,
+            );
+          }
+
+          if (
+            listensForSmileResume &&
+            isNewSmileGesture(currentForTick, passiveGestureReading)
+          ) {
+            return applySmileResumeGesture(
+              currentForTick,
+              passiveGestureReading,
+            );
+          }
 
           if (
             winkActionReading?.winkSide === 'left' &&
@@ -1342,6 +1679,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           gestureInputsEnabled &&
           !activeModeRunsWithoutGaze &&
           modeUsesWinkLap(activeTimerModeId, 'right');
+        const listensForActiveSmilePause =
+          gestureInputsEnabled &&
+          !activeModeRunsWithoutGaze &&
+          canPauseFromSmile(currentForTick, activeTimerModeId);
         const consumedSingleWink =
           listensForActiveLeftWink ||
           listensForActiveRightWink ||
@@ -1363,16 +1704,23 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
             gazeDetector.suppressSingleWinkUntilOpen();
           }
         };
-        const withDetection = !gestureInputsEnabled
-          ? currentForTick
-          : activeModeRunsWithoutGaze
-            ? normalizeNormalTimerState(currentForTick, true)
+        const withDetection = activeModeRunsWithoutGaze
+          ? normalizeNormalTimerState(currentForTick, true)
+          : !gestureInputsEnabled
+            ? currentForTick
             : applyDetectionWithBehavior(
                 currentForTick,
                 activeWinkReading,
                 activeSensitivity,
                 activeBehavior,
               );
+
+        if (
+          listensForActiveSmilePause &&
+          isNewSmileGesture(currentForTick, activeWinkReading)
+        ) {
+          return pauseTimer(withDetection, now, activeSensitivity);
+        }
 
         if (
           ((winkActionReading?.winkSide === 'left' &&
@@ -1491,6 +1839,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     (timer.phase === 'active' ||
       canResetFromWink(timer, timerModeId, 'left') ||
       canResetFromWink(timer, timerModeId, 'right') ||
+      canListenForSmileStart(timer, timerModeId) ||
+      canResumeFromSmile(timer, timerModeId) ||
       canListenForWinkAction(timer, timerModeId, 'left') ||
       canListenForWinkAction(timer, timerModeId, 'right'));
 
@@ -1546,20 +1896,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       'change',
       nextState => {
         setIsAppForeground(nextState === 'active');
-
-        if (nextState !== 'active') {
-          const now = Date.now();
-
-          setTimer(current =>
-            handleAppBackgroundTimerState(
-              current,
-              now,
-              sensitivityRef.current,
-              normalTimerModeRef.current,
-              timerModeIdRef.current,
-            ),
-          );
-        }
       },
     );
 
@@ -1788,6 +2124,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setWinkRightEyeProbabilityGapThreshold,
       winkDistanceLevel,
       setWinkDistanceLevel,
+      smileThreshold,
+      setSmileThreshold,
+      smileDistanceLevel,
+      setSmileDistanceLevel,
       lookAngleLevel,
       setLookAngleLevel,
       faceHeightAngleLevel,
@@ -1847,6 +2187,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       winkLeftEyeProbabilityGapThreshold,
       winkRightEyeProbabilityGapThreshold,
       winkDistanceLevel,
+      smileThreshold,
+      smileDistanceLevel,
       lookAngleLevel,
       faceHeightAngleLevel,
       detectionResolutionLevel,

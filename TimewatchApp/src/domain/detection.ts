@@ -12,6 +12,10 @@ export type WinkEyeProbabilityGapThreshold = number;
 
 export type WinkDistanceLevel = 1 | 2 | 3 | 4 | 5;
 
+export type SmileThreshold = number;
+
+export type SmileDistanceLevel = 1 | 2 | 3 | 4 | 5;
+
 export type LookAngleLevel = 1 | 2 | 3;
 
 export type FaceHeightAngleLevel = 1 | 2 | 3;
@@ -45,6 +49,9 @@ export type WinkDebugValues = {
   maxFaceYawDegrees: number | null;
   maxFaceRollDegrees: number | null;
   analysisDurationMs: number | null;
+  smileProbability?: number | null;
+  minSmileProbability?: number | null;
+  minSmileFaceAreaRatio?: number | null;
 };
 
 export type DetectionReading = {
@@ -52,6 +59,7 @@ export type DetectionReading = {
   confidence: number;
   eyeState?: EyeState;
   winkSide?: WinkSide;
+  smileDetected?: boolean;
   winkDebug?: WinkDebugValues;
   atMs: number;
 };
@@ -74,6 +82,14 @@ export const DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD: WinkEyeProbabilityGapTh
 export const winkDistanceLevels: WinkDistanceLevel[] = [1, 3, 5];
 
 export const DEFAULT_WINK_DISTANCE_LEVEL: WinkDistanceLevel = 5;
+
+export const smileThresholdLevels: SmileThreshold[] = [0.5, 0.7, 0.9];
+
+export const DEFAULT_SMILE_THRESHOLD: SmileThreshold = 0.7;
+
+export const smileDistanceLevels: SmileDistanceLevel[] = [1, 3, 5];
+
+export const DEFAULT_SMILE_DISTANCE_LEVEL: SmileDistanceLevel = 5;
 
 export const lookAngleLevels: LookAngleLevel[] = [1, 2, 3];
 
@@ -158,6 +174,25 @@ export function normalizeWinkDistanceLevel(value: number): WinkDistanceLevel {
   }, DEFAULT_WINK_DISTANCE_LEVEL);
 
   return nearest as WinkDistanceLevel;
+}
+
+export function normalizeSmileThreshold(value: number): SmileThreshold {
+  return normalizeProbabilityThreshold(value, DEFAULT_SMILE_THRESHOLD);
+}
+
+export function normalizeSmileDistanceLevel(value: number): SmileDistanceLevel {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SMILE_DISTANCE_LEVEL;
+  }
+
+  const rounded = Math.round(value);
+  const nearest = smileDistanceLevels.reduce((best, level) => {
+    const currentDistance = Math.abs(level - rounded);
+    const bestDistance = Math.abs(best - rounded);
+    return currentDistance < bestDistance ? level : best;
+  }, DEFAULT_SMILE_DISTANCE_LEVEL);
+
+  return nearest as SmileDistanceLevel;
 }
 
 export function normalizeLookAngleLevel(value: number): LookAngleLevel {

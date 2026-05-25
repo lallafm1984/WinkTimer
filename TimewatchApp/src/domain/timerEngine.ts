@@ -25,6 +25,7 @@ export type TimerState = {
   detectionStatus: DetectionStatus;
   eyeState: EyeState;
   winkSide: WinkSide | null;
+  smileDetected: boolean | null;
   recentWinkSide: WinkSide | null;
   recentWinkAtMs: number | null;
   lookingStartedAtMs: number | null;
@@ -45,6 +46,7 @@ export function createInitialTimerState(nowMs: number): TimerState {
     detectionStatus: 'unknown',
     eyeState: 'unknown',
     winkSide: null,
+    smileDetected: null,
     recentWinkSide: null,
     recentWinkAtMs: null,
     lookingStartedAtMs: null,
@@ -118,6 +120,8 @@ export function applyDetectionWithBehavior(
     detectionStatus: reading.status,
     eyeState,
     winkSide: tracksOneEyeClosure ? reading.winkSide ?? null : null,
+    smileDetected:
+      reading.status === 'looking' ? reading.smileDetected ?? null : null,
     lookingStartedAtMs:
       tracksLookPause
         ? advanced.lookingStartedAtMs ?? reading.atMs
@@ -146,6 +150,7 @@ export function markTimerEnded(
     detectionStatus: 'unknown',
     eyeState: 'unknown',
     winkSide: null,
+    smileDetected: null,
     recentWinkSide: null,
     recentWinkAtMs: null,
     lookingStartedAtMs: null,
@@ -175,6 +180,7 @@ export function resumeTimer(state: TimerState, nowMs: number): TimerState {
     detectionStatus: 'unknown',
     eyeState: 'unknown',
     winkSide: null,
+    smileDetected: null,
     recentWinkSide: null,
     recentWinkAtMs: null,
     lookingStartedAtMs: null,
@@ -191,6 +197,7 @@ export function resetTimer(state: TimerState, nowMs: number): TimerState {
     detectionStatus: state.detectionStatus,
     eyeState: state.eyeState,
     winkSide: state.eyeState === 'oneEyeClosed' ? state.winkSide : null,
+    smileDetected: state.smileDetected,
     recentWinkSide: state.recentWinkSide,
     recentWinkAtMs: state.recentWinkAtMs,
     oneEyeClosedStartedAtMs:
@@ -296,6 +303,7 @@ function finishTargetIfReached(state: TimerState): TimerState {
     detectionStatus: 'unknown',
     eyeState: 'unknown',
     winkSide: null,
+    smileDetected: null,
     recentWinkSide: null,
     recentWinkAtMs: null,
     lookingStartedAtMs: null,

@@ -5,10 +5,13 @@ import {
   detectionResolutionByLevel,
   detectionResolutionLevels,
   faceHeightAngleLevels,
+  DEFAULT_SMILE_THRESHOLD,
   DEFAULT_WINK_EYE_CLOSED_THRESHOLD,
   DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD,
   normalizeDetectionPerformanceMode,
   lookAngleLevels,
+  normalizeSmileDistanceLevel,
+  normalizeSmileThreshold,
   normalizeWinkEyeClosedThreshold,
   normalizeWinkEyeProbabilityGapThreshold,
   normalizeDetectionFrameIntervalLevel,
@@ -16,6 +19,8 @@ import {
   normalizeFaceHeightAngleLevel,
   normalizeLookAngleLevel,
   normalizeWinkDistanceLevel,
+  smileDistanceLevels,
+  smileThresholdLevels,
   winkDistanceLevels,
 } from '../detection';
 
@@ -52,6 +57,26 @@ describe('detection settings', () => {
     expect(normalizeWinkDistanceLevel(3.4)).toBe(3);
     expect(normalizeWinkDistanceLevel(99)).toBe(5);
     expect(normalizeWinkDistanceLevel(Number.NaN)).toBe(5);
+  });
+
+  it('provides selectable smile threshold values with the calibrated default', () => {
+    expect(DEFAULT_SMILE_THRESHOLD).toBe(0.7);
+    expect(smileThresholdLevels).toEqual([0.5, 0.7, 0.9]);
+  });
+
+  it('normalizes smile threshold values into the native 0 to 1 range', () => {
+    expect(normalizeSmileThreshold(-1)).toBe(0);
+    expect(normalizeSmileThreshold(0.82)).toBe(0.82);
+    expect(normalizeSmileThreshold(2)).toBe(1);
+    expect(normalizeSmileThreshold(Number.NaN)).toBe(0.7);
+  });
+
+  it('normalizes smile distance input into the displayed 1, 3, 5 range', () => {
+    expect(smileDistanceLevels).toEqual([1, 3, 5]);
+    expect(normalizeSmileDistanceLevel(0)).toBe(1);
+    expect(normalizeSmileDistanceLevel(3.4)).toBe(3);
+    expect(normalizeSmileDistanceLevel(99)).toBe(5);
+    expect(normalizeSmileDistanceLevel(Number.NaN)).toBe(5);
   });
 
   it('provides three look angle levels', () => {

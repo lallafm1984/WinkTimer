@@ -31,6 +31,8 @@ import type {
   DetectionResolutionLevel,
   FaceHeightAngleLevel,
   LookAngleLevel,
+  SmileDistanceLevel,
+  SmileThreshold,
   WinkDistanceLevel,
   WinkEyeClosedThreshold,
   WinkEyeProbabilityGapThreshold,
@@ -42,11 +44,13 @@ import {
   detectionResolutionLevels,
   faceHeightAngleLevels,
   lookAngleLevels,
+  normalizeSmileThreshold,
+  smileDistanceLevels,
   winkDistanceLevels,
 } from '../domain/detection';
 import {useAppState} from '../state/AppState';
 
-const WINK_TEST_POLL_MS = 100;
+const WINK_CALIBRATION_POLL_MS = 100;
 const WINK_CALIBRATION_COUNTDOWN_MS = 3000;
 const WINK_CALIBRATION_REQUIRED_WINKS = 3;
 const WINK_CALIBRATION_CAPTURE_TIMEOUT_MS = 15000;
@@ -57,6 +61,10 @@ const WINK_CALIBRATION_RAW_RELEASE_THRESHOLD = 0.45;
 const WINK_CALIBRATION_CLOSED_EYE_MAX_OPEN_PROBABILITY = 0.4;
 const WINK_CALIBRATION_OPEN_EYE_MIN_OPEN_PROBABILITY = 0.4;
 const WINK_CALIBRATION_MIN_GAP_THRESHOLD = 0.2;
+const SMILE_CALIBRATION_REQUIRED_SMILES = 3;
+const SMILE_CALIBRATION_RAW_SMILE_THRESHOLD = 0.45;
+const SMILE_CALIBRATION_RAW_RELEASE_THRESHOLD = 0.35;
+const SMILE_CALIBRATION_THRESHOLD_OFFSET = -0.01;
 const detectionPerformanceLevels = [1, 2] as const;
 
 type WinkCalibrationSide = 'left' | 'right';
@@ -95,12 +103,40 @@ type WinkCalibrationResult =
       message: string;
     };
 
+type SmileCalibrationPhase = WinkCalibrationPhase;
+
+type SmileCalibrationSample = {
+  status: DetectionReading['status'];
+  smileProbability: number | null | undefined;
+  faceAngleValid: boolean;
+};
+
+type CompleteSmileCalibrationSample = SmileCalibrationSample & {
+  smileProbability: number;
+};
+
+type RawSmileCalibrationCaptureState = {
+  isCapturingSmile: boolean;
+  currentSampleIndex: number | null;
+};
+
+type SmileCalibrationResult =
+  | {
+      ok: true;
+      threshold: SmileThreshold;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 type AccordionGroupProps = {
   title: string;
   summary: string;
   testID: string;
   expanded: boolean;
   onToggle(): void;
+  emphasized?: boolean;
   children: React.ReactNode;
 };
 
@@ -135,33 +171,50 @@ type TimerAlertVibrationPatternControlProps = {
   onChange(value: TimerAlertVibrationPatternId): void;
 };
 
-type MetricProps = {
-  label: string;
-  value: string;
-};
-
 function AccordionGroup({
   title,
   summary,
   testID,
   expanded,
   onToggle,
+  emphasized = false,
   children,
 }: AccordionGroupProps) {
   return (
-    <View style={styles.group}>
+    <View style={[styles.group, emphasized ? styles.emphasizedGroup : null]}>
       <Pressable
         accessibilityLabel={title}
         accessibilityRole="button"
         accessibilityState={{expanded}}
         onPress={onToggle}
-        style={styles.groupHeader}
+        style={[
+          styles.groupHeader,
+          emphasized ? styles.emphasizedGroupHeader : null,
+        ]}
         testID={`${testID}-accordion`}>
         <View style={styles.groupHeaderCopy}>
-          <Text style={styles.groupTitle}>{title}</Text>
-          <Text style={styles.groupSummary}>{summary}</Text>
+          <Text
+            style={[
+              styles.groupTitle,
+              emphasized ? styles.emphasizedGroupTitle : null,
+            ]}>
+            {title}
+          </Text>
+          <Text
+            style={[
+              styles.groupSummary,
+              emphasized ? styles.emphasizedGroupSummary : null,
+            ]}>
+            {summary}
+          </Text>
         </View>
-        <Text style={styles.groupCue}>{expanded ? '-' : '+'}</Text>
+        <Text
+          style={[
+            styles.groupCue,
+            emphasized ? styles.emphasizedGroupCue : null,
+          ]}>
+          {expanded ? '-' : '+'}
+        </Text>
       </Pressable>
       {expanded ? (
         <View style={styles.groupBody} testID={`${testID}-body`}>
@@ -172,45 +225,8 @@ function AccordionGroup({
   );
 }
 
-function Metric({label, value}: MetricProps) {
-  return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-    </View>
-  );
-}
-
-function formatRatio(value: number | null | undefined): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toFixed(2)
-    : '--';
-}
-
-function formatPercent(value: number | null | undefined): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? `${Math.round(value * 100)}%`
-    : '--';
-}
-
-function formatDegrees(value: number | null | undefined): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toFixed(1)
-    : '--';
-}
-
-function formatMs(value: number | null | undefined): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? `${Math.round(value)} ms`
-    : '--';
-}
-
 function isFiniteNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
-}
-
-function getWinkSideLabel(reading: DetectionReading | null): string {
-  return reading?.winkSide ?? '--';
 }
 
 function getWinkTestEyeOpenProbability(
@@ -479,6 +495,113 @@ function getWinkCalibrationResult(
   };
 }
 
+function createSmileCalibrationSample(
+  reading: DetectionReading,
+): SmileCalibrationSample {
+  return {
+    status: reading.status,
+    smileProbability: reading.winkDebug?.smileProbability,
+    faceAngleValid: isWinkCalibrationFaceAngleValid(reading.winkDebug),
+  };
+}
+
+function isSmileCalibrationJudgmentUnavailable(
+  sample: SmileCalibrationSample,
+) {
+  return (
+    sample.status !== 'looking' ||
+    !sample.faceAngleValid ||
+    !isFiniteNumber(sample.smileProbability)
+  );
+}
+
+function hasCompleteSmileCalibrationValues(
+  sample: SmileCalibrationSample,
+): sample is CompleteSmileCalibrationSample {
+  return (
+    sample.status === 'looking' &&
+    sample.faceAngleValid &&
+    isFiniteNumber(sample.smileProbability)
+  );
+}
+
+function isRawSmileCalibrationAttempt(sample: SmileCalibrationSample) {
+  return (
+    hasCompleteSmileCalibrationValues(sample) &&
+    sample.smileProbability >= SMILE_CALIBRATION_RAW_SMILE_THRESHOLD
+  );
+}
+
+function isRawSmileCalibrationReleased(sample: SmileCalibrationSample) {
+  return (
+    hasCompleteSmileCalibrationValues(sample) &&
+    sample.smileProbability <= SMILE_CALIBRATION_RAW_RELEASE_THRESHOLD
+  );
+}
+
+function isBetterRawSmileCalibrationSample(
+  nextSample: SmileCalibrationSample,
+  currentSample: SmileCalibrationSample,
+) {
+  return (
+    hasCompleteSmileCalibrationValues(nextSample) &&
+    hasCompleteSmileCalibrationValues(currentSample) &&
+    nextSample.smileProbability > currentSample.smileProbability
+  );
+}
+
+function getCalibratedSmileThreshold(value: number): SmileThreshold {
+  const threshold =
+    Math.round((value + SMILE_CALIBRATION_THRESHOLD_OFFSET) * 1000) / 1000;
+
+  return normalizeSmileThreshold(threshold) as SmileThreshold;
+}
+
+function getSmileCalibrationResult(
+  samples: readonly SmileCalibrationSample[],
+): SmileCalibrationResult {
+  const validSamples = samples.filter(hasCompleteSmileCalibrationValues);
+
+  if (validSamples.length < SMILE_CALIBRATION_REQUIRED_SMILES) {
+    const angleInvalidCount = samples.filter(
+      sample => sample.status === 'looking' && !sample.faceAngleValid,
+    ).length;
+    const notLookingCount = samples.filter(
+      sample => sample.status !== 'looking',
+    ).length;
+
+    if (angleInvalidCount > samples.length * 0.35) {
+      return {
+        ok: false,
+        message:
+          'CALIBRATION FAILED: face the camera directly and try again.',
+      };
+    }
+
+    if (notLookingCount > samples.length * 0.35) {
+      return {
+        ok: false,
+        message:
+          'CALIBRATION FAILED: keep your face in view and try again.',
+      };
+    }
+
+    return {
+      ok: false,
+      message:
+        'CALIBRATION FAILED: smile values were not measured steadily. Try again in brighter light.',
+    };
+  }
+
+  const smileValues = validSamples.map(sample => sample.smileProbability);
+  const maxSmileValue = Math.max(...smileValues);
+
+  return {
+    ok: true,
+    threshold: getCalibratedSmileThreshold(maxSmileValue),
+  };
+}
+
 function getRangeLabel(level: number): string {
   switch (level) {
     case 1:
@@ -499,6 +622,10 @@ function getDistanceLabel(level: number): string {
     default:
       return 'FAR';
   }
+}
+
+function getSmileThresholdLabel(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 function getDetectionPerformanceLevel(
@@ -852,16 +979,16 @@ function TimerAlertVibrationPatternControl({
 
 export function SettingsScreen() {
   const {
-    winkLeftEyeClosedThreshold,
     setWinkLeftEyeClosedThreshold,
-    winkRightEyeClosedThreshold,
     setWinkRightEyeClosedThreshold,
-    winkLeftEyeProbabilityGapThreshold,
     setWinkLeftEyeProbabilityGapThreshold,
-    winkRightEyeProbabilityGapThreshold,
     setWinkRightEyeProbabilityGapThreshold,
     winkDistanceLevel,
     setWinkDistanceLevel,
+    smileThreshold,
+    setSmileThreshold,
+    smileDistanceLevel,
+    setSmileDistanceLevel,
     lookAngleLevel,
     setLookAngleLevel,
     faceHeightAngleLevel,
@@ -885,11 +1012,6 @@ export function SettingsScreen() {
     gazeDetector,
     setScreen,
   } = useAppState();
-  const [winkTestEnabled, setWinkTestEnabled] = useState(false);
-  const [winkTestReading, setWinkTestReading] =
-    useState<DetectionReading | null>(null);
-  const [lastWinkReading, setLastWinkReading] =
-    useState<DetectionReading | null>(null);
   const [winkCalibrationSide, setWinkCalibrationSide] =
     useState<WinkCalibrationSide | null>(null);
   const [winkCalibrationPhase, setWinkCalibrationPhase] =
@@ -900,6 +1022,15 @@ export function SettingsScreen() {
     useState(WINK_CALIBRATION_REQUIRED_WINKS);
   const [winkCalibrationFailureMessage, setWinkCalibrationFailureMessage] =
     useState('');
+  const [smileCalibrationOpen, setSmileCalibrationOpen] = useState(false);
+  const [smileCalibrationPhase, setSmileCalibrationPhase] =
+    useState<SmileCalibrationPhase>('ready');
+  const [smileCalibrationRemainingMs, setSmileCalibrationRemainingMs] =
+    useState(WINK_CALIBRATION_COUNTDOWN_MS);
+  const [smileCalibrationRemainingSmiles, setSmileCalibrationRemainingSmiles] =
+    useState(SMILE_CALIBRATION_REQUIRED_SMILES);
+  const [smileCalibrationFailureMessage, setSmileCalibrationFailureMessage] =
+    useState('');
   const [expandedSettingsGroup, setExpandedSettingsGroup] = useState<
     string | null
   >(null);
@@ -907,57 +1038,29 @@ export function SettingsScreen() {
     winkCalibrationJudgmentUnavailable,
     setWinkCalibrationJudgmentUnavailable,
   ] = useState(false);
+  const [
+    smileCalibrationJudgmentUnavailable,
+    setSmileCalibrationJudgmentUnavailable,
+  ] = useState(false);
   const [activeWinkCalibrationRunId, setActiveWinkCalibrationRunId] = useState<
     number | null
   >(null);
+  const [activeSmileCalibrationRunId, setActiveSmileCalibrationRunId] =
+    useState<number | null>(null);
   const winkCalibrationSamplesRef = useRef<WinkCalibrationSample[]>([]);
   const winkCalibrationRunCounterRef = useRef(0);
+  const smileCalibrationSamplesRef = useRef<SmileCalibrationSample[]>([]);
+  const smileCalibrationRunCounterRef = useRef(0);
 
   const toggleSettingsGroup = (groupId: string) => {
     setExpandedSettingsGroup(current => (current === groupId ? null : groupId));
   };
 
-  useEffect(() => {
-    if (!winkTestEnabled) {
-      return;
-    }
-
-    let isCancelled = false;
-    gazeDetector.start().catch(() => {
-      if (!isCancelled) {
-        setWinkTestReading({
-          status: 'unknown',
-          confidence: 0,
-          eyeState: 'unknown',
-          atMs: Date.now(),
-        });
-      }
-    });
-
-    const intervalId = setInterval(() => {
-      const now = Date.now();
-      const consumedWink = gazeDetector.consumeSingleWink(now);
-      const nextReading = consumedWink ?? gazeDetector.getLatestReading(now);
-
-      if (consumedWink !== null) {
-        setLastWinkReading(consumedWink);
-      }
-
-      setWinkTestReading(nextReading);
-    }, WINK_TEST_POLL_MS);
-
-    return () => {
-      isCancelled = true;
-      clearInterval(intervalId);
-      gazeDetector.stop().catch(() => undefined);
-    };
-  }, [gazeDetector, winkTestEnabled]);
-
-  const winkDebug = winkTestReading?.winkDebug;
   const isWinkCalibrating = winkCalibrationSide !== null;
+  const isSmileCalibrating = smileCalibrationOpen;
+  const isAnyCalibrating = isWinkCalibrating || isSmileCalibrating;
 
   const openWinkCalibration = (side: WinkCalibrationSide) => {
-    setWinkTestEnabled(false);
     setActiveWinkCalibrationRunId(null);
     setWinkCalibrationFailureMessage('');
     setWinkCalibrationJudgmentUnavailable(false);
@@ -977,6 +1080,26 @@ export function SettingsScreen() {
     setWinkCalibrationRemainingWinks(WINK_CALIBRATION_REQUIRED_WINKS);
   };
 
+  const openSmileCalibration = () => {
+    setActiveSmileCalibrationRunId(null);
+    setSmileCalibrationFailureMessage('');
+    setSmileCalibrationJudgmentUnavailable(false);
+    setSmileCalibrationPhase('ready');
+    setSmileCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
+    setSmileCalibrationRemainingSmiles(SMILE_CALIBRATION_REQUIRED_SMILES);
+    setSmileCalibrationOpen(true);
+  };
+
+  const closeSmileCalibration = () => {
+    setActiveSmileCalibrationRunId(null);
+    setSmileCalibrationOpen(false);
+    setSmileCalibrationFailureMessage('');
+    setSmileCalibrationJudgmentUnavailable(false);
+    setSmileCalibrationPhase('ready');
+    setSmileCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
+    setSmileCalibrationRemainingSmiles(SMILE_CALIBRATION_REQUIRED_SMILES);
+  };
+
   const startWinkCalibration = () => {
     if (winkCalibrationSide === null) {
       return;
@@ -991,6 +1114,21 @@ export function SettingsScreen() {
     setWinkCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
     setWinkCalibrationRemainingWinks(WINK_CALIBRATION_REQUIRED_WINKS);
     setActiveWinkCalibrationRunId(winkCalibrationRunCounterRef.current);
+  };
+
+  const startSmileCalibration = () => {
+    if (!smileCalibrationOpen) {
+      return;
+    }
+
+    smileCalibrationSamplesRef.current = [];
+    smileCalibrationRunCounterRef.current += 1;
+    setSmileCalibrationFailureMessage('');
+    setSmileCalibrationJudgmentUnavailable(false);
+    setSmileCalibrationPhase('countdown');
+    setSmileCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
+    setSmileCalibrationRemainingSmiles(SMILE_CALIBRATION_REQUIRED_SMILES);
+    setActiveSmileCalibrationRunId(smileCalibrationRunCounterRef.current);
   };
 
   useEffect(() => {
@@ -1102,7 +1240,6 @@ export function SettingsScreen() {
           winkCalibrationSide,
         );
 
-        setWinkTestReading(nextReading);
         setWinkCalibrationJudgmentUnavailable(
           isWinkCalibrationJudgmentUnavailable(nextSample),
         );
@@ -1133,11 +1270,6 @@ export function SettingsScreen() {
             rawCaptureState.selectedOpenBaseline,
           )
         ) {
-          setLastWinkReading({
-            ...nextReading,
-            winkSide: winkCalibrationSide,
-          });
-
           if (!rawCaptureState.isCapturingWink) {
             winkCalibrationSamplesRef.current.push(nextSample);
             rawCaptureState.isCapturingWink = true;
@@ -1173,7 +1305,7 @@ export function SettingsScreen() {
       captureCalibrationWink();
       captureIntervalId = setInterval(
         captureCalibrationWink,
-        WINK_TEST_POLL_MS,
+        WINK_CALIBRATION_POLL_MS,
       );
     };
 
@@ -1198,7 +1330,10 @@ export function SettingsScreen() {
       };
 
       updateCountdown();
-      countdownIntervalId = setInterval(updateCountdown, WINK_TEST_POLL_MS);
+      countdownIntervalId = setInterval(
+        updateCountdown,
+        WINK_CALIBRATION_POLL_MS,
+      );
     };
 
     gazeDetector.start().catch(() => {
@@ -1225,6 +1360,202 @@ export function SettingsScreen() {
     winkCalibrationSide,
   ]);
 
+  useEffect(() => {
+    if (!smileCalibrationOpen || activeSmileCalibrationRunId === null) {
+      return;
+    }
+
+    let countdownIntervalId: ReturnType<typeof setInterval> | null = null;
+    let captureIntervalId: ReturnType<typeof setInterval> | null = null;
+    const rawCaptureState: RawSmileCalibrationCaptureState = {
+      currentSampleIndex: null,
+      isCapturingSmile: false,
+    };
+    let didFinish = false;
+    let isCancelled = false;
+
+    const clearCalibrationTimers = () => {
+      if (countdownIntervalId !== null) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+      }
+
+      if (captureIntervalId !== null) {
+        clearInterval(captureIntervalId);
+        captureIntervalId = null;
+      }
+    };
+
+    const stopDetector = () => {
+      gazeDetector.stop().catch(() => undefined);
+    };
+
+    const failCalibration = (message: string) => {
+      if (didFinish || isCancelled) {
+        return;
+      }
+
+      didFinish = true;
+      clearCalibrationTimers();
+      setSmileCalibrationFailureMessage(message);
+      setSmileCalibrationJudgmentUnavailable(false);
+      setSmileCalibrationPhase('failed');
+      setSmileCalibrationRemainingMs(0);
+      setSmileCalibrationRemainingSmiles(0);
+      setActiveSmileCalibrationRunId(null);
+      stopDetector();
+    };
+
+    const finishCalibration = () => {
+      if (didFinish || isCancelled) {
+        return;
+      }
+
+      const result = getSmileCalibrationResult(
+        smileCalibrationSamplesRef.current,
+      );
+
+      if (!result.ok) {
+        failCalibration(result.message);
+        return;
+      }
+
+      didFinish = true;
+      clearCalibrationTimers();
+      setSmileThreshold(result.threshold);
+      setSmileCalibrationRemainingMs(0);
+      setSmileCalibrationRemainingSmiles(0);
+      setSmileCalibrationFailureMessage('');
+      setSmileCalibrationJudgmentUnavailable(false);
+      setSmileCalibrationPhase('ready');
+      setActiveSmileCalibrationRunId(null);
+      setSmileCalibrationOpen(false);
+      stopDetector();
+    };
+
+    const startSmileCapture = () => {
+      if (didFinish || isCancelled) {
+        return;
+      }
+
+      const captureStartedAtMs = Date.now();
+      smileCalibrationSamplesRef.current = [];
+      setSmileCalibrationJudgmentUnavailable(false);
+      setSmileCalibrationPhase('measuring');
+      setSmileCalibrationRemainingSmiles(SMILE_CALIBRATION_REQUIRED_SMILES);
+
+      const captureCalibrationSmile = () => {
+        const now = Date.now();
+        const elapsedMs = now - captureStartedAtMs;
+        const nextReading = gazeDetector.getLatestReading(now);
+        const nextSample = createSmileCalibrationSample(nextReading);
+
+        setSmileCalibrationJudgmentUnavailable(
+          isSmileCalibrationJudgmentUnavailable(nextSample),
+        );
+
+        if (isRawSmileCalibrationReleased(nextSample)) {
+          if (
+            rawCaptureState.isCapturingSmile &&
+            smileCalibrationSamplesRef.current.length >=
+              SMILE_CALIBRATION_REQUIRED_SMILES
+          ) {
+            rawCaptureState.isCapturingSmile = false;
+            rawCaptureState.currentSampleIndex = null;
+            finishCalibration();
+            return;
+          }
+
+          rawCaptureState.isCapturingSmile = false;
+          rawCaptureState.currentSampleIndex = null;
+        } else if (isRawSmileCalibrationAttempt(nextSample)) {
+          if (!rawCaptureState.isCapturingSmile) {
+            smileCalibrationSamplesRef.current.push(nextSample);
+            rawCaptureState.isCapturingSmile = true;
+            rawCaptureState.currentSampleIndex =
+              smileCalibrationSamplesRef.current.length - 1;
+          } else if (
+            rawCaptureState.currentSampleIndex !== null &&
+            isBetterRawSmileCalibrationSample(
+              nextSample,
+              smileCalibrationSamplesRef.current[
+                rawCaptureState.currentSampleIndex
+              ],
+            )
+          ) {
+            smileCalibrationSamplesRef.current[
+              rawCaptureState.currentSampleIndex
+            ] = nextSample;
+          }
+
+          const remainingSmiles = Math.max(
+            0,
+            SMILE_CALIBRATION_REQUIRED_SMILES -
+              smileCalibrationSamplesRef.current.length,
+          );
+          setSmileCalibrationRemainingSmiles(remainingSmiles);
+        }
+
+        if (elapsedMs >= WINK_CALIBRATION_CAPTURE_TIMEOUT_MS) {
+          finishCalibration();
+        }
+      };
+
+      captureCalibrationSmile();
+      captureIntervalId = setInterval(
+        captureCalibrationSmile,
+        WINK_CALIBRATION_POLL_MS,
+      );
+    };
+
+    const startCountdown = () => {
+      const countdownStartedAtMs = Date.now();
+
+      const updateCountdown = () => {
+        const elapsedMs = Date.now() - countdownStartedAtMs;
+
+        setSmileCalibrationRemainingMs(
+          Math.max(0, WINK_CALIBRATION_COUNTDOWN_MS - elapsedMs),
+        );
+
+        if (elapsedMs >= WINK_CALIBRATION_COUNTDOWN_MS) {
+          if (countdownIntervalId !== null) {
+            clearInterval(countdownIntervalId);
+            countdownIntervalId = null;
+          }
+
+          startSmileCapture();
+        }
+      };
+
+      updateCountdown();
+      countdownIntervalId = setInterval(
+        updateCountdown,
+        WINK_CALIBRATION_POLL_MS,
+      );
+    };
+
+    gazeDetector.start().catch(() => {
+      failCalibration(
+        'CALIBRATION FAILED: camera could not start. Check permission and lighting, then try again.',
+      );
+    });
+    startCountdown();
+
+    return () => {
+      isCancelled = true;
+      clearCalibrationTimers();
+      if (!didFinish) {
+        stopDetector();
+      }
+    };
+  }, [
+    activeSmileCalibrationRunId,
+    gazeDetector,
+    setSmileThreshold,
+    smileCalibrationOpen,
+  ]);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
@@ -1238,6 +1569,55 @@ export function SettingsScreen() {
           style={styles.returnButton}
         />
       </View>
+
+      <AccordionGroup
+        title="REMOVE ADS"
+        summary="Ad display setting"
+        expanded={expandedSettingsGroup === 'remove-ads-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('remove-ads-settings');
+        }}
+        emphasized
+        testID="remove-ads-settings">
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AD STATUS</Text>
+          <Text style={styles.description}>STANDARD WITH ADS</Text>
+        </View>
+      </AccordionGroup>
+
+      <AccordionGroup
+        title="TIMER"
+        summary="Completion alert controls"
+        expanded={expandedSettingsGroup === 'timer-alert-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('timer-alert-settings');
+        }}
+        testID="timer-alert-settings">
+        <BooleanButtonControl
+          title="VIBRATION"
+          value={timerAlertVibrationEnabled}
+          testID="timer-alert-vibration"
+          onChange={setTimerAlertVibrationEnabled}
+        />
+        <BooleanButtonControl
+          title="SOUND"
+          value={timerAlertSoundEnabled}
+          testID="timer-alert-sound"
+          onChange={setTimerAlertSoundEnabled}
+        />
+        <SoundOptionControl
+          value={timerAlertSoundId}
+          onChange={setTimerAlertSoundId}
+        />
+        <TimerAlertDurationControl
+          value={timerAlertDurationId}
+          onChange={setTimerAlertDurationId}
+        />
+        <TimerAlertVibrationPatternControl
+          value={timerAlertVibrationPatternId}
+          onChange={setTimerAlertVibrationPatternId}
+        />
+      </AccordionGroup>
 
       <AccordionGroup
         title="LOOK MODE"
@@ -1282,7 +1662,7 @@ export function SettingsScreen() {
           <View style={styles.calibrationRow}>
             <PrimaryButton
               label="LEFT WINK SETTING"
-              disabled={isWinkCalibrating}
+              disabled={isAnyCalibrating}
               onPress={() => {
                 openWinkCalibration('left');
               }}
@@ -1291,7 +1671,7 @@ export function SettingsScreen() {
             />
             <PrimaryButton
               label="RIGHT WINK SETTING"
-              disabled={isWinkCalibrating}
+              disabled={isAnyCalibrating}
               onPress={() => {
                 openWinkCalibration('right');
               }}
@@ -1308,6 +1688,39 @@ export function SettingsScreen() {
           testID="wink-distance-levels"
           onChange={level => {
             setWinkDistanceLevel(level as WinkDistanceLevel);
+          }}
+        />
+      </AccordionGroup>
+
+      <AccordionGroup
+        title="SMILE MODE"
+        summary="Smile value and face distance"
+        expanded={expandedSettingsGroup === 'smile-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('smile-settings');
+        }}
+        testID="smile-settings">
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SMILE CALIBRATION</Text>
+          <Text style={styles.description} testID="smile-threshold-value">
+            {`CURRENT VALUE ${getSmileThresholdLabel(smileThreshold)}`}
+          </Text>
+          <PrimaryButton
+            label="SMILE SETTING"
+            disabled={isAnyCalibrating}
+            onPress={openSmileCalibration}
+            testID="calibrate-smile"
+            style={styles.calibrationButton}
+          />
+        </View>
+        <OptionButtonControl
+          title="FACE DISTANCE"
+          value={smileDistanceLevel}
+          levels={smileDistanceLevels}
+          labelForLevel={getDistanceLabel}
+          testID="smile-distance-levels"
+          onChange={level => {
+            setSmileDistanceLevel(level as SmileDistanceLevel);
           }}
         />
       </AccordionGroup>
@@ -1355,159 +1768,16 @@ export function SettingsScreen() {
       </AccordionGroup>
 
       <AccordionGroup
-        title="TIMER"
-        summary="Completion alert controls"
-        expanded={expandedSettingsGroup === 'timer-alert-settings'}
+        title="LANGUAGE"
+        summary="App display language"
+        expanded={expandedSettingsGroup === 'language-settings'}
         onToggle={() => {
-          toggleSettingsGroup('timer-alert-settings');
+          toggleSettingsGroup('language-settings');
         }}
-        testID="timer-alert-settings">
-        <BooleanButtonControl
-          title="VIBRATION"
-          value={timerAlertVibrationEnabled}
-          testID="timer-alert-vibration"
-          onChange={setTimerAlertVibrationEnabled}
-        />
-        <BooleanButtonControl
-          title="SOUND"
-          value={timerAlertSoundEnabled}
-          testID="timer-alert-sound"
-          onChange={setTimerAlertSoundEnabled}
-        />
-        <SoundOptionControl
-          value={timerAlertSoundId}
-          onChange={setTimerAlertSoundId}
-        />
-        <TimerAlertDurationControl
-          value={timerAlertDurationId}
-          onChange={setTimerAlertDurationId}
-        />
-        <TimerAlertVibrationPatternControl
-          value={timerAlertVibrationPatternId}
-          onChange={setTimerAlertVibrationPatternId}
-        />
-      </AccordionGroup>
-
-      <AccordionGroup
-        title="WINK TEST"
-        summary="Live values and calibration"
-        expanded={expandedSettingsGroup === 'wink-test'}
-        onToggle={() => {
-          toggleSettingsGroup('wink-test');
-        }}
-        testID="wink-test">
+        testID="language-settings">
         <View style={styles.section}>
-          <View style={styles.testHeader}>
-            <View style={styles.settingCopy}>
-              <Text style={styles.sectionTitle}>LIVE CAMERA</Text>
-              <Text style={styles.description}>
-                {winkTestEnabled ? 'CAMERA ON' : 'CAMERA OFF'}
-              </Text>
-            </View>
-            <PrimaryButton
-              label={winkTestEnabled ? 'STOP' : 'START'}
-              onPress={() => {
-                setWinkTestEnabled(enabled => !enabled);
-              }}
-              testID="wink-test-toggle"
-              variant={winkTestEnabled ? 'secondary' : 'primary'}
-              style={styles.testButton}
-            />
-          </View>
-
-          <View style={styles.metricGrid}>
-            <Metric
-              label="SAVED LEFT"
-              value={formatRatio(winkLeftEyeClosedThreshold)}
-            />
-            <Metric
-              label="SAVED RIGHT"
-              value={formatRatio(winkRightEyeClosedThreshold)}
-            />
-            <Metric
-              label="SAVED LEFT GAP"
-              value={formatRatio(winkLeftEyeProbabilityGapThreshold)}
-            />
-            <Metric
-              label="SAVED RIGHT GAP"
-              value={formatRatio(winkRightEyeProbabilityGapThreshold)}
-            />
-            <Metric label="STATUS" value={winkTestReading?.status ?? '--'} />
-            <Metric label="EYE" value={winkTestReading?.eyeState ?? '--'} />
-            <Metric label="SIDE" value={getWinkSideLabel(winkTestReading)} />
-            <Metric
-              label="CONFIDENCE"
-              value={formatPercent(winkTestReading?.confidence)}
-            />
-            <Metric
-              label="LEFT EYE"
-              value={formatRatio(
-                getWinkTestEyeOpenProbability(winkDebug, 'left'),
-              )}
-            />
-            <Metric
-              label="RIGHT EYE"
-              value={formatRatio(
-                getWinkTestEyeOpenProbability(winkDebug, 'right'),
-              )}
-            />
-            <Metric
-              label="GAP"
-              value={formatRatio(winkDebug?.eyeProbabilityGap)}
-            />
-            <Metric
-              label="FACE AREA"
-              value={formatRatio(winkDebug?.faceAreaRatio)}
-            />
-            <Metric
-              label="FRAME MS"
-              value={formatMs(winkDebug?.analysisDurationMs)}
-            />
-            <Metric
-              label="PITCH"
-              value={formatDegrees(winkDebug?.facePitchDegrees)}
-            />
-            <Metric
-              label="PITCH LIMIT"
-              value={formatDegrees(winkDebug?.maxFacePitchDegrees)}
-            />
-            <Metric
-              label="LEFT LIMIT"
-              value={formatRatio(
-                winkDebug?.leftEyeClosedThreshold ??
-                  winkLeftEyeClosedThreshold,
-              )}
-            />
-            <Metric
-              label="RIGHT LIMIT"
-              value={formatRatio(
-                winkDebug?.rightEyeClosedThreshold ??
-                  winkRightEyeClosedThreshold,
-              )}
-            />
-            <Metric
-              label="LEFT GAP LIMIT"
-              value={formatRatio(
-                winkDebug?.leftEyeProbabilityGapThreshold ??
-                  winkLeftEyeProbabilityGapThreshold,
-              )}
-            />
-            <Metric
-              label="RIGHT GAP LIMIT"
-              value={formatRatio(
-                winkDebug?.rightEyeProbabilityGapThreshold ??
-                  winkRightEyeProbabilityGapThreshold,
-              )}
-            />
-            <Metric
-              label="FACE LIMIT"
-              value={formatRatio(winkDebug?.minFaceAreaRatio)}
-            />
-            <Metric
-              label="LAST WINK"
-              value={getWinkSideLabel(lastWinkReading)}
-            />
-          </View>
+          <Text style={styles.sectionTitle}>APP LANGUAGE</Text>
+          <Text style={styles.description}>DEVICE DEFAULT</Text>
         </View>
       </AccordionGroup>
 
@@ -1581,6 +1851,71 @@ export function SettingsScreen() {
           </View>
         </View>
       </Modal>
+      <Modal animationType="fade" transparent visible={smileCalibrationOpen}>
+        <View style={styles.modalBackdrop} testID="smile-calibration-popup">
+          <View
+            pointerEvents="none"
+            style={styles.cameraDotBackground}
+            testID="smile-calibration-camera-dot-background">
+            <View
+              style={styles.cameraDot}
+              testID="smile-calibration-camera-dot"
+            />
+          </View>
+          <View style={styles.modalPanel}>
+            <Text style={styles.modalTitle}>SMILE SETTING</Text>
+            <Text style={styles.modalMessage}>
+              {smileCalibrationFailureMessage !== ''
+                ? smileCalibrationFailureMessage
+                : smileCalibrationPhase === 'ready'
+                  ? 'LOOK AT CAMERA AND PRESS START'
+                  : smileCalibrationPhase === 'countdown'
+                    ? 'MEASUREMENT STARTS IN 3 SECONDS'
+                    : 'SMILE 3 TIMES'}
+            </Text>
+            {smileCalibrationPhase === 'countdown' ? (
+              <Text style={styles.modalTimer}>
+                {Math.ceil(smileCalibrationRemainingMs / 1000)}s
+              </Text>
+            ) : smileCalibrationPhase === 'measuring' ? (
+              <>
+                <Text
+                  style={styles.modalTimer}
+                  testID="smile-calibration-count">
+                  {smileCalibrationRemainingSmiles}
+                </Text>
+                <Text
+                  style={styles.calibrationUnavailableMessage}
+                  testID="smile-calibration-unavailable-message">
+                  {smileCalibrationJudgmentUnavailable
+                    ? 'SMILE JUDGMENT UNAVAILABLE.'
+                    : ''}
+                </Text>
+              </>
+            ) : null}
+            <View style={styles.modalActions}>
+              {smileCalibrationPhase === 'ready' ||
+              smileCalibrationPhase === 'failed' ? (
+                <PrimaryButton
+                  label={
+                    smileCalibrationPhase === 'failed' ? 'RETRY' : 'START'
+                  }
+                  onPress={startSmileCalibration}
+                  testID="start-smile-calibration"
+                  style={styles.modalButton}
+                />
+              ) : null}
+              <PrimaryButton
+                label="CANCEL"
+                onPress={closeSmileCalibration}
+                testID="cancel-smile-calibration"
+                variant="secondary"
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1616,6 +1951,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  emphasizedGroup: {
+    borderColor: '#D5972B',
+  },
   groupHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1625,21 +1963,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  emphasizedGroupHeader: {
+    backgroundColor: '#FFF4D8',
+  },
   groupHeaderCopy: {
     flex: 1,
     gap: 4,
   },
   groupTitle: {
     color: '#121A14',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
+    lineHeight: 22,
+  },
+  emphasizedGroupTitle: {
+    color: '#7A3E00',
   },
   groupSummary: {
     color: '#5D6A62',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    lineHeight: 18,
+    lineHeight: 16,
+  },
+  emphasizedGroupSummary: {
+    color: '#7C5B1D',
   },
   groupCue: {
     color: '#121A14',
@@ -1647,6 +1995,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     minWidth: 24,
     textAlign: 'center',
+  },
+  emphasizedGroupCue: {
+    color: '#7A3E00',
   },
   groupBody: {
     backgroundColor: '#F3F6F1',
@@ -1661,16 +2012,17 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#121A14',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
+    lineHeight: 18,
   },
   settingCopy: {
     gap: 4,
   },
   description: {
     color: '#5D6A62',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     textTransform: 'uppercase',
   },
   toggleGrid: {
@@ -1690,9 +2042,9 @@ const styles = StyleSheet.create({
   },
   soundSelectedName: {
     color: '#5D6A62',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   soundPreviewButton: {
     minHeight: 34,
@@ -1799,18 +2151,6 @@ const styles = StyleSheet.create({
   durationValueDisabled: {
     color: '#6A746D',
   },
-  testHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  testButton: {
-    minHeight: 42,
-    minWidth: 92,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
   calibrationRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1912,35 +2252,5 @@ const styles = StyleSheet.create({
     minWidth: 118,
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  metric: {
-    backgroundColor: '#F7F8F5',
-    borderColor: '#DCE2DE',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexBasis: '47%',
-    flexGrow: 1,
-    minHeight: 58,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  metricLabel: {
-    color: '#5D6A62',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0,
-    marginBottom: 4,
-  },
-  metricValue: {
-    color: '#121A14',
-    fontSize: 15,
-    fontVariant: ['tabular-nums'],
-    fontWeight: '800',
-    letterSpacing: 0,
   },
 });

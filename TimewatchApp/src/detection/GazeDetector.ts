@@ -13,6 +13,8 @@ import type {
   DetectionResolutionLevel,
   EyeState,
   LookAngleLevel,
+  SmileDistanceLevel,
+  SmileThreshold,
   WinkDistanceLevel,
   WinkDebugValues,
   WinkEyeClosedThreshold,
@@ -27,6 +29,8 @@ import {
   normalizeDetectionResolutionLevel,
   normalizeFaceHeightAngleLevel,
   normalizeLookAngleLevel,
+  normalizeSmileDistanceLevel,
+  normalizeSmileThreshold,
   normalizeWinkEyeClosedThreshold,
   normalizeWinkEyeProbabilityGapThreshold,
   normalizeWinkDistanceLevel,
@@ -42,6 +46,8 @@ type NativeGazeDetectionModule = {
     rightEyeProbabilityGapThreshold: number,
   ): Promise<void>;
   setWinkDistanceLevel?(level: number): Promise<void>;
+  setSmileThreshold?(threshold: number): Promise<void>;
+  setSmileDistanceLevel?(level: number): Promise<void>;
   setLookAngleLevel?(level: number): Promise<void>;
   setFaceHeightAngleLevel?(level: number): Promise<void>;
   setAnalysisResolution?(width: number, height: number): Promise<void>;
@@ -54,6 +60,7 @@ type NativeGazeDetectionReadingEvent = {
   confidence?: unknown;
   eyeState?: unknown;
   winkSide?: unknown;
+  smileDetected?: unknown;
   leftEyeOpenProbability?: unknown;
   rightEyeOpenProbability?: unknown;
   eyeProbabilityGap?: unknown;
@@ -74,6 +81,9 @@ type NativeGazeDetectionReadingEvent = {
   maxFaceYawDegrees?: unknown;
   maxFaceRollDegrees?: unknown;
   analysisDurationMs?: unknown;
+  smileProbability?: unknown;
+  minSmileProbability?: unknown;
+  minSmileFaceAreaRatio?: unknown;
 };
 
 export type GazeDetector = {
@@ -89,6 +99,8 @@ export type GazeDetector = {
     rightEyeProbabilityGapThreshold: WinkEyeProbabilityGapThreshold,
   ): Promise<void>;
   setWinkDistanceLevel(level: WinkDistanceLevel): Promise<void>;
+  setSmileThreshold(threshold: SmileThreshold): Promise<void>;
+  setSmileDistanceLevel(level: SmileDistanceLevel): Promise<void>;
   setLookAngleLevel(level: LookAngleLevel): Promise<void>;
   setFaceHeightAngleLevel(level: FaceHeightAngleLevel): Promise<void>;
   setDetectionResolutionLevel(level: DetectionResolutionLevel): Promise<void>;
@@ -171,7 +183,10 @@ function normalizeWinkDebug(
     event.maxFacePitchDegrees !== undefined ||
     event.maxFaceYawDegrees !== undefined ||
     event.maxFaceRollDegrees !== undefined ||
-    event.analysisDurationMs !== undefined;
+    event.analysisDurationMs !== undefined ||
+    event.smileProbability !== undefined ||
+    event.minSmileProbability !== undefined ||
+    event.minSmileFaceAreaRatio !== undefined;
 
   if (!hasDebugValue) {
     return undefined;
@@ -216,6 +231,19 @@ function normalizeWinkDebug(
     maxFaceYawDegrees: normalizeOptionalNumber(event.maxFaceYawDegrees),
     maxFaceRollDegrees: normalizeOptionalNumber(event.maxFaceRollDegrees),
     analysisDurationMs: normalizeOptionalNumber(event.analysisDurationMs),
+    ...(event.smileProbability !== undefined
+      ? {smileProbability: normalizeOptionalNumber(event.smileProbability)}
+      : {}),
+    ...(event.minSmileProbability !== undefined
+      ? {minSmileProbability: normalizeOptionalNumber(event.minSmileProbability)}
+      : {}),
+    ...(event.minSmileFaceAreaRatio !== undefined
+      ? {
+          minSmileFaceAreaRatio: normalizeOptionalNumber(
+            event.minSmileFaceAreaRatio,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -268,6 +296,41 @@ function isWinkDebugGeometryAllowed(winkDebug: WinkDebugValues) {
     exceedsAbsoluteLimit(winkDebug.faceYawDegrees, winkDebug.maxFaceYawDegrees) ||
     exceedsAbsoluteLimit(winkDebug.faceRollDegrees, winkDebug.maxFaceRollDegrees)
   );
+}
+
+function getSmileDetected(
+  status: DetectionStatus,
+  event: NativeGazeDetectionReadingEvent,
+  winkDebug: WinkDebugValues | undefined,
+): boolean | undefined {
+  if (status !== 'looking') {
+    return undefined;
+  }
+
+  if (
+    typeof winkDebug?.faceAreaRatio === 'number' &&
+    Number.isFinite(winkDebug.faceAreaRatio) &&
+    typeof winkDebug.minSmileFaceAreaRatio === 'number' &&
+    Number.isFinite(winkDebug.minSmileFaceAreaRatio) &&
+    winkDebug.faceAreaRatio < winkDebug.minSmileFaceAreaRatio
+  ) {
+    return undefined;
+  }
+
+  if (typeof event.smileDetected === 'boolean') {
+    return event.smileDetected;
+  }
+
+  if (
+    typeof winkDebug?.smileProbability === 'number' &&
+    Number.isFinite(winkDebug.smileProbability) &&
+    typeof winkDebug.minSmileProbability === 'number' &&
+    Number.isFinite(winkDebug.minSmileProbability)
+  ) {
+    return winkDebug.smileProbability >= winkDebug.minSmileProbability;
+  }
+
+  return undefined;
 }
 
 function getFixedWinkEyeClassification(
@@ -380,6 +443,7 @@ export function createMockGazeDetector(
   let confidence = status === 'unknown' ? 0 : 1;
   let eyeState: EyeState = 'unknown';
   let winkSide: WinkSide | null = null;
+  let smileDetected: boolean | undefined;
   let winkDebug: WinkDebugValues | undefined;
   let oneEyeClosedStartedAtMs: number | null = null;
   let oneEyeClosedLastSeenAtMs: number | null = null;
@@ -406,6 +470,11 @@ export function createMockGazeDetector(
         ? event.winkSide
         : null;
       const nextWinkDebug = normalizeWinkDebug(event);
+      const nextSmileDetected = getSmileDetected(
+        nextStatus,
+        event,
+        nextWinkDebug,
+      );
       const fixedEyeClassification = getFixedWinkEyeClassification(
         nextStatus,
         eventEyeState,
@@ -485,6 +554,7 @@ export function createMockGazeDetector(
       status = event.status;
       confidence = nextConfidence;
       eyeState = nextEyeState;
+      smileDetected = nextSmileDetected;
       winkDebug = nextWinkDebug;
     },
   );
@@ -524,6 +594,7 @@ export function createMockGazeDetector(
         winkSide !== null
           ? { winkSide }
           : {}),
+        ...(smileDetected !== undefined ? { smileDetected } : {}),
         ...(winkDebug !== undefined ? { winkDebug } : {}),
         atMs: nowMs,
       };
@@ -568,6 +639,17 @@ export function createMockGazeDetector(
       await getNativeGazeDetection()?.setWinkDistanceLevel?.(normalized);
     },
 
+    async setSmileThreshold(threshold) {
+      await getNativeGazeDetection()?.setSmileThreshold?.(
+        normalizeSmileThreshold(threshold),
+      );
+    },
+
+    async setSmileDistanceLevel(level) {
+      const normalized = normalizeSmileDistanceLevel(level);
+      await getNativeGazeDetection()?.setSmileDistanceLevel?.(normalized);
+    },
+
     async setLookAngleLevel(level) {
       const normalized = normalizeLookAngleLevel(level);
       await getNativeGazeDetection()?.setLookAngleLevel?.(normalized);
@@ -606,6 +688,7 @@ export function createMockGazeDetector(
       confidence = status === 'unknown' ? 0 : 1;
       eyeState = 'unknown';
       winkSide = null;
+      smileDetected = undefined;
       winkDebug = undefined;
       oneEyeClosedStartedAtMs = null;
       oneEyeClosedLastSeenAtMs = null;

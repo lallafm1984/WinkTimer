@@ -78,6 +78,15 @@ type NativeTimerAlertModule = {
     durationId: string,
     vibrationPatternId: string,
   ): Promise<void>;
+  scheduleTimerEndAlert?(
+    triggerAtMs: number,
+    soundId: string,
+    vibrationEnabled: boolean,
+    soundEnabled: boolean,
+    durationId: string,
+    vibrationPatternId: string,
+  ): Promise<void>;
+  cancelScheduledTimerEndAlert?(): Promise<void>;
   previewTimerAlertSound?(soundId: string, durationMs: number): Promise<void>;
   stopTimerEndAlert?(): Promise<void>;
   getTimerAlertSoundOptions?(): Promise<unknown>;
@@ -89,6 +98,10 @@ type TimerAlertSettings = {
   soundId: TimerAlertSoundId;
   durationId: TimerAlertDurationId;
   vibrationPatternId: TimerAlertVibrationPatternId;
+};
+
+type ScheduledTimerAlertSettings = TimerAlertSettings & {
+  triggerAtMs: number;
 };
 
 const fallbackVibrationPatterns: Record<
@@ -281,6 +294,37 @@ export function playTimerEndAlert({
   }
 
   return Promise.resolve();
+}
+
+export function scheduleTimerEndAlert({
+  triggerAtMs,
+  vibrationEnabled,
+  soundEnabled,
+  soundId,
+  durationId,
+  vibrationPatternId,
+}: ScheduledTimerAlertSettings): Promise<void> {
+  if (!vibrationEnabled && !soundEnabled) {
+    return cancelScheduledTimerEndAlert();
+  }
+
+  return (
+    getNativeTimerAlert()?.scheduleTimerEndAlert?.(
+      triggerAtMs,
+      soundId,
+      vibrationEnabled,
+      soundEnabled,
+      durationId,
+      vibrationPatternId,
+    ) ?? Promise.resolve()
+  );
+}
+
+export function cancelScheduledTimerEndAlert(): Promise<void> {
+  return (
+    getNativeTimerAlert()?.cancelScheduledTimerEndAlert?.() ??
+    Promise.resolve()
+  );
 }
 
 export function previewTimerAlertSound(

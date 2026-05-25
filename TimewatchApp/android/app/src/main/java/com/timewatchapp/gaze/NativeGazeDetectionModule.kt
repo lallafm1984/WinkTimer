@@ -65,6 +65,8 @@ class NativeGazeDetectionModule(
   @Volatile private var winkLeftEyeProbabilityGapThreshold = DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD
   @Volatile private var winkRightEyeProbabilityGapThreshold = DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD
   @Volatile private var winkDistanceLevel = DEFAULT_WINK_DISTANCE_LEVEL
+  @Volatile private var smileThreshold = DEFAULT_SMILE_THRESHOLD
+  @Volatile private var smileDistanceLevel = DEFAULT_SMILE_DISTANCE_LEVEL
   @Volatile private var lookAngleLevel = DEFAULT_LOOK_ANGLE_LEVEL
   @Volatile private var faceHeightAngleLevel = DEFAULT_FACE_HEIGHT_ANGLE_LEVEL
   @Volatile private var analysisResolutionWidth = DEFAULT_ANALYSIS_WIDTH
@@ -186,6 +188,24 @@ class NativeGazeDetectionModule(
       level
         .toInt()
         .coerceIn(MIN_WINK_DISTANCE_LEVEL, MAX_WINK_DISTANCE_LEVEL)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun setSmileThreshold(threshold: Double, promise: Promise) {
+    smileThreshold =
+      threshold
+        .toFloat()
+        .coerceIn(MIN_SMILE_THRESHOLD, MAX_SMILE_THRESHOLD)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun setSmileDistanceLevel(level: Double, promise: Promise) {
+    smileDistanceLevel =
+      level
+        .toInt()
+        .coerceIn(MIN_SMILE_DISTANCE_LEVEL, MAX_SMILE_DISTANCE_LEVEL)
     promise.resolve(null)
   }
 
@@ -416,12 +436,19 @@ class NativeGazeDetectionModule(
       if (facingScreen) {
         rawEyeReading
       } else {
-        EyeReading("unknown", null, rawEyeReading.debug)
+        EyeReading("unknown", null, null, rawEyeReading.debug)
       }
     val status = if (facingScreen) "looking" else "notLooking"
     val confidence = calculateConfidence(face, facingScreen, eyeReading.eyeState, lookingAngles)
 
-    emitReading(status, confidence, eyeReading.eyeState, eyeReading.winkSide, eyeReading.debug)
+    emitReading(
+      status,
+      confidence,
+      eyeReading.eyeState,
+      eyeReading.winkSide,
+      eyeReading.debug,
+      smileDetected = eyeReading.smileDetected,
+    )
   }
 
   private fun resolveEyeReading(
@@ -456,6 +483,17 @@ class NativeGazeDetectionModule(
       } else {
         null
       }
+    val rawSmileProbability = face.smilingProbability
+    val smileProbability = rawSmileProbability?.toDouble()
+    val minSmileProbability =
+      smileThreshold.coerceIn(MIN_SMILE_THRESHOLD, MAX_SMILE_THRESHOLD)
+    val minSmileFaceAreaRatio = getMinFaceAreaRatioForSmile()
+    val smileDetected =
+      if (rawSmileProbability != null && faceAreaRatio >= minSmileFaceAreaRatio) {
+        rawSmileProbability >= minSmileProbability
+      } else {
+        null
+      }
     val debug =
       EyeDebug(
         leftEyeOpenProbability = leftEye?.toDouble(),
@@ -478,14 +516,17 @@ class NativeGazeDetectionModule(
         maxFaceYawDegrees = lookingAngles.maxYawDegrees,
         maxFaceRollDegrees = lookingAngles.maxRollDegrees,
         analysisDurationMs = analysisDurationMs,
+        smileProbability = smileProbability,
+        minSmileProbability = minSmileProbability.toDouble(),
+        minSmileFaceAreaRatio = minSmileFaceAreaRatio,
       )
 
     if (faceAreaRatio < minFaceAreaRatio) {
-      return EyeReading("unknown", null, debug)
+      return EyeReading("unknown", null, smileDetected, debug)
     }
 
     if (leftEye == null || rightEye == null) {
-      return EyeReading("unknown", null, debug)
+      return EyeReading("unknown", null, smileDetected, debug)
     }
 
     val bothOpen =
@@ -503,11 +544,11 @@ class NativeGazeDetectionModule(
         leftEye >= thresholds.minOpenEyeProbabilityForWink
 
     return when {
-      bothOpen -> EyeReading("bothOpen", null, debug)
-      leftClosed && rightClosed -> EyeReading("bothClosed", null, debug)
-      leftWink -> EyeReading("oneEyeClosed", normalizeWinkSide("left"), debug)
-      rightWink -> EyeReading("oneEyeClosed", normalizeWinkSide("right"), debug)
-      else -> EyeReading("unknown", null, debug)
+      bothOpen -> EyeReading("bothOpen", null, smileDetected, debug)
+      leftClosed && rightClosed -> EyeReading("bothClosed", null, smileDetected, debug)
+      leftWink -> EyeReading("oneEyeClosed", normalizeWinkSide("left"), smileDetected, debug)
+      rightWink -> EyeReading("oneEyeClosed", normalizeWinkSide("right"), smileDetected, debug)
+      else -> EyeReading("unknown", null, smileDetected, debug)
     }
   }
 
@@ -557,6 +598,16 @@ class NativeGazeDetectionModule(
     return CLOSE_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION +
       ((FAR_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION -
         CLOSE_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION) * ratio)
+  }
+
+  private fun getMinFaceAreaRatioForSmile(): Double {
+    val ratio =
+      (smileDistanceLevel - MIN_SMILE_DISTANCE_LEVEL).toDouble() /
+        (MAX_SMILE_DISTANCE_LEVEL - MIN_SMILE_DISTANCE_LEVEL).toDouble()
+
+    return CLOSE_MIN_FACE_AREA_RATIO_FOR_SMILE +
+      ((FAR_MIN_FACE_AREA_RATIO_FOR_SMILE -
+        CLOSE_MIN_FACE_AREA_RATIO_FOR_SMILE) * ratio)
   }
 
   private fun getLookingAngleThresholds(): LookingAngleThresholds =
@@ -611,6 +662,7 @@ class NativeGazeDetectionModule(
     winkSide: String?,
     eyeDebug: EyeDebug? = null,
     analysisDurationMs: Double? = null,
+    smileDetected: Boolean? = null,
   ) {
     val now = System.currentTimeMillis()
     if (
@@ -636,6 +688,11 @@ class NativeGazeDetectionModule(
         } else {
           putString("winkSide", winkSide)
         }
+        if (smileDetected == null) {
+          putNull("smileDetected")
+        } else {
+          putBoolean("smileDetected", smileDetected)
+        }
         putDouble("confidence", confidence)
         (analysisDurationMs ?: eyeDebug?.analysisDurationMs)?.let {
           putDouble("analysisDurationMs", it)
@@ -660,6 +717,9 @@ class NativeGazeDetectionModule(
           putDouble("maxFacePitchDegrees", debug.maxFacePitchDegrees)
           putDouble("maxFaceYawDegrees", debug.maxFaceYawDegrees)
           putDouble("maxFaceRollDegrees", debug.maxFaceRollDegrees)
+          debug.smileProbability?.let { putDouble("smileProbability", it) }
+          putDouble("minSmileProbability", debug.minSmileProbability)
+          putDouble("minSmileFaceAreaRatio", debug.minSmileFaceAreaRatio)
         }
       }
 
@@ -758,8 +818,16 @@ class NativeGazeDetectionModule(
     private const val MIN_WINK_DISTANCE_LEVEL = 1
     private const val MAX_WINK_DISTANCE_LEVEL = 5
     private const val DEFAULT_WINK_DISTANCE_LEVEL = 5
+    private const val MIN_SMILE_THRESHOLD = 0.0f
+    private const val MAX_SMILE_THRESHOLD = 1.0f
+    private const val DEFAULT_SMILE_THRESHOLD = 0.7f
+    private const val MIN_SMILE_DISTANCE_LEVEL = 1
+    private const val MAX_SMILE_DISTANCE_LEVEL = 5
+    private const val DEFAULT_SMILE_DISTANCE_LEVEL = 5
     private const val CLOSE_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION = 0.065
     private const val FAR_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION = 0.0
+    private const val CLOSE_MIN_FACE_AREA_RATIO_FOR_SMILE = 0.045
+    private const val FAR_MIN_FACE_AREA_RATIO_FOR_SMILE = 0.0
     private const val EMIT_THROTTLE_MS = 350L
     private const val POSTURE_EMIT_THROTTLE_MS = 150L
     private const val DEFAULT_ANALYSIS_WIDTH = 640
@@ -794,6 +862,7 @@ class NativeGazeDetectionModule(
   private data class EyeReading(
     val eyeState: String,
     val winkSide: String?,
+    val smileDetected: Boolean?,
     val debug: EyeDebug?,
   )
 
@@ -818,5 +887,8 @@ class NativeGazeDetectionModule(
     val maxFaceYawDegrees: Double,
     val maxFaceRollDegrees: Double,
     val analysisDurationMs: Double,
+    val smileProbability: Double?,
+    val minSmileProbability: Double,
+    val minSmileFaceAreaRatio: Double,
   )
 }

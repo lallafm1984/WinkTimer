@@ -273,6 +273,7 @@ describe('timerEngine', () => {
       detectionStatus: 'unknown',
       eyeState: 'unknown',
       winkSide: null,
+      smileDetected: null,
       recentWinkSide: null,
       recentWinkAtMs: null,
       lookingStartedAtMs: null,

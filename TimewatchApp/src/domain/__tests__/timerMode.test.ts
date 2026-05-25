@@ -1,4 +1,6 @@
 import {
+  modeUsesSmileResume,
+  modeUsesSmileStart,
   modeRunsWithoutGaze,
   modeUsesDeviceFlip,
   modeUsesWinkLap,
@@ -11,6 +13,7 @@ describe('timer mode presets', () => {
       'basicTimer',
       'lookPause',
       'winkControl',
+      'smileMode',
       'flipTimer',
     ]);
     expect(timerModePresets.some(mode => mode.beta)).toBe(false);
@@ -46,6 +49,26 @@ describe('timer mode presets', () => {
       {label: 'RESUME', value: 'Flip Down'},
       {label: 'RESET', value: 'Button'},
     ]);
+  });
+
+  it('adds Smile Mode after Wink Control with smile start, stop, and resume controls', () => {
+    const smile = timerModePresets.find(mode => mode.id === 'smileMode');
+
+    expect(smile?.startGesture).toBe('smile');
+    expect(smile?.pauseGesture).toBe('smile');
+    expect(smile?.resumeGesture).toBe('smile');
+    expect(smile?.resetGesture).toBe('button');
+    expect(smile?.lapGesture).toBeUndefined();
+    expect(smile?.actions).toEqual([
+      {label: 'START', value: 'Smile'},
+      {label: 'PAUSE', value: 'Smile'},
+      {label: 'RESUME', value: 'Smile'},
+      {label: 'RESET', value: 'Button'},
+    ]);
+    expect(modeUsesSmileStart('smileMode')).toBe(true);
+    expect(modeUsesSmileResume('smileMode')).toBe(true);
+    expect(modeUsesSmileStart('winkControl')).toBe(false);
+    expect(modeUsesSmileResume('winkControl')).toBe(false);
   });
 
   it('assigns lap gestures only where lap records are meaningful', () => {

@@ -1,6 +1,7 @@
 export type TimerModeId =
   | 'lookPause'
   | 'winkControl'
+  | 'smileMode'
   | 'basicTimer'
   | 'flipTimer';
 
@@ -8,6 +9,7 @@ export type TimerModeGesture =
   | 'button'
   | 'leftWink'
   | 'rightWink'
+  | 'smile'
   | 'look'
   | 'lookAway'
   | 'deviceFaceDown'
@@ -74,6 +76,21 @@ export const timerModePresets: TimerModePreset[] = [
       {label: 'RESUME', value: 'Right Wink'},
       {label: 'RESET', value: 'Left Wink'},
       {label: 'LAP', value: 'Left Wink'},
+    ],
+  },
+  {
+    id: 'smileMode',
+    title: 'SMILE MODE',
+    description: 'Smile starts, pauses, and resumes the timer; button resets',
+    startGesture: 'smile',
+    pauseGesture: 'smile',
+    resumeGesture: 'smile',
+    resetGesture: 'button',
+    actions: [
+      {label: 'START', value: 'Smile'},
+      {label: 'PAUSE', value: 'Smile'},
+      {label: 'RESUME', value: 'Smile'},
+      {label: 'RESET', value: 'Button'},
     ],
   },
   {
@@ -162,6 +179,18 @@ export function modeUsesWinkLap(
   side: WinkGestureSide,
 ): boolean {
   return getTimerModePreset(modeId).lapGesture === getWinkGesture(side);
+}
+
+export function modeUsesSmileStart(modeId: TimerModeId): boolean {
+  return getTimerModePreset(modeId).startGesture === 'smile';
+}
+
+export function modeUsesSmilePause(modeId: TimerModeId): boolean {
+  return getTimerModePreset(modeId).pauseGesture === 'smile';
+}
+
+export function modeUsesSmileResume(modeId: TimerModeId): boolean {
+  return getTimerModePreset(modeId).resumeGesture === 'smile';
 }
 
 export function modeHasLap(modeId: TimerModeId): boolean {

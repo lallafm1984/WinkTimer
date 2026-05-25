@@ -6,6 +6,8 @@ type NativeGazeDetectionModuleForTest = {
   start: jest.Mock<Promise<void>, []>;
   stop: jest.Mock<Promise<void>, []>;
   setWinkDistanceLevel?: jest.Mock<Promise<void>, [number]>;
+  setSmileThreshold?: jest.Mock<Promise<void>, [number]>;
+  setSmileDistanceLevel?: jest.Mock<Promise<void>, [number]>;
   setLookAngleLevel?: jest.Mock<Promise<void>, [number]>;
   setFaceHeightAngleLevel?: jest.Mock<Promise<void>, [number]>;
   setWinkThresholds?: jest.Mock<
@@ -146,6 +148,26 @@ describe('GazeDetector', () => {
       0.344,
       0.218,
     );
+  });
+
+  it('delegates smile threshold and distance changes to the native detector', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    const setSmileThreshold = jest.fn().mockResolvedValue(undefined);
+    const setSmileDistanceLevel = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {
+      start,
+      stop,
+      setSmileThreshold,
+      setSmileDistanceLevel,
+    };
+    const detector = createMockGazeDetector();
+
+    await detector.setSmileThreshold(0.82);
+    await detector.setSmileDistanceLevel(2);
+
+    expect(setSmileThreshold).toHaveBeenCalledWith(0.82);
+    expect(setSmileDistanceLevel).toHaveBeenCalledWith(1);
   });
 
   it('delegates look angle changes to the native detector', async () => {
@@ -365,6 +387,35 @@ describe('GazeDetector', () => {
         analysisDurationMs: 24,
       },
       atMs: 7100,
+    });
+  });
+
+  it('preserves native smile values in the latest reading', () => {
+    const detector = createMockGazeDetector('looking');
+
+    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+      status: 'looking',
+      confidence: 0.88,
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      smileProbability: 0.91,
+      minSmileProbability: 0.7,
+      minSmileFaceAreaRatio: 0.04,
+      faceAreaRatio: 0.12,
+    });
+
+    expect(detector.getLatestReading(7150)).toEqual({
+      status: 'looking',
+      confidence: 0.88,
+      eyeState: 'bothOpen',
+      smileDetected: true,
+      winkDebug: expect.objectContaining({
+        faceAreaRatio: 0.12,
+        smileProbability: 0.91,
+        minSmileProbability: 0.7,
+        minSmileFaceAreaRatio: 0.04,
+      }),
+      atMs: 7150,
     });
   });
 

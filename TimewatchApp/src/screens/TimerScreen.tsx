@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type GestureResponderEvent,
   type StyleProp,
@@ -37,6 +38,10 @@ import {
 } from '../domain/timekeeping';
 import {useAppState} from '../state/AppState';
 import {arcadeTheme} from '../theme/arcadeTheme';
+
+const MODE_MENU_MAX_HEIGHT = 440;
+const MODE_MENU_MIN_HEIGHT = 360;
+const MODE_MENU_SCREEN_HEIGHT_RATIO = 0.56;
 
 type TimerActionButtonProps = {
   label: string;
@@ -116,6 +121,16 @@ function isWinkJudgmentUnavailable(
     (timer.detectionStatus !== 'looking' ||
       timer.eyeState === 'unknown' ||
       timer.eyeState === 'bothClosed')
+  );
+}
+
+function isSmileJudgmentUnavailable(
+  timer: TimerState,
+  mode: TimerModePreset,
+) {
+  return (
+    mode.id === 'smileMode' &&
+    (timer.detectionStatus !== 'looking' || timer.smileDetected === null)
   );
 }
 
@@ -518,6 +533,7 @@ function TimerTargetWheel({
 }
 
 export function TimerScreen() {
+  const {height: windowHeight} = useWindowDimensions();
   const {
     timer,
     setScreen,
@@ -543,27 +559,46 @@ export function TimerScreen() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [timerTargetPopupOpen, setTimerTargetPopupOpen] =
     React.useState(false);
+  const [timerTargetDraftDurationMs, setTimerTargetDraftDurationMsState] =
+    React.useState(timer.targetDurationMs ?? timerTargetDurationMs);
+  const timerTargetDraftDurationMsRef = React.useRef(
+    timer.targetDurationMs ?? timerTargetDurationMs,
+  );
   const openTimerTargetAfterModeSwitchRef = React.useRef(false);
   const closeModeMenuAfterTimekeepingModeRef =
     React.useRef<TimekeepingMode | null>(null);
 
   const ghostState = getGhostState(timer);
   const selectedMode = getTimerModePreset(timerModeId);
-  const winkJudgmentUnavailable = isWinkJudgmentUnavailable(
-    timer,
-    selectedMode,
+  const modeMenuScrollMaxHeight = Math.max(
+    MODE_MENU_MIN_HEIGHT,
+    Math.min(
+      MODE_MENU_MAX_HEIGHT,
+      Math.floor(windowHeight * MODE_MENU_SCREEN_HEIGHT_RATIO),
+    ),
   );
+  const gestureJudgmentUnavailable =
+    selectedMode.id === 'smileMode'
+      ? isSmileJudgmentUnavailable(timer, selectedMode)
+      : isWinkJudgmentUnavailable(timer, selectedMode);
   const [
-    winkUnavailableHintVisible,
-    setWinkUnavailableHintVisible,
-  ] = React.useState(winkJudgmentUnavailable);
+    gestureUnavailableHintVisible,
+    setGestureUnavailableHintVisible,
+  ] = React.useState(gestureJudgmentUnavailable);
   const shouldRenderWinkJudgmentHint = selectedMode.id === 'winkControl';
   const winkUnavailableHintShown =
-    shouldRenderWinkJudgmentHint && winkUnavailableHintVisible;
+    shouldRenderWinkJudgmentHint && gestureUnavailableHintVisible;
   const winkReadyHintShown =
-    shouldRenderWinkJudgmentHint && !winkUnavailableHintVisible;
+    shouldRenderWinkJudgmentHint && !gestureUnavailableHintVisible;
   const winkJudgmentHintShown =
     winkUnavailableHintShown || winkReadyHintShown;
+  const shouldRenderSmileJudgmentHint = selectedMode.id === 'smileMode';
+  const smileUnavailableHintShown =
+    shouldRenderSmileJudgmentHint && gestureUnavailableHintVisible;
+  const smileReadyHintShown =
+    shouldRenderSmileJudgmentHint && !gestureUnavailableHintVisible;
+  const smileJudgmentHintShown =
+    smileUnavailableHintShown || smileReadyHintShown;
   const historyEvents = React.useMemo(
     () =>
       sessionHistory.filter(event =>
@@ -604,7 +639,7 @@ export function TimerScreen() {
   );
   const effectiveTimerTargetDurationMs =
     timer.targetDurationMs ?? timerTargetDurationMs;
-  const timerTargetParts = getTimerTargetParts(effectiveTimerTargetDurationMs);
+  const timerTargetDraftParts = getTimerTargetParts(timerTargetDraftDurationMs);
   const showsTimerTargetControls = timekeepingMode === 'timer';
   const canAdjustTimerTarget =
     showsTimerTargetControls &&
@@ -612,6 +647,45 @@ export function TimerScreen() {
       timer.phase === 'manualPaused' ||
       timer.phase === 'ended');
   const canOpenTimerTargetPopup = showsTimerTargetControls && canAdjustTimerTarget;
+  const setTimerTargetDraftDurationMs = React.useCallback(
+    (durationMs: number) => {
+      timerTargetDraftDurationMsRef.current = durationMs;
+      setTimerTargetDraftDurationMsState(durationMs);
+    },
+    [],
+  );
+  const openTimerTargetPopup = React.useCallback(() => {
+    if (!canOpenTimerTargetPopup) {
+      return;
+    }
+
+    setTimerTargetDraftDurationMs(effectiveTimerTargetDurationMs);
+    setTimerTargetPopupOpen(true);
+  }, [
+    canOpenTimerTargetPopup,
+    effectiveTimerTargetDurationMs,
+    setTimerTargetDraftDurationMs,
+  ]);
+  const cancelTimerTargetPopup = React.useCallback(() => {
+    setTimerTargetDraftDurationMs(effectiveTimerTargetDurationMs);
+    setTimerTargetPopupOpen(false);
+  }, [effectiveTimerTargetDurationMs, setTimerTargetDraftDurationMs]);
+  const applyTimerTargetPopup = React.useCallback(() => {
+    const nextDurationMs = timerTargetDraftDurationMsRef.current;
+
+    if (
+      canAdjustTimerTarget &&
+      nextDurationMs !== effectiveTimerTargetDurationMs
+    ) {
+      setTimerTargetDurationMs(nextDurationMs);
+    }
+
+    setTimerTargetPopupOpen(false);
+  }, [
+    canAdjustTimerTarget,
+    effectiveTimerTargetDurationMs,
+    setTimerTargetDurationMs,
+  ]);
   const appTitle =
     timekeepingMode === 'timer' ? 'WINK TIMER' : 'WINK STOPWATCH';
   const primaryAction =
@@ -637,15 +711,15 @@ export function TimerScreen() {
           };
 
   React.useEffect(() => {
-    if (winkUnavailableHintVisible === winkJudgmentUnavailable) {
+    if (gestureUnavailableHintVisible === gestureJudgmentUnavailable) {
       return;
     }
 
     const timeoutId = setTimeout(
       () => {
-        setWinkUnavailableHintVisible(winkJudgmentUnavailable);
+        setGestureUnavailableHintVisible(gestureJudgmentUnavailable);
       },
-      winkJudgmentUnavailable
+      gestureJudgmentUnavailable
         ? WINK_UNAVAILABLE_HINT_SHOW_DELAY_MS
         : WINK_UNAVAILABLE_HINT_HIDE_DELAY_MS,
     );
@@ -653,7 +727,7 @@ export function TimerScreen() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [winkJudgmentUnavailable, winkUnavailableHintVisible]);
+  }, [gestureJudgmentUnavailable, gestureUnavailableHintVisible]);
 
   React.useEffect(() => {
     if (!canChangeMode && modeMenuOpen) {
@@ -674,14 +748,14 @@ export function TimerScreen() {
   React.useEffect(() => {
     if (openTimerTargetAfterModeSwitchRef.current && canOpenTimerTargetPopup) {
       openTimerTargetAfterModeSwitchRef.current = false;
-      setTimerTargetPopupOpen(true);
+      openTimerTargetPopup();
       return;
     }
 
     if (!canOpenTimerTargetPopup && timerTargetPopupOpen) {
       setTimerTargetPopupOpen(false);
     }
-  }, [canOpenTimerTargetPopup, timerTargetPopupOpen]);
+  }, [canOpenTimerTargetPopup, openTimerTargetPopup, timerTargetPopupOpen]);
 
   React.useEffect(() => {
     if (closeModeMenuAfterTimekeepingModeRef.current !== timekeepingMode) {
@@ -718,14 +792,15 @@ export function TimerScreen() {
   };
 
   const setTimerTargetPartValue = (
-    part: keyof typeof timerTargetParts,
+    part: keyof typeof timerTargetDraftParts,
     nextValue: number,
   ) => {
     if (!canAdjustTimerTarget) {
       return false;
     }
 
-    const currentParts = getTimerTargetParts(timerTargetDurationMs);
+    const currentDraftDurationMs = timerTargetDraftDurationMsRef.current;
+    const currentParts = getTimerTargetParts(currentDraftDurationMs);
     const nextParts = {
       ...currentParts,
       [part]: nextValue,
@@ -736,11 +811,11 @@ export function TimerScreen() {
       nextParts.seconds,
     );
 
-    if (nextDurationMs === timerTargetDurationMs) {
+    if (nextDurationMs === currentDraftDurationMs) {
       return false;
     }
 
-    setTimerTargetDurationMs(nextDurationMs);
+    setTimerTargetDraftDurationMs(nextDurationMs);
     return true;
   };
 
@@ -773,7 +848,8 @@ export function TimerScreen() {
         </View>
       </View>
 
-      <ArcadePanel style={styles.timerPanel}>
+      {modeMenuOpen ? null : (
+        <ArcadePanel style={styles.timerPanel}>
         <View style={styles.timerTopStrip} testID="top-timer-readout">
           <Pressable
             accessibilityLabel="Open timer target settings"
@@ -782,9 +858,7 @@ export function TimerScreen() {
             disabled={!canOpenTimerTargetPopup}
             onPress={
               canOpenTimerTargetPopup
-                ? () => {
-                    setTimerTargetPopupOpen(true);
-                  }
+                ? openTimerTargetPopup
                 : undefined
             }
             style={({pressed}) => [
@@ -814,6 +888,29 @@ export function TimerScreen() {
                 ? '윙크 판정 불가능 상태.'
                 : winkReadyHintShown
                   ? '눈을 크게 뜬상태에서 윙크하세요'
+                  : ' '}
+            </Text>
+          ) : null}
+          {shouldRenderSmileJudgmentHint ? (
+            <Text
+              accessibilityElementsHidden={!smileJudgmentHintShown}
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              style={[
+                styles.winkJudgmentHint,
+                smileUnavailableHintShown
+                  ? styles.winkJudgmentHintUnavailable
+                  : smileReadyHintShown
+                    ? styles.winkJudgmentHintReady
+                    : styles.winkJudgmentHintHidden,
+              ]}
+              testID="timer-smile-unavailable-label">
+              {smileUnavailableHintShown
+                ? 'SMILE UNAVAILABLE'
+                : smileReadyHintShown
+                  ? timer.smileDetected === true
+                    ? 'SMILE DETECTED'
+                    : 'SMILE READY'
                   : ' '}
             </Text>
           ) : null}
@@ -912,7 +1009,24 @@ export function TimerScreen() {
             <View
               style={styles.timerTargetPopup}
               testID="timer-target-popup">
-              <Text style={styles.timerTargetPopupTitle}>SET TIMER</Text>
+              <View style={styles.timerTargetPopupHeader}>
+                <Text
+                  style={styles.timerTargetPopupTitle}
+                  testID="timer-target-popup-title">
+                  SET TIMER
+                </Text>
+                <Pressable
+                  accessibilityLabel="Cancel timer target settings"
+                  accessibilityRole="button"
+                  onPress={cancelTimerTargetPopup}
+                  style={({pressed}) => [
+                    styles.timerTargetCancelButton,
+                    pressed && styles.pressedControl,
+                  ]}
+                  testID="timer-target-cancel-button">
+                  <Text style={styles.timerTargetCancelLabel}>X</Text>
+                </Pressable>
+              </View>
               <View
                 style={styles.timerTargetControls}
                 testID="timer-target-controls">
@@ -920,7 +1034,7 @@ export function TimerScreen() {
                 wheelTestID="timer-target-hour-wheel"
                 reelTestID="timer-target-hour-reel"
                 label="HOUR"
-                value={timerTargetParts.hours}
+                value={timerTargetDraftParts.hours}
                 min={0}
                 max={MAX_TIMER_TARGET_HOURS}
                 disabled={!canAdjustTimerTarget}
@@ -932,7 +1046,7 @@ export function TimerScreen() {
                 wheelTestID="timer-target-minute-wheel"
                 reelTestID="timer-target-minute-reel"
                 label="MIN"
-                value={timerTargetParts.minutes}
+                value={timerTargetDraftParts.minutes}
                 min={0}
                 max={MAX_TIMER_TARGET_UNIT_VALUE}
                 disabled={!canAdjustTimerTarget}
@@ -945,7 +1059,7 @@ export function TimerScreen() {
                 wheelTestID="timer-target-second-wheel"
                 reelTestID="timer-target-second-reel"
                 label="SEC"
-                value={timerTargetParts.seconds}
+                value={timerTargetDraftParts.seconds}
                 min={0}
                 max={MAX_TIMER_TARGET_UNIT_VALUE}
                 disabled={!canAdjustTimerTarget}
@@ -957,55 +1071,67 @@ export function TimerScreen() {
               </View>
               <PrimaryButton
                 label="DONE"
-                onPress={() => {
-                  setTimerTargetPopupOpen(false);
-                }}
+                onPress={applyTimerTargetPopup}
                 variant="secondary"
                 style={styles.timerTargetDoneButton}
+                testID="timer-target-done-button"
               />
             </View>
           </View>
         ) : null}
-      </ArcadePanel>
+        </ArcadePanel>
+      )}
 
       <View style={styles.modeSection} testID="mode-selector-bottom">
         {canChangeMode && modeMenuOpen ? (
           <>
             <View style={styles.modeMenu} testID="mode-menu">
-              {timerModePresets.map(mode => {
-                const active = mode.id === timerModeId;
+              <ScrollView
+                bounces={false}
+                contentContainerStyle={styles.modeMenuList}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+                style={[
+                  styles.modeMenuScroll,
+                  {maxHeight: modeMenuScrollMaxHeight},
+                ]}
+                testID="mode-menu-scroll">
+                {timerModePresets.map(mode => {
+                  const active = mode.id === timerModeId;
 
-                return (
-                  <Pressable
-                    accessibilityLabel={`${mode.title} mode`}
-                    accessibilityRole="button"
-                    accessibilityState={{selected: active}}
-                    key={mode.id}
-                    onPress={() => handleSelectMode(mode.id)}
-                    style={({pressed}) => [
-                      styles.modeMenuItem,
-                      active && styles.activeModeMenuItem,
-                      pressed && canChangeMode && styles.pressedControl,
-                    ]}>
-                    <View style={styles.modeMenuCopy}>
-                      <Text style={styles.modeMenuTitle}>{mode.title}</Text>
-                      <Text style={styles.modeMenuDescription}>
-                        {mode.description}
-                      </Text>
-                      <Text style={styles.modeMenuActions}>
-                        {getModeActionSummary(mode)}
-                      </Text>
-                    </View>
-                    <View style={styles.modeMenuBadges}>
-                      {active ? (
-                        <Text style={[styles.menuBadge, styles.activeMenuBadge]}>
-                          ACTIVE
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${mode.title} mode`}
+                      accessibilityRole="button"
+                      accessibilityState={{selected: active}}
+                      key={mode.id}
+                      onPress={() => handleSelectMode(mode.id)}
+                      style={({pressed}) => [
+                        styles.modeMenuItem,
+                        active && styles.activeModeMenuItem,
+                        pressed && canChangeMode && styles.pressedControl,
+                      ]}>
+                      <View style={styles.modeMenuCopy}>
+                        <Text style={styles.modeMenuTitle}>{mode.title}</Text>
+                        <Text style={styles.modeMenuDescription}>
+                          {mode.description}
                         </Text>
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
+                        <Text style={styles.modeMenuActions}>
+                          {getModeActionSummary(mode)}
+                        </Text>
+                      </View>
+                      <View style={styles.modeMenuBadges}>
+                        {active ? (
+                          <Text
+                            style={[styles.menuBadge, styles.activeMenuBadge]}>
+                            ACTIVE
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
             <View
               style={styles.timekeepingModeOptions}
@@ -1131,6 +1257,13 @@ const styles = StyleSheet.create({
     padding: arcadeTheme.spacing.md,
     width: '100%',
   },
+  timerTargetPopupHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: arcadeTheme.dimensions.iconButton,
+    position: 'relative',
+    width: '100%',
+  },
   timerTargetPopupTitle: {
     color: arcadeTheme.colors.ink,
     fontSize: 18,
@@ -1138,6 +1271,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  timerTargetCancelButton: {
+    alignItems: 'center',
+    borderColor: arcadeTheme.colors.line,
+    borderRadius: arcadeTheme.radii.control,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    top: 4,
+    width: 36,
+  },
+  timerTargetCancelLabel: {
+    color: arcadeTheme.colors.ink,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 18,
   },
   timerTargetControls: {
     alignItems: 'center',
@@ -1293,6 +1445,7 @@ const styles = StyleSheet.create({
     color: arcadeTheme.colors.mutedInk,
   },
   modeSection: {
+    gap: arcadeTheme.spacing.sm,
     position: 'relative',
     elevation: 40,
     zIndex: 40,
@@ -1351,14 +1504,16 @@ const styles = StyleSheet.create({
     borderColor: arcadeTheme.colors.heavyLine,
     borderRadius: arcadeTheme.radii.panel,
     borderWidth: 2,
-    bottom: 66,
     elevation: 50,
-    gap: arcadeTheme.spacing.sm,
-    left: 0,
     padding: arcadeTheme.spacing.sm,
-    position: 'absolute',
-    right: 0,
+    position: 'relative',
     zIndex: 50,
+  },
+  modeMenuScroll: {
+    width: '100%',
+  },
+  modeMenuList: {
+    gap: arcadeTheme.spacing.sm,
   },
   modeMenuItem: {
     alignItems: 'flex-start',
