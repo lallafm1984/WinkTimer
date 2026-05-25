@@ -161,9 +161,10 @@ describe('mobile Android verification environment', () => {
     expect(nativeModule).toContain('setFaceHeightAngleLevel');
     expect(nativeModule).toContain('DEFAULT_WINK_DISTANCE_LEVEL = 5');
     expect(nativeModule).toContain('DEFAULT_FACE_HEIGHT_ANGLE_LEVEL = 2');
-    expect(nativeModule).toContain('normalizeWinkSensitivityLevel');
-    expect(nativeModule).toContain('getWinkSensitivityOffset');
-    expect(nativeModule).toContain('WINK_SENSITIVITY_STEP_COUNT = 9.0f');
+    expect(nativeModule).not.toContain('setWinkSensitivity');
+    expect(nativeModule).not.toContain('normalizeWinkSensitivityLevel');
+    expect(nativeModule).not.toContain('getWinkSensitivityOffset');
+    expect(nativeModule).not.toContain('WINK_SENSITIVITY_STEP_COUNT');
     expect(nativeModule).toContain('headEulerAngleX');
     expect(nativeModule).toContain('maxPitchDegrees');
     expect(nativeModule).toContain('getMinFaceAreaRatioForEyeClassification');

@@ -1,5 +1,7 @@
 ﻿# Timewatch MVP Foundation Implementation Plan
 
+> Current product correction, 2026-05-25: the app name is **Wink Timer**. The product is a general-purpose timer app, not a focus-only timer. BASIC TIMER is the baseline normal timer experience; LOOK PAUSE, WINK CONTROL, and FLIP TIMER are optional camera/sensor-assisted modes. Treat older `Timewatch`, `focus timer`, and `focusDurationMs` wording in this historical implementation plan as implementation-era naming unless a later task explicitly requests a code rename.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** React Native Android 앱의 MVP 뼈대, 순수 타이머 로직, 화면 흐름, 로컬 세션 저장, mock 감지 어댑터를 만든다.

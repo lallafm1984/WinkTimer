@@ -1,6 +1,15 @@
-# TimewatchApp
+# Wink Timer
 
-React Native Android app for Timewatch.
+React Native Android app for **Wink Timer**.
+
+Wink Timer is a general-purpose timer app. It is not a focus-only timer. The normal button-based timer is the baseline experience, and camera/sensor-assisted modes are optional add-on modes:
+
+- BASIC TIMER: regular button-only timer.
+- LOOK PAUSE: front-camera detection can pause/resume based on whether the user is looking.
+- WINK CONTROL: wink gestures can control timer actions.
+- FLIP TIMER: device posture can control timer actions.
+
+The app's product differentiator is not "focus timing" by itself. The differentiator is bringing look, wink, and flip controls to a normal timer app.
 
 ## Quick Mobile Check
 
@@ -43,12 +52,12 @@ dist/android/timewatch-release.apk
 
 The debug APK at `android/app/build/outputs/apk/debug/app-debug.apk` is for React Native development and expects Metro or `adb reverse tcp:8081 tcp:8081`. If you install that file directly, Android can show `Unable to load script`.
 
-## Focus Wink Design System
+## Wink Timer Design System
 
 The main timer screen uses the Arcade Ghost Console theme:
 
 - Timer format: `MM:SS.CS`
-- Default mode shown first: Look Pause
+- Default baseline mode: BASIC TIMER
 - Mascot states: ready, looking, left wink, right wink, wink hold, reset flash
 - Single wink mode is marked as Beta in the UI
 

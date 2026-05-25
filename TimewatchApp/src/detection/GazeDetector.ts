@@ -17,20 +17,11 @@ import type {
   WinkDebugValues,
   WinkEyeClosedThreshold,
   WinkEyeProbabilityGapThreshold,
-  WinkMaxDurationMs,
-  WinkMinDurationMs,
-  WinkMinTimeLevel,
   WinkSide,
-  WinkSensitivityLevel,
-  WinkTimeLevel,
 } from '../domain/detection';
 import {
-  DEFAULT_WINK_MAX_DURATION_MS,
-  DEFAULT_WINK_MIN_DURATION_MS,
   getDetectionFrameIntervalMs,
   getDetectionResolution,
-  getSingleWinkMinDurationMs,
-  getSingleWinkMaxDurationMs,
   normalizeDetectionFrameIntervalLevel,
   normalizeDetectionPerformanceMode,
   normalizeDetectionResolutionLevel,
@@ -38,19 +29,12 @@ import {
   normalizeLookAngleLevel,
   normalizeWinkEyeClosedThreshold,
   normalizeWinkEyeProbabilityGapThreshold,
-  normalizeWinkMaxDurationMs,
-  normalizeWinkMinDurationMs,
   normalizeWinkDistanceLevel,
-  normalizeWinkMinTimeLevel,
-  normalizeWinkSensitivityLevel,
-  normalizeWinkTimeLevel,
-  toNativeWinkSensitivityLevel,
 } from '../domain/detection';
 
 type NativeGazeDetectionModule = {
   start(): Promise<void>;
   stop(): Promise<void>;
-  setWinkSensitivity?(level: number): Promise<void>;
   setWinkThresholds?(
     leftEyeClosedThreshold: number,
     rightEyeClosedThreshold: number,
@@ -98,7 +82,6 @@ export type GazeDetector = {
   getLatestReading(nowMs: number): DetectionReading;
   consumeSingleWink(nowMs: number): DetectionReading | null;
   suppressSingleWinkUntilOpen(): void;
-  setWinkSensitivity(level: WinkSensitivityLevel): Promise<void>;
   setWinkThresholds(
     leftEyeClosedThreshold: WinkEyeClosedThreshold,
     rightEyeClosedThreshold: WinkEyeClosedThreshold,
@@ -108,10 +91,6 @@ export type GazeDetector = {
   setWinkDistanceLevel(level: WinkDistanceLevel): Promise<void>;
   setLookAngleLevel(level: LookAngleLevel): Promise<void>;
   setFaceHeightAngleLevel(level: FaceHeightAngleLevel): Promise<void>;
-  setWinkTimeLevel(level: WinkTimeLevel): void;
-  setWinkMaxDurationMs(durationMs: WinkMaxDurationMs): void;
-  setWinkMinTimeLevel(level: WinkMinTimeLevel): void;
-  setWinkMinDurationMs(durationMs: WinkMinDurationMs): void;
   setDetectionResolutionLevel(level: DetectionResolutionLevel): Promise<void>;
   setDetectionFrameIntervalLevel(
     level: DetectionFrameIntervalLevel,
@@ -133,6 +112,8 @@ function getNativeGazeDetection(): NativeGazeDetectionModule | undefined {
 
 const readingEventName = 'TimewatchGazeDetectionReading';
 const SINGLE_WINK_MIN_MS = 100;
+const DEFAULT_SINGLE_WINK_MIN_DURATION_MS = 200;
+const DEFAULT_SINGLE_WINK_MAX_DURATION_MS = 1000;
 const SINGLE_WINK_COOLDOWN_MS = 500;
 const WINK_HOLD_BREAK_GRACE_MS = 700;
 const WINK_READY_EYE_OPEN_PROBABILITY = 0.85;
@@ -407,8 +388,6 @@ export function createMockGazeDetector(
   let pendingSingleWink: Omit<DetectionReading, 'atMs'> | null = null;
   let suppressSingleWinkUntilOpen = false;
   let lastSingleWinkAcceptedAtMs: number | null = null;
-  let winkMaxDurationMs = DEFAULT_WINK_MAX_DURATION_MS;
-  let winkMinDurationMs = DEFAULT_WINK_MIN_DURATION_MS;
 
   DeviceEventEmitter.addListener(
     readingEventName,
@@ -471,11 +450,11 @@ export function createMockGazeDetector(
         const winkDurationMs = eventAtMs - oneEyeClosedStartedAtMs;
         const minWinkDurationMs = Math.max(
           SINGLE_WINK_MIN_MS,
-          winkMinDurationMs,
+          DEFAULT_SINGLE_WINK_MIN_DURATION_MS,
         );
         const maxWinkDurationMs = Math.max(
           minWinkDurationMs,
-          winkMaxDurationMs,
+          DEFAULT_SINGLE_WINK_MAX_DURATION_MS,
         );
 
         if (
@@ -568,13 +547,6 @@ export function createMockGazeDetector(
       suppressSingleWinkUntilOpen = true;
     },
 
-    async setWinkSensitivity(level) {
-      const normalized = normalizeWinkSensitivityLevel(level);
-      await getNativeGazeDetection()?.setWinkSensitivity?.(
-        toNativeWinkSensitivityLevel(normalized),
-      );
-    },
-
     async setWinkThresholds(
       leftEyeClosedThreshold,
       rightEyeClosedThreshold,
@@ -627,24 +599,6 @@ export function createMockGazeDetector(
       await getNativeGazeDetection()?.setPerformanceMode?.(
         normalizeDetectionPerformanceMode(mode),
       );
-    },
-
-    setWinkTimeLevel(level) {
-      const normalized = normalizeWinkTimeLevel(level);
-      winkMaxDurationMs = getSingleWinkMaxDurationMs(normalized);
-    },
-
-    setWinkMaxDurationMs(durationMs) {
-      winkMaxDurationMs = normalizeWinkMaxDurationMs(durationMs);
-    },
-
-    setWinkMinTimeLevel(level) {
-      const normalized = normalizeWinkMinTimeLevel(level);
-      winkMinDurationMs = getSingleWinkMinDurationMs(normalized);
-    },
-
-    setWinkMinDurationMs(durationMs) {
-      winkMinDurationMs = normalizeWinkMinDurationMs(durationMs);
     },
 
     setMockStatus(nextStatus) {

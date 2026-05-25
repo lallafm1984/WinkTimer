@@ -11,6 +11,7 @@ const mockResumeTimerSession = jest.fn();
 const mockResetTimerSession = jest.fn();
 const mockRecordLapSession = jest.fn();
 const mockFinishTimerSession = jest.fn();
+const mockStopTimerEndAlert = jest.fn();
 const mockSetMockDetectionStatus = jest.fn();
 const mockSetTimerModeId = jest.fn();
 const mockSetGestureInputsBlocked = jest.fn();
@@ -67,6 +68,18 @@ const baseState = {
   setTimerTargetDurationMs: mockSetTimerTargetDurationMs,
   timerModeId: 'lookPause',
   setTimerModeId: mockSetTimerModeId,
+  timerAlertVibrationEnabled: true,
+  setTimerAlertVibrationEnabled: jest.fn(),
+  timerAlertSoundEnabled: true,
+  setTimerAlertSoundEnabled: jest.fn(),
+  timerAlertSoundId: 'alarm',
+  setTimerAlertSoundId: jest.fn(),
+  timerAlertDurationId: 'short',
+  setTimerAlertDurationId: jest.fn(),
+  timerAlertVibrationPatternId: 'double',
+  setTimerAlertVibrationPatternId: jest.fn(),
+  isTimerAlertActive: false,
+  stopTimerEndAlert: mockStopTimerEndAlert,
   gestureInputsBlocked: false,
   setGestureInputsBlocked: mockSetGestureInputsBlocked,
   finishError: null,
@@ -135,6 +148,10 @@ describe('TimerScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockState = baseState;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('renders the redesigned wink timer layout for an active timer', () => {
@@ -794,7 +811,7 @@ describe('TimerScreen', () => {
     ).toBe('- \uC815\uC9C0 -');
   });
 
-  it('shows a red wink unavailable status when eyes are not fully open in wink control', () => {
+  it('shows wink unavailable as a separate small helper while keeping status stable', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -809,9 +826,186 @@ describe('TimerScreen', () => {
     const statusLabel = renderer.root.findByProps({
       testID: 'timer-status-label',
     });
+    const winkUnavailableLabel = renderer.root.findByProps({
+      testID: 'timer-wink-unavailable-label',
+    });
 
-    expect(statusLabel.props.children).toBe('윙크 판정 불가능 상태.');
-    expect(StyleSheet.flatten(statusLabel.props.style).color).toBe('#B42318');
+    expect(statusLabel.props.children).toBe('- \uCE21\uC815\uC911 -');
+    expect(winkUnavailableLabel.props.children).toBe(
+      '윙크 판정 불가능 상태.',
+    );
+    expect(
+      StyleSheet.flatten(winkUnavailableLabel.props.style).fontSize,
+    ).toBeLessThan(StyleSheet.flatten(statusLabel.props.style).fontSize);
+    expect(StyleSheet.flatten(winkUnavailableLabel.props.style).color).toBe(
+      '#B42318',
+    );
+  });
+
+  it('shows a green wink-ready helper when wink control can judge a wink', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'looking',
+        eyeState: 'bothOpen',
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+    const winkReadyLabel = renderer.root.findByProps({
+      testID: 'timer-wink-unavailable-label',
+    });
+
+    expect(winkReadyLabel.props.children).toBe(
+      '눈을 크게 뜬상태에서 윙크하세요',
+    );
+    expect(StyleSheet.flatten(winkReadyLabel.props.style).color).toBe(
+      '#18794E',
+    );
+    expect(StyleSheet.flatten(winkReadyLabel.props.style).opacity).toBe(1);
+  });
+
+  it('places the wink helper under the timer readout instead of the main content', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'looking',
+        eyeState: 'bothOpen',
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+    const topTimerReadout = renderer.root.findByProps({
+      testID: 'top-timer-readout',
+    });
+    const mainContent = renderer.root.findByProps({
+      testID: 'timer-main-content',
+    });
+
+    expect(
+      topTimerReadout.findAllByProps({
+        testID: 'timer-wink-unavailable-label',
+      }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      mainContent.findAllByProps({
+        testID: 'timer-wink-unavailable-label',
+      }),
+    ).toHaveLength(0);
+  });
+
+  it.each([
+    ['notLooking', 'unknown'],
+    ['unknown', 'unknown'],
+    ['looking', 'bothClosed'],
+  ] as const)(
+    'shows wink unavailable when wink control cannot judge %s/%s',
+    (detectionStatus, eyeState) => {
+      mockState = {
+        ...baseState,
+        timer: {
+          ...baseTimer,
+          detectionStatus,
+          eyeState,
+          isLookPaused: false,
+        },
+        timerModeId: 'winkControl',
+      };
+      const renderer = renderTimerScreen();
+      const winkUnavailableLabel = renderer.root.findByProps({
+        testID: 'timer-wink-unavailable-label',
+      });
+
+      expect(winkUnavailableLabel.props.children).toBe(
+        '윙크 판정 불가능 상태.',
+      );
+    },
+  );
+
+  it('debounces the wink unavailable helper so brief eye-state noise does not flicker', () => {
+    jest.useFakeTimers();
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'looking',
+        eyeState: 'bothOpen',
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+
+    const getHintLabel = () =>
+      renderer.root.findByProps({testID: 'timer-wink-unavailable-label'});
+    const getHintStyle = () =>
+      StyleSheet.flatten(
+        getHintLabel().props.style,
+      );
+
+    expect(getHintLabel().props.children).toBe(
+      '눈을 크게 뜬상태에서 윙크하세요',
+    );
+    expect(getHintStyle().color).toBe('#18794E');
+    expect(getHintStyle().opacity).toBe(1);
+
+    mockState = {
+      ...mockState,
+      timer: {
+        ...mockState.timer,
+        eyeState: 'unknown',
+      },
+    };
+    ReactTestRenderer.act(() => {
+      renderer.update(<TimerScreen />);
+    });
+
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(249);
+    });
+    expect(getHintLabel().props.children).toBe(
+      '눈을 크게 뜬상태에서 윙크하세요',
+    );
+    expect(getHintStyle().color).toBe('#18794E');
+
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(getHintLabel().props.children).toBe(
+      '윙크 판정 불가능 상태.',
+    );
+    expect(getHintStyle().color).toBe('#B42318');
+
+    mockState = {
+      ...mockState,
+      timer: {
+        ...mockState.timer,
+        eyeState: 'bothOpen',
+      },
+    };
+    ReactTestRenderer.act(() => {
+      renderer.update(<TimerScreen />);
+    });
+
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(799);
+    });
+    expect(getHintLabel().props.children).toBe(
+      '윙크 판정 불가능 상태.',
+    );
+    expect(getHintStyle().color).toBe('#B42318');
+
+    ReactTestRenderer.act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(getHintLabel().props.children).toBe(
+      '눈을 크게 뜬상태에서 윙크하세요',
+    );
+    expect(getHintStyle().color).toBe('#18794E');
   });
 
   it('enables reset and history while look-pause is stopped by looking', () => {
@@ -1340,6 +1534,45 @@ describe('TimerScreen', () => {
       .toHaveLength(0);
   });
 
+  it('enables the mode selector after a timer alarm has ended', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timer: {
+        ...baseTimer,
+        phase: 'ended',
+        focusDurationMs: 5 * 60 * 1000,
+        targetDurationMs: 5 * 60 * 1000,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      isTimerAlertActive: false,
+    };
+    const renderer = renderTimerScreen();
+    const modeButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open mode menu',
+    });
+
+    expect(modeButton.props.disabled).toBe(false);
+
+    ReactTestRenderer.act(() => {
+      modeButton.props.onPress();
+    });
+
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
+      .toBeTruthy();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'BASIC TIMER mode'})
+        .props.onPress();
+    });
+
+    expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
+    expect(mockSetTimerModeId).toHaveBeenCalledWith('basicTimer');
+  });
+
   it('shows preset mode cards alongside the timekeeping selector', () => {
     mockState = {
       ...baseState,
@@ -1823,5 +2056,58 @@ describe('TimerScreen', () => {
     expect(getRenderedText(renderer)).toContain('RESUME');
     expect(getRenderedText(renderer)).toContain('Right Wink');
     expect(getRenderedText(renderer)).toContain('Left Wink');
+  });
+
+  it('shows a timer alert stop action when a completed timer alert is still active', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      isTimerAlertActive: true,
+      timer: {
+        ...baseTimer,
+        phase: 'ended',
+        focusDurationMs: 60 * 1000,
+        targetDurationMs: 60 * 1000,
+        detectionStatus: 'unknown',
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const stopAlertButton = renderer.root.findByProps({
+      accessibilityLabel: 'STOP ALERT Button',
+    });
+
+    expect(getRenderedText(renderer)).toContain('STOP ALERT');
+
+    ReactTestRenderer.act(() => {
+      stopAlertButton.props.onPress();
+    });
+
+    expect(mockStopTimerEndAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps mode selection locked while a completed timer alert is still active', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      isTimerAlertActive: true,
+      timer: {
+        ...baseTimer,
+        phase: 'ended',
+        focusDurationMs: 60 * 1000,
+        targetDurationMs: 60 * 1000,
+        detectionStatus: 'unknown',
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const modeButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open mode menu',
+    });
+
+    expect(modeButton.props.disabled).toBe(true);
+    expect(modeButton.props.onPress).toBeUndefined();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
+      .toHaveLength(0);
   });
 });

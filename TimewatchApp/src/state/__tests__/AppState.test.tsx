@@ -28,12 +28,22 @@ type NativeGazeDetectionModuleForTest = {
   setPerformanceMode?: jest.Mock<Promise<void>, [string]>;
 };
 
+type NativeTimerAlertModuleForTest = {
+  playTimerEndAlert: jest.Mock<
+    Promise<void>,
+    [string, boolean, boolean, string, string]
+  >;
+  stopTimerEndAlert?: jest.Mock<Promise<void>, []>;
+};
+
 type MutableNativeModules = typeof NativeModules & {
   NativeGazeDetection?: NativeGazeDetectionModuleForTest;
+  NativeTimerAlert?: NativeTimerAlertModuleForTest;
 };
 
 const nativeModules = NativeModules as MutableNativeModules;
 const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
+const originalNativeTimerAlert = nativeModules.NativeTimerAlert;
 const SETTINGS_STORAGE_KEY = '@timewatch:settings:v1';
 
 function AppStateHarness() {
@@ -52,6 +62,12 @@ function AppStateHarness() {
       <Text>{`timerTarget:${app.timerTargetDurationMs}`}</Text>
       <Text>{`activeTarget:${app.timer.targetDurationMs ?? 'none'}`}</Text>
       <Text>{`timerMode:${app.timerModeId}`}</Text>
+      <Text>{`timerAlertVibration:${app.timerAlertVibrationEnabled}`}</Text>
+      <Text>{`timerAlertSound:${app.timerAlertSoundEnabled}`}</Text>
+      <Text>{`timerAlertSoundId:${app.timerAlertSoundId}`}</Text>
+      <Text>{`timerAlertDurationId:${app.timerAlertDurationId}`}</Text>
+      <Text>{`timerAlertVibrationPatternId:${app.timerAlertVibrationPatternId}`}</Text>
+      <Text>{`timerAlertActive:${app.isTimerAlertActive}`}</Text>
       <Text>{`gestureBlocked:${app.gestureInputsBlocked}`}</Text>
       <Text>{`leftEyeClosed:${app.winkLeftEyeClosedThreshold}`}</Text>
       <Text>{`rightEyeClosed:${app.winkRightEyeClosedThreshold}`}</Text>
@@ -60,10 +76,6 @@ function AppStateHarness() {
       <Text>{`winkDistance:${app.winkDistanceLevel}`}</Text>
       <Text>{`lookAngle:${app.lookAngleLevel}`}</Text>
       <Text>{`faceHeightAngle:${app.faceHeightAngleLevel}`}</Text>
-      <Text>{`winkTime:${app.winkTimeLevel}`}</Text>
-      <Text>{`winkMaxDuration:${app.winkMaxDurationMs}`}</Text>
-      <Text>{`winkMinTime:${app.winkMinTimeLevel}`}</Text>
-      <Text>{`winkMinDuration:${app.winkMinDurationMs}`}</Text>
       <Text>{`resolution:${app.detectionResolutionLevel}`}</Text>
       <Text>{`frameInterval:${app.detectionFrameIntervalLevel}`}</Text>
       <Text>{`performance:${app.detectionPerformanceMode}`}</Text>
@@ -135,6 +147,60 @@ function AppStateHarness() {
           app.setTimerTargetDurationMs(60 * 1000);
         }}>
         target one minute
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-alert-vibration-off"
+        onPress={() => {
+          app.setTimerAlertVibrationEnabled(false);
+        }}>
+        timer alert vibration off
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-alert-sound-off"
+        onPress={() => {
+          app.setTimerAlertSoundEnabled(false);
+        }}>
+        timer alert sound off
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-alert-ringtone"
+        onPress={() => {
+          app.setTimerAlertSoundId('ringtone');
+        }}>
+        timer alert ringtone
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-alert-15-seconds"
+        onPress={() => {
+          app.setTimerAlertDurationId('seconds:15');
+        }}>
+        timer alert 15 seconds
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-alert-until-stopped"
+        onPress={() => {
+          app.setTimerAlertDurationId('untilStopped');
+        }}>
+        timer alert until stopped
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-alert-long-repeat"
+        onPress={() => {
+          app.setTimerAlertVibrationPatternId('longRepeat');
+        }}>
+        timer alert long repeat
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="stop-timer-alert"
+        onPress={app.stopTimerEndAlert}>
+        stop timer alert
       </Text>
       <Text
         accessibilityRole="button"
@@ -221,24 +287,6 @@ function AppStateHarness() {
       </Text>
       <Text
         accessibilityRole="button"
-        accessibilityLabel="wink-time-3"
-        onPress={() => {
-          app.setWinkTimeLevel(3);
-          app.setWinkMaxDurationMs(1300);
-        }}>
-        wink time 3
-      </Text>
-      <Text
-        accessibilityRole="button"
-        accessibilityLabel="wink-min-time-3"
-        onPress={() => {
-          app.setWinkMinTimeLevel(3);
-          app.setWinkMinDurationMs(300);
-        }}>
-        wink min time 3
-      </Text>
-      <Text
-        accessibilityRole="button"
         accessibilityLabel="resolution-1"
         onPress={() => {
           app.setDetectionResolutionLevel(1);
@@ -278,6 +326,12 @@ function AppStateHarness() {
         accessibilityLabel="pause"
         onPress={app.pauseTimerSession}>
         pause
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="reset"
+        onPress={app.resetTimerSession}>
+        reset
       </Text>
       <Text
         accessibilityRole="button"
@@ -366,6 +420,12 @@ describe('AppStateProvider app flow', () => {
       nativeModules.NativeGazeDetection = originalNativeGazeDetection;
     } else {
       delete nativeModules.NativeGazeDetection;
+    }
+
+    if (originalNativeTimerAlert) {
+      nativeModules.NativeTimerAlert = originalNativeTimerAlert;
+    } else {
+      delete nativeModules.NativeTimerAlert;
     }
 
     jest.restoreAllMocks();
@@ -457,11 +517,21 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'mode:minimal')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
     expect(hasText(renderer, 'timerTarget:300000')).toBe(true);
+    expect(hasText(renderer, 'timerAlertVibration:true')).toBe(true);
+    expect(hasText(renderer, 'timerAlertSound:true')).toBe(true);
+    expect(hasText(renderer, 'timerAlertSoundId:alarm')).toBe(true);
+    expect(hasText(renderer, 'timerAlertDurationId:seconds:4')).toBe(true);
+    expect(hasText(renderer, 'timerAlertVibrationPatternId:double')).toBe(
+      true,
+    );
+    expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
 
     await unmount(renderer);
   });
 
   it('starts countdown timers with the configured target duration', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {playTimerEndAlert};
     const renderer = await renderHarness();
 
     nowMs = 1000;
@@ -479,6 +549,131 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'activeTarget:60000')).toBe(true);
     expect(hasText(renderer, 'phase:ended')).toBe(true);
     expect(hasText(renderer, 'focus:60000')).toBe(true);
+    expect(playTimerEndAlert).toHaveBeenCalledTimes(1);
+    expect(playTimerEndAlert).toHaveBeenLastCalledWith(
+      'alarm',
+      true,
+      true,
+      'seconds:4',
+      'double',
+    );
+    expect(hasText(renderer, 'timerAlertActive:true')).toBe(true);
+
+    nowMs = 63000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(playTimerEndAlert).toHaveBeenCalledTimes(1);
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(3000);
+    });
+
+    expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('does not replay fixed-duration timer alerts while wink control waits after timer end', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {playTimerEndAlert};
+    nativeModules.NativeGazeDetection = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+    };
+    const renderer = await renderHarness();
+
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await startWinkControlByRightWink(renderer);
+
+    nowMs = 62000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(60 * 1000);
+    });
+
+    expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(playTimerEndAlert).toHaveBeenCalledTimes(1);
+
+    nowMs = 66000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(4000);
+    });
+
+    expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+    expect(playTimerEndAlert).toHaveBeenCalledTimes(1);
+
+    await unmount(renderer);
+  });
+
+  it('plays long repeating timer alerts until stopped manually', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const stopTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {playTimerEndAlert, stopTimerEndAlert};
+    const renderer = await renderHarness();
+
+    await press(renderer, 'timer-alert-until-stopped');
+    await press(renderer, 'timer-alert-long-repeat');
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 62000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(61 * 1000);
+    });
+
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(playTimerEndAlert).toHaveBeenLastCalledWith(
+      'alarm',
+      true,
+      true,
+      'untilStopped',
+      'longRepeat',
+    );
+    expect(hasText(renderer, 'timerAlertActive:true')).toBe(true);
+
+    nowMs = 72000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10 * 1000);
+    });
+
+    expect(hasText(renderer, 'timerAlertActive:true')).toBe(true);
+
+    await press(renderer, 'stop-timer-alert');
+
+    expect(stopTimerEndAlert).toHaveBeenCalledTimes(1);
+    expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('skips the timer completion alert when vibration and sound are disabled', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {playTimerEndAlert};
+    const renderer = await renderHarness();
+
+    await press(renderer, 'timer-alert-vibration-off');
+    await press(renderer, 'timer-alert-sound-off');
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 62000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(61 * 1000);
+    });
+
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(playTimerEndAlert).not.toHaveBeenCalled();
 
     await unmount(renderer);
   });
@@ -553,6 +748,11 @@ describe('AppStateProvider app flow', () => {
         timekeepingMode: 'timer',
         timerTargetDurationMs: 60000,
         timerModeId: 'winkControl',
+        timerAlertVibrationEnabled: false,
+        timerAlertSoundEnabled: true,
+        timerAlertSoundId: 'uri:content://settings/system/alarm_alert',
+        timerAlertDurationId: 'long',
+        timerAlertVibrationPatternId: 'short',
         winkLeftEyeClosedThreshold: 0.5,
         winkRightEyeClosedThreshold: 0.55,
         winkLeftEyeProbabilityGapThreshold: 0.4,
@@ -560,10 +760,6 @@ describe('AppStateProvider app flow', () => {
         winkDistanceLevel: 4,
         lookAngleLevel: 3,
         faceHeightAngleLevel: 1,
-        winkTimeLevel: 3,
-        winkMaxDurationMs: 1200,
-        winkMinTimeLevel: 3,
-        winkMinDurationMs: 250,
         detectionResolutionLevel: 1,
         detectionFrameIntervalLevel: 2,
         detectionPerformanceMode: 'accurate',
@@ -597,6 +793,18 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
     expect(hasText(renderer, 'timerTarget:60000')).toBe(true);
     expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(hasText(renderer, 'timerAlertVibration:false')).toBe(true);
+    expect(hasText(renderer, 'timerAlertSound:true')).toBe(true);
+    expect(
+      hasText(
+        renderer,
+        'timerAlertSoundId:uri:content://settings/system/alarm_alert',
+      ),
+    ).toBe(true);
+    expect(hasText(renderer, 'timerAlertDurationId:seconds:15')).toBe(true);
+    expect(hasText(renderer, 'timerAlertVibrationPatternId:short')).toBe(
+      true,
+    );
     expect(hasText(renderer, 'leftEyeClosed:0.5')).toBe(true);
     expect(hasText(renderer, 'rightEyeClosed:0.55')).toBe(true);
     expect(hasText(renderer, 'leftGap:0.4')).toBe(true);
@@ -604,10 +812,6 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'winkDistance:5')).toBe(true);
     expect(hasText(renderer, 'lookAngle:3')).toBe(true);
     expect(hasText(renderer, 'faceHeightAngle:1')).toBe(true);
-    expect(hasText(renderer, 'winkTime:2')).toBe(true);
-    expect(hasText(renderer, 'winkMaxDuration:1000')).toBe(true);
-    expect(hasText(renderer, 'winkMinTime:2')).toBe(true);
-    expect(hasText(renderer, 'winkMinDuration:200')).toBe(true);
     expect(hasText(renderer, 'resolution:1')).toBe(true);
     expect(hasText(renderer, 'frameInterval:2')).toBe(true);
     expect(hasText(renderer, 'performance:accurate')).toBe(true);
@@ -640,6 +844,11 @@ describe('AppStateProvider app flow', () => {
     await press(renderer, 'timer-function');
     await press(renderer, 'target-one-minute');
     await press(renderer, 'wink-control-mode');
+    await press(renderer, 'timer-alert-vibration-off');
+    await press(renderer, 'timer-alert-sound-off');
+    await press(renderer, 'timer-alert-ringtone');
+    await press(renderer, 'timer-alert-15-seconds');
+    await press(renderer, 'timer-alert-long-repeat');
     await press(renderer, 'wink-thresholds-custom');
     await press(renderer, 'wink-distance-3');
     await press(renderer, 'look-angle-3');
@@ -660,6 +869,11 @@ describe('AppStateProvider app flow', () => {
       timekeepingMode: 'timer',
       timerTargetDurationMs: 60000,
       timerModeId: 'winkControl',
+      timerAlertVibrationEnabled: false,
+      timerAlertSoundEnabled: false,
+      timerAlertSoundId: 'ringtone',
+      timerAlertDurationId: 'seconds:15',
+      timerAlertVibrationPatternId: 'longRepeat',
       winkLeftEyeClosedThreshold: 0.15,
       winkRightEyeClosedThreshold: 0.2,
       winkLeftEyeProbabilityGapThreshold: 0.4,
@@ -667,10 +881,6 @@ describe('AppStateProvider app flow', () => {
       winkDistanceLevel: 3,
       lookAngleLevel: 3,
       faceHeightAngleLevel: 1,
-      winkTimeLevel: 2,
-      winkMaxDurationMs: 1000,
-      winkMinTimeLevel: 2,
-      winkMinDurationMs: 200,
       detectionResolutionLevel: 1,
       detectionFrameIntervalLevel: 2,
       detectionPerformanceMode: 'accurate',
@@ -1056,6 +1266,29 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('clears current session history when reset is pressed', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'basic-mode');
+    await press(renderer, 'start');
+
+    nowMs = 6000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await press(renderer, 'lap');
+
+    expect(hasText(renderer, 'history:LAP:5000:5000')).toBe(true);
+
+    await press(renderer, 'reset');
+
+    expect(hasText(renderer, 'history:')).toBe(true);
+    expect(hasText(renderer, 'phase:idle')).toBe(true);
+
+    await unmount(renderer);
+  });
+
   it('completes the session when save succeeds even if refreshing the session list fails', async () => {
     const renderer = await renderHarness();
 
@@ -1323,40 +1556,6 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
     expect(hasText(renderer, 'faceHeightAngle:3')).toBe(true);
     expect(setFaceHeightAngleLevel).toHaveBeenLastCalledWith(1);
-
-    await unmount(renderer);
-  });
-
-  it('keeps the wink maximum time fixed at level 2', async () => {
-    const renderer = await renderHarness();
-
-    await ReactTestRenderer.act(async () => undefined);
-
-    expect(hasText(renderer, 'winkTime:2')).toBe(true);
-    expect(hasText(renderer, 'winkMaxDuration:1000')).toBe(true);
-
-    await press(renderer, 'wink-time-3');
-    await ReactTestRenderer.act(async () => undefined);
-
-    expect(hasText(renderer, 'winkTime:2')).toBe(true);
-    expect(hasText(renderer, 'winkMaxDuration:1000')).toBe(true);
-
-    await unmount(renderer);
-  });
-
-  it('keeps the wink minimum time fixed at level 2', async () => {
-    const renderer = await renderHarness();
-
-    await ReactTestRenderer.act(async () => undefined);
-
-    expect(hasText(renderer, 'winkMinTime:2')).toBe(true);
-    expect(hasText(renderer, 'winkMinDuration:200')).toBe(true);
-
-    await press(renderer, 'wink-min-time-3');
-    await ReactTestRenderer.act(async () => undefined);
-
-    expect(hasText(renderer, 'winkMinTime:2')).toBe(true);
-    expect(hasText(renderer, 'winkMinDuration:200')).toBe(true);
 
     await unmount(renderer);
   });

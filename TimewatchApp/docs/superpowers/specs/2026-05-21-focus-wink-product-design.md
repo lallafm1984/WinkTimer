@@ -1,34 +1,44 @@
-# Focus Wink Product Design
+# Wink Timer Product Design
 
 ## Purpose
 
-Focus Wink is a hands-free focus timer controlled by gaze and wink gestures. The app should feel like a serious productivity timer first, with a memorable arcade ghost interaction layer that makes the gesture controls understandable and distinctive.
+Wink Timer is a general-purpose timer app with optional camera and sensor control modes. The product must feel like a reliable normal timer first, then become distinctive through look, wink, and flip controls.
+
+This app is not a focus-only timer. Focus, study, cooking, exercise, accessibility, and hands-free timing are use cases. The product category remains a timer.
 
 ## Current Technical Baseline
 
 The current Android prototype already supports the core detection loop:
 
 - Front-camera detection through CameraX and ML Kit Face Detection.
-- Looking at the screen pauses the timer.
-- Looking away resumes the timer.
-- One-eye wink hold for 3 seconds resets the active timer when both eyes are detectable and exactly one eye is closed.
+- Looking at the screen can pause the timer in LOOK PAUSE mode.
+- Looking away can resume the timer in LOOK PAUSE mode.
+- One-eye wink detection can trigger configured timer actions when both eyes are detectable and exactly one eye is closed.
+- Device posture detection supports FLIP TIMER behavior.
 - Head roll is accepted up to about 45 degrees.
 - Standalone APK builds through `npm run apk:android`.
 
 ## Product Identity
 
-Working name: **Focus Wink**
+App name: **Wink Timer**
 
 Product sentence:
 
-> A retro arcade focus timer controlled by gaze and wink gestures.
+> A normal timer with look, wink, and flip controls.
 
-Tone:
+Positioning:
 
-- 70% calm productivity tool.
-- 30% playful wink interaction.
+- 70% practical timer utility.
+- 30% playful camera/sensor interaction.
 - The app should be cute, but not feel like a toy.
-- Visual language should resemble a monochrome arcade console, score panel, or diagnostic HUD.
+- The default experience should be understandable even if the user never enables the camera.
+- Camera features are the differentiator, not the entire category.
+
+Non-goal:
+
+- Do not describe the whole app as a focus timer or concentration timer.
+- Do not make focus/study the only primary use case.
+- Do not require camera permission for BASIC TIMER.
 
 ## Visual Theme
 
@@ -53,7 +63,7 @@ Text expressions such as `^_^`, `>_^`, `^_<`, and `^_^;` are internal expression
 
 ## Expression System
 
-The mascot expression reflects detection state.
+The mascot expression reflects timer and detection state.
 
 | State | Internal Alias | UI Expression |
 | --- | --- | --- |
@@ -76,39 +86,56 @@ The centisecond display reinforces the arcade score/timer feel and makes gesture
 
 ## Main Modes
 
-The app ships with three default modes. Each mode is a preset over the same gesture mapping system.
+The app ships as a normal timer with optional enhanced modes. Each mode is a preset over the same timer action system.
 
-### 1. Look Pause
+### 1. BASIC TIMER
 
-Default stable mode.
+Default baseline mode.
+
+- Start: button
+- Pause: button
+- Resume: button
+- Reset: button
+- Lap: button
+- Camera: not required
+
+This mode must remain usable without camera permission and without premium camera features.
+
+### 2. LOOK PAUSE
+
+Camera-assisted mode.
 
 - Start: button
 - Pause: look at screen
 - Resume: look away
-- Reset: wink hold
+- Reset: button or deliberate wink-hold if enabled
+- Camera: required
 
-### 2. Wink Start
+### 3. WINK CONTROL
 
-Hands-free mode for cooking, exercise, or situations where touching the phone is inconvenient.
+Camera-assisted hands-free mode.
 
-- Start: wink hold
-- Pause: look at screen
-- Resume: look away
-- Reset: wink hold
+- Start: wink or button, depending on preset
+- Pause/resume: wink gesture
+- Reset: deliberate wink hold or button
+- Lap: wink gesture if enabled
+- Camera: required
 
-### 3. Wink Control
+Single wink behavior is useful but accuracy-sensitive. It should remain hideable or beta-labeled before public launch if validation is not acceptable.
 
-Experimental wink-first mode.
+### 4. FLIP TIMER
 
-- Start: wink hold
-- Pause/resume: single wink
-- Reset: wink hold
+Sensor-assisted mode.
 
-`Single Wink` is included in development scope but should remain removable or hideable before launch if accuracy is not acceptable.
+- Start: device face down
+- Pause: device face up
+- Resume: device face down
+- Reset: button
+- Camera: not required
 
 ## Gesture Mapping
 
-Users can freely map timer actions to gesture inputs.
+Users may eventually customize timer actions, but the default product should not depend on advanced mapping.
 
 Timer actions:
 
@@ -116,6 +143,7 @@ Timer actions:
 - Pause
 - Resume
 - Reset
+- Lap
 
 Gesture inputs:
 
@@ -128,6 +156,8 @@ Gesture inputs:
 - Left single wink
 - Right single wink
 - Any-eye single wink
+- Device face down
+- Device face up
 
 Wink hold options:
 
@@ -144,14 +174,15 @@ Single wink options:
 
 ## Safety Rules
 
-Free mapping is powerful, so the app needs guardrails.
+Camera and gesture control are powerful, so the app needs guardrails.
 
+- BASIC TIMER must always work without camera permission.
 - Default presets must always be usable without configuration.
 - If a mapping is ambiguous, show a warning before saving.
 - If the same gesture is mapped to different actions, the UI must explain the state-based behavior.
 - Single wink mappings should show a Beta label.
-- Single wink can be hidden before release without affecting the rest of the app.
-- Reset gestures should remain deliberate, preferably wink hold rather than single wink.
+- Single wink can be hidden before release without affecting BASIC TIMER, LOOK PAUSE, or FLIP TIMER.
+- Reset gestures should remain deliberate, preferably wink hold or button rather than single wink.
 
 ## App Menu Structure
 
@@ -164,8 +195,8 @@ Must show:
 - Large centisecond timer.
 - Active mode name.
 - Ghost expression state.
-- Current gesture hint, such as `Look = Pause` or `Wink Hold = Reset`.
-- Quick access to mode and mapping.
+- Current action hint, such as `Button = Start`, `Look = Pause`, or `Wink = Lap`.
+- Quick access to mode selection.
 
 ### Modes
 
@@ -173,11 +204,12 @@ Preset selector.
 
 Includes:
 
-- Look Pause
-- Wink Start
-- Wink Control
+- BASIC TIMER
+- LOOK PAUSE
+- WINK CONTROL
+- FLIP TIMER
 
-Each mode can be used as-is or customized.
+Each mode can be used as-is. Custom mapping may be added later, but it is not required for the baseline product.
 
 ### Gesture Mapping
 
@@ -209,20 +241,34 @@ Session record screen.
 
 Tracks:
 
-- Focus duration.
-- Look-paused duration.
+- Timer duration.
+- Look-paused duration when LOOK PAUSE is used.
 - Reset count.
+- Lap records when available.
 - Mode used.
 - Optional future metric: wink interactions.
 
+## Monetization Implication
+
+The free baseline should be BASIC TIMER. Premium or rewarded-ad access should be attached to optional advanced modes and comfort features:
+
+- LOOK PAUSE
+- WINK CONTROL
+- FLIP TIMER if chosen as premium
+- Advanced calibration
+- Custom gesture mapping
+- Ad removal
+
+The paid value proposition should be "unlock enhanced timer controls and remove ads," not only "remove ads."
+
 ## Design System First
 
-The next implementation phase should start with the visual system before expanding gesture mapping.
+The visual system remains useful because it makes camera/sensor state readable and memorable.
 
 Reasoning:
 
-- The app's differentiator is not only gesture logic, but the feeling of controlling a timer through a shy arcade ghost.
-- The same mascot state component can later reflect actual detection states.
+- The app's differentiator is not only gesture logic, but the feeling of controlling a normal timer through look, wink, and flip interactions.
+- The same mascot state component can reflect actual detection states.
 - A stable design system will reduce churn when adding modes, mapping, and calibration.
 
 First build slice:
@@ -230,7 +276,7 @@ First build slice:
 1. Ghost mascot component with expression states.
 2. Arcade timer display with centiseconds.
 3. Main timer screen restyle using Arcade Ghost Console theme.
-4. Mode cards for the three presets.
+4. Mode cards for BASIC TIMER, LOOK PAUSE, WINK CONTROL, and FLIP TIMER.
 5. Gesture mapping screen shell with static rows.
 
 Functional mapping behavior can follow after the visual language is established.
@@ -239,9 +285,8 @@ Functional mapping behavior can follow after the visual language is established.
 
 These are intentionally deferred:
 
-- Final app name in Korean.
 - Whether `Single Wink` ships publicly.
 - Exact single-wink accuracy threshold.
 - Whether calibration is mandatory before enabling single wink.
 - Final icon and store branding.
-
+- Final monetization split between rewarded ads, one-time purchase, and possible subscription.

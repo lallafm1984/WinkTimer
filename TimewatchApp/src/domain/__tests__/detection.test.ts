@@ -7,56 +7,20 @@ import {
   faceHeightAngleLevels,
   DEFAULT_WINK_EYE_CLOSED_THRESHOLD,
   DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD,
-  DEFAULT_WINK_MAX_DURATION_MS,
-  DEFAULT_WINK_MIN_DURATION_MS,
   normalizeDetectionPerformanceMode,
-  getSingleWinkMinDurationMs,
   lookAngleLevels,
   normalizeWinkEyeClosedThreshold,
   normalizeWinkEyeProbabilityGapThreshold,
-  normalizeWinkMaxDurationMs,
-  normalizeWinkMinDurationMs,
   normalizeDetectionFrameIntervalLevel,
   normalizeDetectionResolutionLevel,
   normalizeFaceHeightAngleLevel,
   normalizeLookAngleLevel,
   normalizeWinkDistanceLevel,
-  normalizeWinkMinTimeLevel,
-  normalizeWinkSensitivityLevel,
-  normalizeWinkTimeLevel,
-  toNativeWinkSensitivityLevel,
-  winkEyeClosedThresholdValues,
-  winkEyeProbabilityGapThresholdValues,
   winkDistanceLevels,
-  winkMinTimeLevels,
-  winkSensitivityLevels,
-  winkTimeLevels,
 } from '../detection';
 
 describe('detection settings', () => {
-  it('provides five displayed wink sensitivity levels', () => {
-    expect(winkSensitivityLevels).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  it('normalizes arbitrary wink sensitivity input into the 1 to 5 display range', () => {
-    expect(normalizeWinkSensitivityLevel(0)).toBe(1);
-    expect(normalizeWinkSensitivityLevel(3.4)).toBe(3);
-    expect(normalizeWinkSensitivityLevel(99)).toBe(5);
-    expect(normalizeWinkSensitivityLevel(Number.NaN)).toBe(3);
-  });
-
-  it('maps displayed wink sensitivity levels to native threshold levels', () => {
-    expect(toNativeWinkSensitivityLevel(1)).toBe(-2);
-    expect(toNativeWinkSensitivityLevel(2)).toBe(-1);
-    expect(toNativeWinkSensitivityLevel(3)).toBe(1);
-    expect(toNativeWinkSensitivityLevel(4)).toBe(2);
-    expect(toNativeWinkSensitivityLevel(5)).toBe(3);
-  });
-
-  it('provides manual wink eye closed threshold values', () => {
-    expect(winkEyeClosedThresholdValues).toEqual([
-      0.03, 0.06, 0.1, 0.15, 0.2,
-    ]);
+  it('provides the calibrated wink eye closed threshold default', () => {
     expect(DEFAULT_WINK_EYE_CLOSED_THRESHOLD).toBe(0.1);
   });
 
@@ -68,8 +32,7 @@ describe('detection settings', () => {
     expect(normalizeWinkEyeClosedThreshold(Number.NaN)).toBe(0.1);
   });
 
-  it('provides manual wink eye gap threshold values', () => {
-    expect(winkEyeProbabilityGapThresholdValues).toEqual([0.2, 0.3, 0.4]);
+  it('provides the calibrated wink eye gap threshold default', () => {
     expect(DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD).toBe(0.3);
   });
 
@@ -89,47 +52,6 @@ describe('detection settings', () => {
     expect(normalizeWinkDistanceLevel(3.4)).toBe(3);
     expect(normalizeWinkDistanceLevel(99)).toBe(5);
     expect(normalizeWinkDistanceLevel(Number.NaN)).toBe(5);
-  });
-
-  it('provides three wink time levels', () => {
-    expect(winkTimeLevels).toEqual([1, 2, 3]);
-  });
-
-  it('normalizes arbitrary wink time input into the 1 to 3 range', () => {
-    expect(normalizeWinkTimeLevel(0)).toBe(1);
-    expect(normalizeWinkTimeLevel(2.4)).toBe(2);
-    expect(normalizeWinkTimeLevel(99)).toBe(3);
-    expect(normalizeWinkTimeLevel(Number.NaN)).toBe(2);
-  });
-
-  it('provides three wink minimum time levels', () => {
-    expect(winkMinTimeLevels).toEqual([1, 2, 3]);
-  });
-
-  it('normalizes arbitrary wink minimum time input into the 1 to 3 range', () => {
-    expect(normalizeWinkMinTimeLevel(0)).toBe(1);
-    expect(normalizeWinkMinTimeLevel(2.4)).toBe(2);
-    expect(normalizeWinkMinTimeLevel(99)).toBe(3);
-    expect(normalizeWinkMinTimeLevel(Number.NaN)).toBe(2);
-  });
-
-  it('maps wink minimum time levels to duration thresholds', () => {
-    expect(getSingleWinkMinDurationMs(1)).toBe(100);
-    expect(getSingleWinkMinDurationMs(2)).toBe(200);
-    expect(getSingleWinkMinDurationMs(3)).toBe(300);
-  });
-
-  it('normalizes direct wink duration inputs in milliseconds', () => {
-    expect(DEFAULT_WINK_MAX_DURATION_MS).toBe(1000);
-    expect(DEFAULT_WINK_MIN_DURATION_MS).toBe(200);
-    expect(normalizeWinkMaxDurationMs(83)).toBe(100);
-    expect(normalizeWinkMaxDurationMs(987.6)).toBe(988);
-    expect(normalizeWinkMaxDurationMs(5000)).toBe(3000);
-    expect(normalizeWinkMaxDurationMs(Number.NaN)).toBe(1000);
-    expect(normalizeWinkMinDurationMs(20)).toBe(50);
-    expect(normalizeWinkMinDurationMs(184.3)).toBe(184);
-    expect(normalizeWinkMinDurationMs(1500)).toBe(1000);
-    expect(normalizeWinkMinDurationMs(Number.NaN)).toBe(200);
   });
 
   it('provides three look angle levels', () => {

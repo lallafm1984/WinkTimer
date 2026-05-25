@@ -10,6 +10,22 @@ import React, {
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState as NativeAppState } from 'react-native';
+import {
+  DEFAULT_TIMER_ALERT_SOUND_ENABLED,
+  DEFAULT_TIMER_ALERT_SOUND_ID,
+  DEFAULT_TIMER_ALERT_VIBRATION_ENABLED,
+  DEFAULT_TIMER_ALERT_DURATION_ID,
+  DEFAULT_TIMER_ALERT_VIBRATION_PATTERN_ID,
+  getTimerAlertDurationMs,
+  normalizeTimerAlertDurationId,
+  normalizeTimerAlertSoundId,
+  normalizeTimerAlertVibrationPatternId,
+  playTimerEndAlert,
+  stopTimerEndAlert as stopNativeTimerEndAlert,
+  type TimerAlertDurationId,
+  type TimerAlertSoundId,
+  type TimerAlertVibrationPatternId,
+} from '../alerts/timerAlert';
 import type {
   DevicePosture,
   DevicePostureDetector,
@@ -30,10 +46,6 @@ import type {
   WinkDistanceLevel,
   WinkEyeClosedThreshold,
   WinkEyeProbabilityGapThreshold,
-  WinkMaxDurationMs,
-  WinkMinDurationMs,
-  WinkMinTimeLevel,
-  WinkTimeLevel,
 } from '../domain/detection';
 import {
   DEFAULT_LOOK_ANGLE_LEVEL,
@@ -44,10 +56,6 @@ import {
   DEFAULT_WINK_EYE_CLOSED_THRESHOLD,
   DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD,
   DEFAULT_WINK_DISTANCE_LEVEL,
-  DEFAULT_WINK_MAX_DURATION_MS,
-  DEFAULT_WINK_MIN_DURATION_MS,
-  DEFAULT_WINK_MIN_TIME_LEVEL,
-  DEFAULT_WINK_TIME_LEVEL,
   normalizeDetectionFrameIntervalLevel,
   normalizeDetectionPerformanceMode,
   normalizeDetectionResolutionLevel,
@@ -146,18 +154,6 @@ type AppStateValue = {
   setFaceHeightAngleLevel: React.Dispatch<
     React.SetStateAction<FaceHeightAngleLevel>
   >;
-  winkTimeLevel: WinkTimeLevel;
-  setWinkTimeLevel: React.Dispatch<React.SetStateAction<WinkTimeLevel>>;
-  winkMaxDurationMs: WinkMaxDurationMs;
-  setWinkMaxDurationMs: React.Dispatch<
-    React.SetStateAction<WinkMaxDurationMs>
-  >;
-  winkMinTimeLevel: WinkMinTimeLevel;
-  setWinkMinTimeLevel: React.Dispatch<React.SetStateAction<WinkMinTimeLevel>>;
-  winkMinDurationMs: WinkMinDurationMs;
-  setWinkMinDurationMs: React.Dispatch<
-    React.SetStateAction<WinkMinDurationMs>
-  >;
   detectionResolutionLevel: DetectionResolutionLevel;
   setDetectionResolutionLevel: React.Dispatch<
     React.SetStateAction<DetectionResolutionLevel>
@@ -180,6 +176,26 @@ type AppStateValue = {
   setTimerTargetDurationMs(durationMs: number): void;
   timerModeId: TimerModeId;
   setTimerModeId: React.Dispatch<React.SetStateAction<TimerModeId>>;
+  timerAlertVibrationEnabled: boolean;
+  setTimerAlertVibrationEnabled: React.Dispatch<
+    React.SetStateAction<boolean>
+  >;
+  timerAlertSoundEnabled: boolean;
+  setTimerAlertSoundEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  timerAlertSoundId: TimerAlertSoundId;
+  setTimerAlertSoundId: React.Dispatch<
+    React.SetStateAction<TimerAlertSoundId>
+  >;
+  timerAlertDurationId: TimerAlertDurationId;
+  setTimerAlertDurationId: React.Dispatch<
+    React.SetStateAction<TimerAlertDurationId>
+  >;
+  timerAlertVibrationPatternId: TimerAlertVibrationPatternId;
+  setTimerAlertVibrationPatternId: React.Dispatch<
+    React.SetStateAction<TimerAlertVibrationPatternId>
+  >;
+  isTimerAlertActive: boolean;
+  stopTimerEndAlert(): void;
   gestureInputsBlocked: boolean;
   setGestureInputsBlocked: React.Dispatch<React.SetStateAction<boolean>>;
   finishError: string | null;
@@ -212,6 +228,11 @@ type PersistedSettings = {
   timekeepingMode: TimekeepingMode;
   timerTargetDurationMs: number;
   timerModeId: TimerModeId;
+  timerAlertVibrationEnabled: boolean;
+  timerAlertSoundEnabled: boolean;
+  timerAlertSoundId: TimerAlertSoundId;
+  timerAlertDurationId: TimerAlertDurationId;
+  timerAlertVibrationPatternId: TimerAlertVibrationPatternId;
   winkLeftEyeClosedThreshold: WinkEyeClosedThreshold;
   winkRightEyeClosedThreshold: WinkEyeClosedThreshold;
   winkLeftEyeProbabilityGapThreshold: WinkEyeProbabilityGapThreshold;
@@ -219,10 +240,6 @@ type PersistedSettings = {
   winkDistanceLevel: WinkDistanceLevel;
   lookAngleLevel: LookAngleLevel;
   faceHeightAngleLevel: FaceHeightAngleLevel;
-  winkTimeLevel: WinkTimeLevel;
-  winkMaxDurationMs: WinkMaxDurationMs;
-  winkMinTimeLevel: WinkMinTimeLevel;
-  winkMinDurationMs: WinkMinDurationMs;
   detectionResolutionLevel: DetectionResolutionLevel;
   detectionFrameIntervalLevel: DetectionFrameIntervalLevel;
   detectionPerformanceMode: DetectionPerformanceMode;
@@ -266,6 +283,21 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
       value.timerTargetDurationMs,
     ),
     timerModeId: normalizeStoredTimerModeId(value.timerModeId),
+    timerAlertVibrationEnabled: normalizeStoredBoolean(
+      value.timerAlertVibrationEnabled,
+      DEFAULT_TIMER_ALERT_VIBRATION_ENABLED,
+    ),
+    timerAlertSoundEnabled: normalizeStoredBoolean(
+      value.timerAlertSoundEnabled,
+      DEFAULT_TIMER_ALERT_SOUND_ENABLED,
+    ),
+    timerAlertSoundId: normalizeTimerAlertSoundId(value.timerAlertSoundId),
+    timerAlertDurationId: normalizeTimerAlertDurationId(
+      value.timerAlertDurationId,
+    ),
+    timerAlertVibrationPatternId: normalizeTimerAlertVibrationPatternId(
+      value.timerAlertVibrationPatternId,
+    ),
     winkLeftEyeClosedThreshold: normalizeWinkEyeClosedThreshold(
       normalizeStoredNumber(
         value.winkLeftEyeClosedThreshold,
@@ -307,10 +339,6 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
         DEFAULT_FACE_HEIGHT_ANGLE_LEVEL,
       ),
     ),
-    winkTimeLevel: DEFAULT_WINK_TIME_LEVEL,
-    winkMaxDurationMs: DEFAULT_WINK_MAX_DURATION_MS,
-    winkMinTimeLevel: DEFAULT_WINK_MIN_TIME_LEVEL,
-    winkMinDurationMs: DEFAULT_WINK_MIN_DURATION_MS,
     detectionResolutionLevel: normalizeDetectionResolutionLevel(
       normalizeStoredNumber(
         value.detectionResolutionLevel,
@@ -669,16 +697,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   );
   const [faceHeightAngleLevel, setFaceHeightAngleLevel] =
     useState<FaceHeightAngleLevel>(DEFAULT_FACE_HEIGHT_ANGLE_LEVEL);
-  const [winkTimeLevel, setWinkTimeLevelState] = useState<WinkTimeLevel>(
-    DEFAULT_WINK_TIME_LEVEL,
-  );
-  const [winkMaxDurationMs, setWinkMaxDurationMsState] =
-    useState<WinkMaxDurationMs>(DEFAULT_WINK_MAX_DURATION_MS);
-  const [winkMinTimeLevel, setWinkMinTimeLevelState] = useState<WinkMinTimeLevel>(
-    DEFAULT_WINK_MIN_TIME_LEVEL,
-  );
-  const [winkMinDurationMs, setWinkMinDurationMsState] =
-    useState<WinkMinDurationMs>(DEFAULT_WINK_MIN_DURATION_MS);
   const [detectionResolutionLevel, setDetectionResolutionLevel] =
     useState<DetectionResolutionLevel>(DEFAULT_DETECTION_RESOLUTION_LEVEL);
   const [detectionFrameIntervalLevel, setDetectionFrameIntervalLevel] =
@@ -696,6 +714,24 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     useState(DEFAULT_TIMER_TARGET_DURATION_MS);
   const [timerModeId, setTimerModeIdState] =
     useState<TimerModeId>('lookPause');
+  const [
+    timerAlertVibrationEnabled,
+    setTimerAlertVibrationEnabled,
+  ] = useState(DEFAULT_TIMER_ALERT_VIBRATION_ENABLED);
+  const [timerAlertSoundEnabled, setTimerAlertSoundEnabled] = useState(
+    DEFAULT_TIMER_ALERT_SOUND_ENABLED,
+  );
+  const [timerAlertSoundId, setTimerAlertSoundId] =
+    useState<TimerAlertSoundId>(DEFAULT_TIMER_ALERT_SOUND_ID);
+  const [timerAlertDurationId, setTimerAlertDurationId] =
+    useState<TimerAlertDurationId>(DEFAULT_TIMER_ALERT_DURATION_ID);
+  const [
+    timerAlertVibrationPatternId,
+    setTimerAlertVibrationPatternId,
+  ] = useState<TimerAlertVibrationPatternId>(
+    DEFAULT_TIMER_ALERT_VIBRATION_PATTERN_ID,
+  );
+  const [isTimerAlertActive, setIsTimerAlertActiveState] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
   const [isFinishingSession, setIsFinishingSession] = useState(false);
   const [isAppForeground, setIsAppForeground] = useState(true);
@@ -709,6 +745,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const timekeepingModeRef = useRef(timekeepingMode);
   const timerTargetDurationMsRef = useRef(timerTargetDurationMs);
   const timerModeIdRef = useRef(timerModeId);
+  const lastTimerAlertKeyRef = useRef<string | null>(null);
+  const isTimerAlertActiveRef = useRef(false);
+  const timerAlertAutoClearTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const gestureInputsBlockedRef = useRef(gestureInputsBlocked);
   const isFinishingRef = useRef(false);
   const skippedInitialSettingsSaveRef = useRef(false);
@@ -733,29 +774,49 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     setSensitivityState('strict');
   }, []);
 
-  const setWinkTimeLevel = useCallback<
-    React.Dispatch<React.SetStateAction<WinkTimeLevel>>
-  >(_action => {
-    setWinkTimeLevelState(DEFAULT_WINK_TIME_LEVEL);
+  const clearTimerAlertAutoClearTimeout = useCallback(() => {
+    if (timerAlertAutoClearTimeoutRef.current === null) {
+      return;
+    }
+
+    clearTimeout(timerAlertAutoClearTimeoutRef.current);
+    timerAlertAutoClearTimeoutRef.current = null;
   }, []);
 
-  const setWinkMaxDurationMs = useCallback<
-    React.Dispatch<React.SetStateAction<WinkMaxDurationMs>>
-  >(_action => {
-    setWinkMaxDurationMsState(DEFAULT_WINK_MAX_DURATION_MS);
+  const setTimerAlertActive = useCallback((active: boolean) => {
+    isTimerAlertActiveRef.current = active;
+    setIsTimerAlertActiveState(active);
   }, []);
 
-  const setWinkMinTimeLevel = useCallback<
-    React.Dispatch<React.SetStateAction<WinkMinTimeLevel>>
-  >(_action => {
-    setWinkMinTimeLevelState(DEFAULT_WINK_MIN_TIME_LEVEL);
-  }, []);
+  const stopTimerEndAlert = useCallback(() => {
+    clearTimerAlertAutoClearTimeout();
+    setTimerAlertActive(false);
+    stopNativeTimerEndAlert().catch(() => undefined);
+  }, [clearTimerAlertAutoClearTimeout, setTimerAlertActive]);
 
-  const setWinkMinDurationMs = useCallback<
-    React.Dispatch<React.SetStateAction<WinkMinDurationMs>>
-  >(_action => {
-    setWinkMinDurationMsState(DEFAULT_WINK_MIN_DURATION_MS);
-  }, []);
+  const scheduleTimerAlertAutoClear = useCallback(
+    (durationId: TimerAlertDurationId) => {
+      clearTimerAlertAutoClearTimeout();
+
+      const durationMs = getTimerAlertDurationMs(durationId);
+      if (durationMs === null) {
+        return;
+      }
+
+      timerAlertAutoClearTimeoutRef.current = setTimeout(() => {
+        timerAlertAutoClearTimeoutRef.current = null;
+        setTimerAlertActive(false);
+      }, durationMs);
+    },
+    [clearTimerAlertAutoClearTimeout, setTimerAlertActive],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearTimerAlertAutoClearTimeout();
+      stopNativeTimerEndAlert().catch(() => undefined);
+    };
+  }, [clearTimerAlertAutoClearTimeout]);
 
   useEffect(() => {
     let isMounted = true;
@@ -793,6 +854,15 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         });
         setTimerModeIdState(nextSettings.timerModeId);
         timerModeIdRef.current = nextSettings.timerModeId;
+        setTimerAlertVibrationEnabled(
+          nextSettings.timerAlertVibrationEnabled,
+        );
+        setTimerAlertSoundEnabled(nextSettings.timerAlertSoundEnabled);
+        setTimerAlertSoundId(nextSettings.timerAlertSoundId);
+        setTimerAlertDurationId(nextSettings.timerAlertDurationId);
+        setTimerAlertVibrationPatternId(
+          nextSettings.timerAlertVibrationPatternId,
+        );
         setWinkLeftEyeClosedThreshold(
           nextSettings.winkLeftEyeClosedThreshold,
         );
@@ -808,10 +878,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         setWinkDistanceLevel(nextSettings.winkDistanceLevel);
         setLookAngleLevel(nextSettings.lookAngleLevel);
         setFaceHeightAngleLevel(nextSettings.faceHeightAngleLevel);
-        setWinkTimeLevel(nextSettings.winkTimeLevel);
-        setWinkMaxDurationMs(nextSettings.winkMaxDurationMs);
-        setWinkMinTimeLevel(nextSettings.winkMinTimeLevel);
-        setWinkMinDurationMs(nextSettings.winkMinDurationMs);
         setDetectionResolutionLevel(nextSettings.detectionResolutionLevel);
         setDetectionFrameIntervalLevel(
           nextSettings.detectionFrameIntervalLevel,
@@ -828,14 +894,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     return () => {
       isMounted = false;
     };
-  }, [
-    setSensitivity,
-    setTimer,
-    setWinkMaxDurationMs,
-    setWinkMinDurationMs,
-    setWinkMinTimeLevel,
-    setWinkTimeLevel,
-  ]);
+  }, [setSensitivity, setTimer]);
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -854,6 +913,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timekeepingMode,
       timerTargetDurationMs,
       timerModeId,
+      timerAlertVibrationEnabled,
+      timerAlertSoundEnabled,
+      timerAlertSoundId,
+      timerAlertDurationId,
+      timerAlertVibrationPatternId,
       winkLeftEyeClosedThreshold,
       winkRightEyeClosedThreshold,
       winkLeftEyeProbabilityGapThreshold,
@@ -861,10 +925,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       winkDistanceLevel,
       lookAngleLevel,
       faceHeightAngleLevel,
-      winkTimeLevel,
-      winkMaxDurationMs,
-      winkMinTimeLevel,
-      winkMinDurationMs,
       detectionResolutionLevel,
       detectionFrameIntervalLevel,
       detectionPerformanceMode,
@@ -883,6 +943,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     sensitivity,
     settingsLoaded,
     statusDisplayMode,
+    timerAlertDurationId,
+    timerAlertSoundEnabled,
+    timerAlertSoundId,
+    timerAlertVibrationEnabled,
+    timerAlertVibrationPatternId,
     timekeepingMode,
     timerTargetDurationMs,
     timerModeId,
@@ -890,11 +955,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     winkLeftEyeProbabilityGapThreshold,
     winkRightEyeProbabilityGapThreshold,
     winkLeftEyeClosedThreshold,
-    winkMaxDurationMs,
-    winkMinDurationMs,
-    winkMinTimeLevel,
     winkRightEyeClosedThreshold,
-    winkTimeLevel,
   ]);
 
   const appendSessionHistoryEvent = useCallback(
@@ -955,6 +1016,67 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   }, [appendSessionHistoryEvent, timer, timerModeId]);
 
   useEffect(() => {
+    if (timer.phase !== 'ended') {
+      lastTimerAlertKeyRef.current = null;
+      if (isTimerAlertActiveRef.current) {
+        stopTimerEndAlert();
+      }
+      return;
+    }
+
+    const targetCompleted =
+      timekeepingMode === 'timer' &&
+      timer.targetDurationMs !== null &&
+      timer.focusDurationMs >= timer.targetDurationMs;
+
+    if (!targetCompleted) {
+      return;
+    }
+
+    const alertKey = [
+      timer.startedAtMs ?? 'none',
+      timer.targetDurationMs,
+      timer.focusDurationMs,
+    ].join(':');
+
+    if (lastTimerAlertKeyRef.current === alertKey) {
+      return;
+    }
+
+    lastTimerAlertKeyRef.current = alertKey;
+
+    if (!timerAlertVibrationEnabled && !timerAlertSoundEnabled) {
+      return;
+    }
+
+    setTimerAlertActive(true);
+    scheduleTimerAlertAutoClear(timerAlertDurationId);
+
+    playTimerEndAlert({
+      vibrationEnabled: timerAlertVibrationEnabled,
+      soundEnabled: timerAlertSoundEnabled,
+      soundId: timerAlertSoundId,
+      durationId: timerAlertDurationId,
+      vibrationPatternId: timerAlertVibrationPatternId,
+    }).catch(() => undefined);
+  }, [
+    scheduleTimerAlertAutoClear,
+    setTimerAlertActive,
+    stopTimerEndAlert,
+    timekeepingMode,
+    timer.focusDurationMs,
+    timer.lastUpdatedAtMs,
+    timer.phase,
+    timer.startedAtMs,
+    timer.targetDurationMs,
+    timerAlertDurationId,
+    timerAlertSoundEnabled,
+    timerAlertSoundId,
+    timerAlertVibrationEnabled,
+    timerAlertVibrationPatternId,
+  ]);
+
+  useEffect(() => {
     sensitivityRef.current = sensitivity;
   }, [sensitivity]);
 
@@ -1011,22 +1133,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       .setDetectionPerformanceMode(detectionPerformanceMode)
       .catch(() => undefined);
   }, [detectionPerformanceMode, gazeDetector]);
-
-  useEffect(() => {
-    gazeDetector.setWinkTimeLevel(winkTimeLevel);
-  }, [gazeDetector, winkTimeLevel]);
-
-  useEffect(() => {
-    gazeDetector.setWinkMaxDurationMs(winkMaxDurationMs);
-  }, [gazeDetector, winkMaxDurationMs]);
-
-  useEffect(() => {
-    gazeDetector.setWinkMinTimeLevel(winkMinTimeLevel);
-  }, [gazeDetector, winkMinTimeLevel]);
-
-  useEffect(() => {
-    gazeDetector.setWinkMinDurationMs(winkMinDurationMs);
-  }, [gazeDetector, winkMinDurationMs]);
 
   useEffect(() => {
     normalTimerModeRef.current = normalTimerMode;
@@ -1559,6 +1665,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         : null;
 
     setFinishError(null);
+    setSessionHistory([]);
     setTimer(current =>
       resetTimer(
         {
@@ -1685,14 +1792,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setLookAngleLevel,
       faceHeightAngleLevel,
       setFaceHeightAngleLevel,
-      winkTimeLevel,
-      setWinkTimeLevel,
-      winkMaxDurationMs,
-      setWinkMaxDurationMs,
-      winkMinTimeLevel,
-      setWinkMinTimeLevel,
-      winkMinDurationMs,
-      setWinkMinDurationMs,
       detectionResolutionLevel,
       setDetectionResolutionLevel,
       detectionFrameIntervalLevel,
@@ -1710,6 +1809,18 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setTimerTargetDurationMs,
       timerModeId,
       setTimerModeId,
+      timerAlertVibrationEnabled,
+      setTimerAlertVibrationEnabled,
+      timerAlertSoundEnabled,
+      setTimerAlertSoundEnabled,
+      timerAlertSoundId,
+      setTimerAlertSoundId,
+      timerAlertDurationId,
+      setTimerAlertDurationId,
+      timerAlertVibrationPatternId,
+      setTimerAlertVibrationPatternId,
+      isTimerAlertActive,
+      stopTimerEndAlert,
       gestureInputsBlocked,
       setGestureInputsBlocked,
       finishError,
@@ -1738,10 +1849,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       winkDistanceLevel,
       lookAngleLevel,
       faceHeightAngleLevel,
-      winkTimeLevel,
-      winkMaxDurationMs,
-      winkMinDurationMs,
-      winkMinTimeLevel,
       detectionResolutionLevel,
       detectionFrameIntervalLevel,
       detectionPerformanceMode,
@@ -1750,6 +1857,12 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timekeepingMode,
       timerTargetDurationMs,
       timerModeId,
+      timerAlertVibrationEnabled,
+      timerAlertSoundEnabled,
+      timerAlertSoundId,
+      timerAlertDurationId,
+      timerAlertVibrationPatternId,
+      isTimerAlertActive,
       gestureInputsBlocked,
       finishError,
       isFinishingSession,
@@ -1760,10 +1873,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setTimekeepingMode,
       setTimerTargetDurationMs,
       setTimerModeId,
-      setWinkMaxDurationMs,
-      setWinkMinDurationMs,
-      setWinkMinTimeLevel,
-      setWinkTimeLevel,
+      stopTimerEndAlert,
       startTimerSession,
       pauseTimerSession,
       resumeTimerSession,

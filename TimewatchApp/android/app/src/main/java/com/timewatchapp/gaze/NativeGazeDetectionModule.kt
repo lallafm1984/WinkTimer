@@ -60,7 +60,6 @@ class NativeGazeDetectionModule(
   private var lastEmittedPostureAtMs: Long = 0L
   private var cameraStartGeneration = 0
   private var lastFrameAnalysisAtMs = 0L
-  @Volatile private var winkSensitivityLevel = DEFAULT_WINK_SENSITIVITY_LEVEL
   @Volatile private var winkLeftEyeClosedThreshold = DEFAULT_WINK_EYE_CLOSED_THRESHOLD
   @Volatile private var winkRightEyeClosedThreshold = DEFAULT_WINK_EYE_CLOSED_THRESHOLD
   @Volatile private var winkLeftEyeProbabilityGapThreshold = DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD
@@ -151,12 +150,6 @@ class NativeGazeDetectionModule(
   @ReactMethod
   fun stopDevicePosture(promise: Promise) {
     stopDevicePostureSensor()
-    promise.resolve(null)
-  }
-
-  @ReactMethod
-  fun setWinkSensitivity(level: Double, promise: Promise) {
-    winkSensitivityLevel = normalizeWinkSensitivityLevel(level.toInt())
     promise.resolve(null)
   }
 
@@ -530,24 +523,17 @@ class NativeGazeDetectionModule(
     }
 
   private fun getWinkThresholds(): WinkThresholds {
-    val sensitivityRatio =
-      getWinkSensitivityOffset(winkSensitivityLevel).toFloat() /
-        WINK_SENSITIVITY_STEP_COUNT
-    val closedEyeAdjustment =
-      WINK_EYE_CLOSED_THRESHOLD_SENSITIVITY_RANGE * sensitivityRatio
-    val gapAdjustment =
-      WINK_EYE_GAP_THRESHOLD_SENSITIVITY_RANGE * sensitivityRatio
     val leftEyeClosedThreshold =
-      (winkLeftEyeClosedThreshold + closedEyeAdjustment)
+      winkLeftEyeClosedThreshold
         .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
     val rightEyeClosedThreshold =
-      (winkRightEyeClosedThreshold + closedEyeAdjustment)
+      winkRightEyeClosedThreshold
         .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
     val leftEyeProbabilityGapThreshold =
-      (winkLeftEyeProbabilityGapThreshold - gapAdjustment)
+      winkLeftEyeProbabilityGapThreshold
         .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
     val rightEyeProbabilityGapThreshold =
-      (winkRightEyeProbabilityGapThreshold - gapAdjustment)
+      winkRightEyeProbabilityGapThreshold
         .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
 
     return WinkThresholds(
@@ -592,24 +578,6 @@ class NativeGazeDetectionModule(
 
   private fun lerp(start: Float, end: Float, ratio: Float): Float =
     start + ((end - start) * ratio)
-
-  private fun normalizeWinkSensitivityLevel(level: Int): Int =
-    when {
-      level <= -2 -> -2
-      level == -1 -> -1
-      level <= 1 -> 1
-      level == 2 -> 2
-      else -> 3
-    }
-
-  private fun getWinkSensitivityOffset(level: Int): Int =
-    when (normalizeWinkSensitivityLevel(level)) {
-      -2 -> -2
-      -1 -> -1
-      1 -> 0
-      2 -> 1
-      else -> 2
-    }
 
   private fun calculateConfidence(
     face: Face,
@@ -781,28 +749,15 @@ class NativeGazeDetectionModule(
     private const val MIN_FACE_HEIGHT_ANGLE_LEVEL = 1
     private const val MAX_FACE_HEIGHT_ANGLE_LEVEL = 3
     private const val DEFAULT_FACE_HEIGHT_ANGLE_LEVEL = 2
-    private const val DEFAULT_WINK_SENSITIVITY_LEVEL = 1
-    private const val WINK_SENSITIVITY_STEP_COUNT = 9.0f
     private const val MIN_WINK_EYE_THRESHOLD = 0.0f
     private const val MAX_WINK_EYE_THRESHOLD = 1.0f
     private const val DEFAULT_WINK_EYE_CLOSED_THRESHOLD = 0.1f
     private const val DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD = 0.4f
     private const val FIXED_WINK_READY_EYE_OPEN_PROBABILITY = 0.85f
-    private const val FIXED_WINK_CLOSED_EYE_OPEN_PROBABILITY = 0.1f
     private const val FIXED_WINK_OPPOSITE_EYE_OPEN_PROBABILITY = 0.5f
-    private const val WINK_EYE_CLOSED_THRESHOLD_SENSITIVITY_RANGE = 0.09f
-    private const val WINK_EYE_GAP_THRESHOLD_SENSITIVITY_RANGE = 0.18f
     private const val MIN_WINK_DISTANCE_LEVEL = 1
     private const val MAX_WINK_DISTANCE_LEVEL = 5
     private const val DEFAULT_WINK_DISTANCE_LEVEL = 5
-    private const val STRICT_MIN_EYE_OPEN_PROBABILITY = 0.25f
-    private const val LOOSE_MIN_EYE_OPEN_PROBABILITY = 0.45f
-    private const val STRICT_MAX_WINK_EYE_OPEN_PROBABILITY = 0.45f
-    private const val LOOSE_MAX_WINK_EYE_OPEN_PROBABILITY = 0.72f
-    private const val STRICT_MIN_WINK_EYE_PROBABILITY_GAP = 0.34f
-    private const val LOOSE_MIN_WINK_EYE_PROBABILITY_GAP = 0.12f
-    private const val STRICT_MIN_OPEN_EYE_PROBABILITY_FOR_WINK = 0.62f
-    private const val LOOSE_MIN_OPEN_EYE_PROBABILITY_FOR_WINK = 0.50f
     private const val CLOSE_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION = 0.065
     private const val FAR_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION = 0.0
     private const val EMIT_THROTTLE_MS = 350L

@@ -8,6 +8,22 @@ import {
   View,
 } from 'react-native';
 import {PrimaryButton} from '../components/PrimaryButton';
+import {
+  TIMER_ALERT_MAX_DURATION_SECONDS,
+  TIMER_ALERT_MIN_DURATION_SECONDS,
+  TIMER_ALERT_UNTIL_STOPPED_ID,
+  createTimerAlertSecondsDurationId,
+  getTimerAlertDurationSeconds,
+  isTimerAlertUntilStopped,
+  loadTimerAlertSoundOptions,
+  previewTimerAlertSound,
+  timerAlertSoundOptions,
+  timerAlertVibrationPatternOptions,
+  type TimerAlertDurationId,
+  type TimerAlertSoundOption,
+  type TimerAlertSoundId,
+  type TimerAlertVibrationPatternId,
+} from '../alerts/timerAlert';
 import type {
   DetectionReading,
   DetectionFrameIntervalLevel,
@@ -49,6 +65,7 @@ type WinkCalibrationPhase = 'ready' | 'countdown' | 'measuring' | 'failed';
 
 type WinkCalibrationSample = {
   status: DetectionReading['status'];
+  eyeState: DetectionReading['eyeState'];
   selectedEyeOpenProbability: number | null | undefined;
   otherEyeOpenProbability: number | null | undefined;
   gapThreshold: number | null | undefined;
@@ -82,17 +99,40 @@ type AccordionGroupProps = {
   title: string;
   summary: string;
   testID: string;
+  expanded: boolean;
+  onToggle(): void;
   children: React.ReactNode;
 };
 
 type OptionButtonControlProps = {
   title: string;
   value: number;
-  valueLabel: string;
   levels: readonly number[];
   testID: string;
   labelForLevel?: (level: number) => string;
   onChange(value: number): void;
+};
+
+type BooleanButtonControlProps = {
+  title: string;
+  value: boolean;
+  testID: string;
+  onChange(value: boolean): void;
+};
+
+type SoundOptionControlProps = {
+  value: TimerAlertSoundId;
+  onChange(value: TimerAlertSoundId): void;
+};
+
+type TimerAlertDurationControlProps = {
+  value: TimerAlertDurationId;
+  onChange(value: TimerAlertDurationId): void;
+};
+
+type TimerAlertVibrationPatternControlProps = {
+  value: TimerAlertVibrationPatternId;
+  onChange(value: TimerAlertVibrationPatternId): void;
 };
 
 type MetricProps = {
@@ -104,19 +144,17 @@ function AccordionGroup({
   title,
   summary,
   testID,
+  expanded,
+  onToggle,
   children,
 }: AccordionGroupProps) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <View style={styles.group}>
       <Pressable
         accessibilityLabel={title}
         accessibilityRole="button"
         accessibilityState={{expanded}}
-        onPress={() => {
-          setExpanded(current => !current);
-        }}
+        onPress={onToggle}
         style={styles.groupHeader}
         testID={`${testID}-accordion`}>
         <View style={styles.groupHeaderCopy}>
@@ -205,6 +243,17 @@ function getCalibrationEyeName(side: WinkCalibrationSide) {
   return side === 'left' ? '왼쪽 눈' : '오른쪽 눈';
 }
 
+function isWinkCalibrationJudgmentUnavailable(
+  sample: Pick<WinkCalibrationSample, 'status' | 'eyeState'>,
+) {
+  return (
+    sample.status !== 'looking' ||
+    sample.eyeState === undefined ||
+    sample.eyeState === 'unknown' ||
+    sample.eyeState === 'bothClosed'
+  );
+}
+
 function getHalfThreshold(value: number) {
   return Math.round((value / 2) * 1000) / 1000;
 }
@@ -252,6 +301,7 @@ function createWinkCalibrationSample(
 
   return {
     status: reading.status,
+    eyeState: reading.eyeState,
     selectedEyeOpenProbability: getWinkTestEyeOpenProbability(winkDebug, side),
     otherEyeOpenProbability: getOtherWinkTestEyeOpenProbability(
       winkDebug,
@@ -267,6 +317,7 @@ function hasCompleteWinkCalibrationValues(
 ): sample is CompleteWinkCalibrationSample {
   return (
     sample.status === 'looking' &&
+    !isWinkCalibrationJudgmentUnavailable(sample) &&
     sample.faceAngleValid &&
     isFiniteNumber(sample.selectedEyeOpenProbability) &&
     isFiniteNumber(sample.otherEyeOpenProbability) &&
@@ -480,16 +531,9 @@ function getFrameIntervalLabel(level: number): string {
   return interval === 0 ? 'REALTIME' : `${interval} MS`;
 }
 
-function getFrameIntervalValueLabel(level: DetectionFrameIntervalLevel) {
-  const interval = detectionFrameIntervalMsByLevel[level];
-
-  return interval === 0 ? 'REALTIME' : `${interval} ms`;
-}
-
 function OptionButtonControl({
   title,
   value,
-  valueLabel,
   levels,
   testID,
   labelForLevel,
@@ -497,10 +541,7 @@ function OptionButtonControl({
 }: OptionButtonControlProps) {
   return (
     <View style={styles.section}>
-      <View style={styles.settingCopy}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <Text style={styles.description}>{valueLabel}</Text>
-      </View>
+      <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.toggleGrid} testID={testID}>
         {levels.map(level => (
           <PrimaryButton
@@ -513,6 +554,295 @@ function OptionButtonControl({
             testID={`${testID}-option-${level}`}
             variant={value === level ? 'primary' : 'secondary'}
             style={styles.toggleButton}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function BooleanButtonControl({
+  title,
+  value,
+  testID,
+  onChange,
+}: BooleanButtonControlProps) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.toggleGrid} testID={testID}>
+        <PrimaryButton
+          accessibilityState={{selected: value}}
+          label="ON"
+          onPress={() => {
+            onChange(true);
+          }}
+          testID={`${testID}-on`}
+          variant={value ? 'primary' : 'secondary'}
+          style={styles.toggleButton}
+        />
+        <PrimaryButton
+          accessibilityState={{selected: !value}}
+          label="OFF"
+          onPress={() => {
+            onChange(false);
+          }}
+          testID={`${testID}-off`}
+          variant={!value ? 'primary' : 'secondary'}
+          style={styles.toggleButton}
+        />
+      </View>
+    </View>
+  );
+}
+
+function SoundOptionControl({value, onChange}: SoundOptionControlProps) {
+  const [soundOptions, setSoundOptions] = useState<TimerAlertSoundOption[]>(
+    () => [...timerAlertSoundOptions],
+  );
+  const [soundModalVisible, setSoundModalVisible] = useState(false);
+  const selectedOption =
+    soundOptions.find(option => option.id === value) ??
+    timerAlertSoundOptions.find(option => option.id === value);
+
+  useEffect(() => {
+    let mounted = true;
+
+    loadTimerAlertSoundOptions()
+      .then(options => {
+        if (mounted) {
+          setSoundOptions(options);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.soundHeader}>
+        <View style={styles.soundTitleGroup}>
+          <Text style={styles.sectionTitle}>SOUND SELECT</Text>
+          <Text
+            style={styles.soundSelectedName}
+            testID="timer-alert-selected-sound-name">
+            {selectedOption?.label ?? 'CUSTOM SOUND'}
+          </Text>
+        </View>
+        <PrimaryButton
+          label="SELECT"
+          onPress={() => {
+            setSoundModalVisible(true);
+          }}
+          testID="timer-alert-sound-open"
+          variant="secondary"
+          style={styles.soundPreviewButton}
+        />
+      </View>
+      {soundModalVisible ? (
+        <Modal
+          animationType="fade"
+          onRequestClose={() => {
+            setSoundModalVisible(false);
+          }}
+          transparent
+          visible={soundModalVisible}>
+          <View style={styles.modalBackdrop} testID="timer-alert-sound-popup">
+            <View style={styles.soundModalPanel}>
+              <View style={styles.soundModalHeader}>
+                <Text style={styles.modalTitle}>SOUND SELECT</Text>
+                <PrimaryButton
+                  label="CLOSE"
+                  onPress={() => {
+                    setSoundModalVisible(false);
+                  }}
+                  testID="timer-alert-sound-close"
+                  variant="secondary"
+                  style={styles.soundPreviewButton}
+                />
+              </View>
+              <ScrollView
+                nestedScrollEnabled
+                style={styles.soundOptionScroller}
+                contentContainerStyle={styles.soundOptionList}
+                testID="timer-alert-sound-scroll">
+                <Text style={styles.soundListTitle}>ALARM SOUNDS</Text>
+                {soundOptions.map((option, index) => (
+                  <View key={option.id} style={styles.soundOptionRow}>
+                    <PrimaryButton
+                      accessibilityState={{selected: value === option.id}}
+                      label={formatSoundOptionLabel(option)}
+                      onPress={() => {
+                        onChange(option.id);
+                        setSoundModalVisible(false);
+                      }}
+                      testID={getSoundOptionSelectTestID(option, index)}
+                      variant={value === option.id ? 'primary' : 'secondary'}
+                      style={styles.soundOptionSelectButton}
+                    />
+                    <PrimaryButton
+                      accessibilityLabel="PREVIEW"
+                      label="▶"
+                      onPress={() => {
+                        previewTimerAlertSound(option.id).catch(
+                          () => undefined,
+                        );
+                      }}
+                      testID={getSoundOptionPreviewTestID(option, index)}
+                      variant="secondary"
+                      style={styles.soundOptionPreviewButton}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+    </View>
+  );
+}
+
+function formatSoundOptionLabel(option: TimerAlertSoundOption) {
+  return option.category === 'Default'
+    ? option.label
+    : option.label;
+}
+
+function getSoundOptionSelectTestID(
+  option: TimerAlertSoundOption,
+  index: number,
+) {
+  return option.category === 'Default'
+    ? `timer-alert-sound-select-${option.id}`
+    : `timer-alert-sound-select-${index}`;
+}
+
+function getSoundOptionPreviewTestID(
+  option: TimerAlertSoundOption,
+  index: number,
+) {
+  return option.category === 'Default'
+    ? `timer-alert-sound-preview-${option.id}`
+    : `timer-alert-sound-preview-${index}`;
+}
+
+function TimerAlertDurationControl({
+  value,
+  onChange,
+}: TimerAlertDurationControlProps) {
+  const currentSeconds = getTimerAlertDurationSeconds(value);
+  const untilStopped = isTimerAlertUntilStopped(value);
+  const lastSecondsRef = useRef(currentSeconds);
+
+  useEffect(() => {
+    if (!untilStopped) {
+      lastSecondsRef.current = currentSeconds;
+    }
+  }, [currentSeconds, untilStopped]);
+
+  const changeSecondsBy = (delta: number) => {
+    if (untilStopped) {
+      return;
+    }
+
+    const nextDurationId = createTimerAlertSecondsDurationId(
+      currentSeconds + delta,
+    );
+
+    if (nextDurationId !== value) {
+      onChange(nextDurationId);
+    }
+  };
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>ALERT LENGTH</Text>
+      <View
+        style={[
+          styles.durationStepper,
+          untilStopped ? styles.durationStepperDisabled : null,
+        ]}
+        testID="timer-alert-duration-stepper">
+        <PrimaryButton
+          accessibilityLabel="DECREASE ALERT LENGTH"
+          disabled={
+            untilStopped || currentSeconds <= TIMER_ALERT_MIN_DURATION_SECONDS
+          }
+          label="-"
+          onPress={() => {
+            changeSecondsBy(-1);
+          }}
+          testID="timer-alert-duration-decrement"
+          variant="secondary"
+          style={styles.durationStepButton}
+        />
+        <Text
+          style={[
+            styles.durationValue,
+            untilStopped ? styles.durationValueDisabled : null,
+          ]}
+          testID="timer-alert-duration-value">
+          {untilStopped ? '--' : `${currentSeconds} sec`}
+        </Text>
+        <PrimaryButton
+          accessibilityLabel="INCREASE ALERT LENGTH"
+          disabled={
+            untilStopped || currentSeconds >= TIMER_ALERT_MAX_DURATION_SECONDS
+          }
+          label="+"
+          onPress={() => {
+            changeSecondsBy(1);
+          }}
+          testID="timer-alert-duration-increment"
+          variant="secondary"
+          style={styles.durationStepButton}
+        />
+      </View>
+      <View style={styles.toggleGrid} testID="timer-alert-duration-options">
+        <PrimaryButton
+          accessibilityState={{selected: untilStopped}}
+          label="UNTIL STOPPED"
+          onPress={() => {
+            onChange(
+              untilStopped
+                ? createTimerAlertSecondsDurationId(lastSecondsRef.current)
+                : TIMER_ALERT_UNTIL_STOPPED_ID,
+            );
+          }}
+          testID="timer-alert-duration-untilStopped"
+          variant={untilStopped ? 'primary' : 'secondary'}
+          style={styles.soundOptionButton}
+        />
+      </View>
+    </View>
+  );
+}
+
+function TimerAlertVibrationPatternControl({
+  value,
+  onChange,
+}: TimerAlertVibrationPatternControlProps) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>VIBRATION PATTERN</Text>
+      <View
+        style={styles.toggleGrid}
+        testID="timer-alert-vibration-pattern-options">
+        {timerAlertVibrationPatternOptions.map(option => (
+          <PrimaryButton
+            key={option.id}
+            accessibilityState={{selected: value === option.id}}
+            label={option.label}
+            onPress={() => {
+              onChange(option.id);
+            }}
+            testID={`timer-alert-vibration-pattern-${option.id}`}
+            variant={value === option.id ? 'primary' : 'secondary'}
+            style={styles.soundOptionButton}
           />
         ))}
       </View>
@@ -542,6 +872,16 @@ export function SettingsScreen() {
     setDetectionFrameIntervalLevel,
     detectionPerformanceMode,
     setDetectionPerformanceMode,
+    timerAlertVibrationEnabled,
+    setTimerAlertVibrationEnabled,
+    timerAlertSoundEnabled,
+    setTimerAlertSoundEnabled,
+    timerAlertSoundId,
+    setTimerAlertSoundId,
+    timerAlertDurationId,
+    setTimerAlertDurationId,
+    timerAlertVibrationPatternId,
+    setTimerAlertVibrationPatternId,
     gazeDetector,
     setScreen,
   } = useAppState();
@@ -560,11 +900,22 @@ export function SettingsScreen() {
     useState(WINK_CALIBRATION_REQUIRED_WINKS);
   const [winkCalibrationFailureMessage, setWinkCalibrationFailureMessage] =
     useState('');
+  const [expandedSettingsGroup, setExpandedSettingsGroup] = useState<
+    string | null
+  >(null);
+  const [
+    winkCalibrationJudgmentUnavailable,
+    setWinkCalibrationJudgmentUnavailable,
+  ] = useState(false);
   const [activeWinkCalibrationRunId, setActiveWinkCalibrationRunId] = useState<
     number | null
   >(null);
   const winkCalibrationSamplesRef = useRef<WinkCalibrationSample[]>([]);
   const winkCalibrationRunCounterRef = useRef(0);
+
+  const toggleSettingsGroup = (groupId: string) => {
+    setExpandedSettingsGroup(current => (current === groupId ? null : groupId));
+  };
 
   useEffect(() => {
     if (!winkTestEnabled) {
@@ -609,6 +960,7 @@ export function SettingsScreen() {
     setWinkTestEnabled(false);
     setActiveWinkCalibrationRunId(null);
     setWinkCalibrationFailureMessage('');
+    setWinkCalibrationJudgmentUnavailable(false);
     setWinkCalibrationPhase('ready');
     setWinkCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
     setWinkCalibrationRemainingWinks(WINK_CALIBRATION_REQUIRED_WINKS);
@@ -619,6 +971,7 @@ export function SettingsScreen() {
     setActiveWinkCalibrationRunId(null);
     setWinkCalibrationSide(null);
     setWinkCalibrationFailureMessage('');
+    setWinkCalibrationJudgmentUnavailable(false);
     setWinkCalibrationPhase('ready');
     setWinkCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
     setWinkCalibrationRemainingWinks(WINK_CALIBRATION_REQUIRED_WINKS);
@@ -633,6 +986,7 @@ export function SettingsScreen() {
     gazeDetector.suppressSingleWinkUntilOpen();
     winkCalibrationRunCounterRef.current += 1;
     setWinkCalibrationFailureMessage('');
+    setWinkCalibrationJudgmentUnavailable(false);
     setWinkCalibrationPhase('countdown');
     setWinkCalibrationRemainingMs(WINK_CALIBRATION_COUNTDOWN_MS);
     setWinkCalibrationRemainingWinks(WINK_CALIBRATION_REQUIRED_WINKS);
@@ -681,6 +1035,7 @@ export function SettingsScreen() {
       didFinish = true;
       clearCalibrationTimers();
       setWinkCalibrationFailureMessage(message);
+      setWinkCalibrationJudgmentUnavailable(false);
       setWinkCalibrationPhase('failed');
       setWinkCalibrationRemainingMs(0);
       setWinkCalibrationRemainingWinks(0);
@@ -720,6 +1075,7 @@ export function SettingsScreen() {
       setWinkCalibrationRemainingMs(0);
       setWinkCalibrationRemainingWinks(0);
       setWinkCalibrationFailureMessage('');
+      setWinkCalibrationJudgmentUnavailable(false);
       setWinkCalibrationPhase('ready');
       setActiveWinkCalibrationRunId(null);
       setWinkCalibrationSide(null);
@@ -733,6 +1089,7 @@ export function SettingsScreen() {
 
       const captureStartedAtMs = Date.now();
       winkCalibrationSamplesRef.current = [];
+      setWinkCalibrationJudgmentUnavailable(false);
       setWinkCalibrationPhase('measuring');
       setWinkCalibrationRemainingWinks(WINK_CALIBRATION_REQUIRED_WINKS);
 
@@ -746,6 +1103,9 @@ export function SettingsScreen() {
         );
 
         setWinkTestReading(nextReading);
+        setWinkCalibrationJudgmentUnavailable(
+          isWinkCalibrationJudgmentUnavailable(nextSample),
+        );
 
         if (isRawWinkCalibrationReleased(nextSample)) {
           rawCaptureState.selectedOpenBaseline =
@@ -882,11 +1242,14 @@ export function SettingsScreen() {
       <AccordionGroup
         title="LOOK MODE"
         summary="Face direction controls"
+        expanded={expandedSettingsGroup === 'look-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('look-settings');
+        }}
         testID="look-settings">
         <OptionButtonControl
           title="FACE DIRECTION"
           value={lookAngleLevel}
-          valueLabel={getRangeLabel(lookAngleLevel)}
           levels={lookAngleLevels}
           labelForLevel={getRangeLabel}
           testID="look-angle-levels"
@@ -897,7 +1260,6 @@ export function SettingsScreen() {
         <OptionButtonControl
           title="VERTICAL RANGE"
           value={faceHeightAngleLevel}
-          valueLabel={getRangeLabel(faceHeightAngleLevel)}
           levels={faceHeightAngleLevels}
           labelForLevel={getRangeLabel}
           testID="face-height-angle-levels"
@@ -910,12 +1272,13 @@ export function SettingsScreen() {
       <AccordionGroup
         title="WINK MODE"
         summary="Eye thresholds and face distance"
+        expanded={expandedSettingsGroup === 'wink-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('wink-settings');
+        }}
         testID="wink-settings">
         <View style={styles.section}>
-          <View style={styles.settingCopy}>
-            <Text style={styles.sectionTitle}>WINK CALIBRATION</Text>
-            <Text style={styles.description}>3 WINKS</Text>
-          </View>
+          <Text style={styles.sectionTitle}>WINK CALIBRATION</Text>
           <View style={styles.calibrationRow}>
             <PrimaryButton
               label="LEFT WINK SETTING"
@@ -940,7 +1303,6 @@ export function SettingsScreen() {
         <OptionButtonControl
           title="FACE DISTANCE"
           value={winkDistanceLevel}
-          valueLabel={getDistanceLabel(winkDistanceLevel)}
           levels={winkDistanceLevels}
           labelForLevel={getDistanceLabel}
           testID="wink-distance-levels"
@@ -953,11 +1315,14 @@ export function SettingsScreen() {
       <AccordionGroup
         title="CAMERA"
         summary="Camera analysis controls"
+        expanded={expandedSettingsGroup === 'camera-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('camera-settings');
+        }}
         testID="camera-settings">
         <OptionButtonControl
           title="IMAGE SIZE"
           value={detectionResolutionLevel}
-          valueLabel={`${detectionResolutionByLevel[detectionResolutionLevel].width} x ${detectionResolutionByLevel[detectionResolutionLevel].height}`}
           levels={detectionResolutionLevels}
           labelForLevel={getResolutionLabel}
           testID="detection-resolution-levels"
@@ -968,7 +1333,6 @@ export function SettingsScreen() {
         <OptionButtonControl
           title="FRAME RATE"
           value={detectionFrameIntervalLevel}
-          valueLabel={getFrameIntervalValueLabel(detectionFrameIntervalLevel)}
           levels={detectionFrameIntervalLevels}
           labelForLevel={getFrameIntervalLabel}
           testID="detection-frame-interval-levels"
@@ -981,7 +1345,6 @@ export function SettingsScreen() {
         <OptionButtonControl
           title="ANALYSIS MODE"
           value={getDetectionPerformanceLevel(detectionPerformanceMode)}
-          valueLabel={detectionPerformanceMode.toUpperCase()}
           levels={detectionPerformanceLevels}
           labelForLevel={getDetectionPerformanceLabel}
           testID="detection-performance-mode-levels"
@@ -992,8 +1355,46 @@ export function SettingsScreen() {
       </AccordionGroup>
 
       <AccordionGroup
+        title="TIMER"
+        summary="Completion alert controls"
+        expanded={expandedSettingsGroup === 'timer-alert-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('timer-alert-settings');
+        }}
+        testID="timer-alert-settings">
+        <BooleanButtonControl
+          title="VIBRATION"
+          value={timerAlertVibrationEnabled}
+          testID="timer-alert-vibration"
+          onChange={setTimerAlertVibrationEnabled}
+        />
+        <BooleanButtonControl
+          title="SOUND"
+          value={timerAlertSoundEnabled}
+          testID="timer-alert-sound"
+          onChange={setTimerAlertSoundEnabled}
+        />
+        <SoundOptionControl
+          value={timerAlertSoundId}
+          onChange={setTimerAlertSoundId}
+        />
+        <TimerAlertDurationControl
+          value={timerAlertDurationId}
+          onChange={setTimerAlertDurationId}
+        />
+        <TimerAlertVibrationPatternControl
+          value={timerAlertVibrationPatternId}
+          onChange={setTimerAlertVibrationPatternId}
+        />
+      </AccordionGroup>
+
+      <AccordionGroup
         title="WINK TEST"
         summary="Live values and calibration"
+        expanded={expandedSettingsGroup === 'wink-test'}
+        onToggle={() => {
+          toggleSettingsGroup('wink-test');
+        }}
         testID="wink-test">
         <View style={styles.section}>
           <View style={styles.testHeader}>
@@ -1137,18 +1538,27 @@ export function SettingsScreen() {
                       ? ''
                       : `${getCalibrationEyeName(
                           winkCalibrationSide,
-                        )}으로 3번 윙크하세요`}
+            )}으로 3번 윙크하세요`}
             </Text>
             {winkCalibrationPhase === 'countdown' ? (
               <Text style={styles.modalTimer}>
                 {Math.ceil(winkCalibrationRemainingMs / 1000)}s
               </Text>
             ) : winkCalibrationPhase === 'measuring' ? (
-              <Text
-                style={styles.modalTimer}
-                testID="wink-calibration-count">
-                {winkCalibrationRemainingWinks}
-              </Text>
+              <>
+                <Text
+                  style={styles.modalTimer}
+                  testID="wink-calibration-count">
+                  {winkCalibrationRemainingWinks}
+                </Text>
+                <Text
+                  style={styles.calibrationUnavailableMessage}
+                  testID="wink-calibration-unavailable-message">
+                  {winkCalibrationJudgmentUnavailable
+                    ? '윙크 판정 불가능 상태.'
+                    : ''}
+                </Text>
+              </>
             ) : null}
             <View style={styles.modalActions}>
               {winkCalibrationPhase === 'ready' ||
@@ -1268,11 +1678,126 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  soundHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  soundTitleGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  soundSelectedName: {
+    color: '#5D6A62',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  soundPreviewButton: {
+    minHeight: 34,
+    minWidth: 84,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  soundModalPanel: {
+    alignItems: 'stretch',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE2DE',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 14,
+    maxHeight: '78%',
+    maxWidth: 380,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    width: '100%',
+  },
+  soundModalHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  soundOptionScroller: {
+    backgroundColor: '#F3F6F1',
+    borderColor: '#DCE2DE',
+    borderRadius: 8,
+    borderWidth: 1,
+    maxHeight: 320,
+  },
+  soundOptionList: {
+    gap: 8,
+    padding: 10,
+  },
+  soundOptionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  soundListTitle: {
+    color: '#5D6A62',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
   toggleButton: {
     minHeight: 40,
     minWidth: 72,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  soundOptionButton: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    width: '100%',
+  },
+  soundOptionSelectButton: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  soundOptionPreviewButton: {
+    minHeight: 34,
+    minWidth: 44,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    width: 44,
+  },
+  durationStepper: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  durationStepperDisabled: {
+    opacity: 0.46,
+  },
+  durationStepButton: {
+    minHeight: 44,
+    minWidth: 56,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+    width: 56,
+  },
+  durationValue: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#C9D2CB',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: '#121A14',
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '900',
+    minHeight: 44,
+    paddingVertical: 8,
+    textAlign: 'center',
+  },
+  durationValueDisabled: {
+    color: '#6A746D',
   },
   testHeader: {
     alignItems: 'center',
@@ -1365,6 +1890,14 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontWeight: '900',
     letterSpacing: 0,
+  },
+  calibrationUnavailableMessage: {
+    color: '#B42318',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 18,
+    minHeight: 18,
+    textAlign: 'center',
   },
   modalActions: {
     flexDirection: 'row',

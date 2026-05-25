@@ -1,6 +1,7 @@
 import React from 'react';
-import {StyleSheet, Text} from 'react-native';
+import {NativeModules, StyleSheet, Text} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
+import {TIMER_ALERT_PREVIEW_DURATION_MS} from '../../alerts/timerAlert';
 import {SettingsScreen} from '../SettingsScreen';
 
 const mockSetScreen = jest.fn();
@@ -14,29 +15,32 @@ const mockSetWinkRightEyeProbabilityGapThreshold = jest.fn();
 const mockSetWinkDistanceLevel = jest.fn();
 const mockSetLookAngleLevel = jest.fn();
 const mockSetFaceHeightAngleLevel = jest.fn();
-const mockSetWinkTimeLevel = jest.fn();
-const mockSetWinkMaxDurationMs = jest.fn();
-const mockSetWinkMinTimeLevel = jest.fn();
-const mockSetWinkMinDurationMs = jest.fn();
 const mockSetDetectionResolutionLevel = jest.fn();
 const mockSetDetectionFrameIntervalLevel = jest.fn();
 const mockSetDetectionPerformanceMode = jest.fn();
+const mockSetTimerAlertVibrationEnabled = jest.fn();
+const mockSetTimerAlertSoundEnabled = jest.fn();
+const mockSetTimerAlertSoundId = jest.fn();
+const mockSetTimerAlertDurationId = jest.fn();
+const mockSetTimerAlertVibrationPatternId = jest.fn();
 
 function createWinkReading({
+  status = 'looking',
   side = 'left',
   leftEye = 0.18,
   rightEye = 0.91,
   gap = 0.36,
   eyeState = 'oneEyeClosed',
 }: {
+  status?: 'looking' | 'notLooking' | 'unknown';
   side?: 'left' | 'right';
   leftEye?: number;
   rightEye?: number;
   gap?: number;
-  eyeState?: 'unknown' | 'bothOpen' | 'oneEyeClosed';
+  eyeState?: 'unknown' | 'bothOpen' | 'bothClosed' | 'oneEyeClosed';
 }) {
   return {
-    status: 'looking' as const,
+    status,
     confidence: 0.82,
     eyeState,
     winkSide: side,
@@ -75,10 +79,6 @@ const mockGazeDetector = {
   setWinkThresholds: jest.fn().mockResolvedValue(undefined),
   setWinkDistanceLevel: jest.fn().mockResolvedValue(undefined),
   setLookAngleLevel: jest.fn().mockResolvedValue(undefined),
-  setWinkTimeLevel: jest.fn(),
-  setWinkMaxDurationMs: jest.fn(),
-  setWinkMinTimeLevel: jest.fn(),
-  setWinkMinDurationMs: jest.fn(),
   setDetectionResolutionLevel: jest.fn().mockResolvedValue(undefined),
   setDetectionFrameIntervalLevel: jest.fn().mockResolvedValue(undefined),
   setDetectionPerformanceMode: jest.fn().mockResolvedValue(undefined),
@@ -108,20 +108,22 @@ const mockState = {
   setLookAngleLevel: mockSetLookAngleLevel,
   faceHeightAngleLevel: 2,
   setFaceHeightAngleLevel: mockSetFaceHeightAngleLevel,
-  winkTimeLevel: 2,
-  setWinkTimeLevel: mockSetWinkTimeLevel,
-  winkMaxDurationMs: 1000,
-  setWinkMaxDurationMs: mockSetWinkMaxDurationMs,
-  winkMinTimeLevel: 2,
-  setWinkMinTimeLevel: mockSetWinkMinTimeLevel,
-  winkMinDurationMs: 200,
-  setWinkMinDurationMs: mockSetWinkMinDurationMs,
   detectionResolutionLevel: 2,
   setDetectionResolutionLevel: mockSetDetectionResolutionLevel,
   detectionFrameIntervalLevel: 1,
   setDetectionFrameIntervalLevel: mockSetDetectionFrameIntervalLevel,
   detectionPerformanceMode: 'fast',
   setDetectionPerformanceMode: mockSetDetectionPerformanceMode,
+  timerAlertVibrationEnabled: true,
+  setTimerAlertVibrationEnabled: mockSetTimerAlertVibrationEnabled,
+  timerAlertSoundEnabled: true,
+  setTimerAlertSoundEnabled: mockSetTimerAlertSoundEnabled,
+  timerAlertSoundId: 'alarm',
+  setTimerAlertSoundId: mockSetTimerAlertSoundId,
+  timerAlertDurationId: 'seconds:4',
+  setTimerAlertDurationId: mockSetTimerAlertDurationId,
+  timerAlertVibrationPatternId: 'double',
+  setTimerAlertVibrationPatternId: mockSetTimerAlertVibrationPatternId,
   gazeDetector: mockGazeDetector,
   setScreen: mockSetScreen,
 };
@@ -166,6 +168,16 @@ function pressByTestID(
   });
 }
 
+async function pressByTestIDAndFlush(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  testID: string,
+) {
+  await ReactTestRenderer.act(async () => {
+    renderer.root.findByProps({testID}).props.onPress();
+    await Promise.resolve();
+  });
+}
+
 function pressToggleOption(
   renderer: ReactTestRenderer.ReactTestRenderer,
   testID: string,
@@ -181,10 +193,34 @@ function getNodeStyle(
   return StyleSheet.flatten(renderer.root.findByProps({testID}).props.style);
 }
 
+function getUppercaseValueTextNodes(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
+  return renderer.root.findAllByType(Text).filter(node => {
+    const style = StyleSheet.flatten(node.props.style);
+
+    return (
+      style?.color === '#5D6A62' &&
+      style?.fontSize === 13 &&
+      style?.textTransform === 'uppercase'
+    );
+  });
+}
+
 function getCalibrationCount(renderer: ReactTestRenderer.ReactTestRenderer) {
   return flattenText(
     renderer.root.findByProps({testID: 'wink-calibration-count'}).props
       .children,
+  );
+}
+
+function getCalibrationUnavailableMessage(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
+  return flattenText(
+    renderer.root.findByProps({
+      testID: 'wink-calibration-unavailable-message',
+    }).props.children,
   );
 }
 
@@ -210,6 +246,22 @@ describe('SettingsScreen', () => {
     mockState.winkRightEyeClosedThreshold = 0.1;
     mockState.winkLeftEyeProbabilityGapThreshold = 0.3;
     mockState.winkRightEyeProbabilityGapThreshold = 0.3;
+    mockState.timerAlertVibrationEnabled = true;
+    mockState.timerAlertSoundEnabled = true;
+    mockState.timerAlertSoundId = 'alarm';
+    mockState.timerAlertDurationId = 'seconds:4';
+    mockState.timerAlertVibrationPatternId = 'double';
+    (NativeModules as {NativeTimerAlert?: unknown}).NativeTimerAlert = {
+      previewTimerAlertSound: jest.fn().mockResolvedValue(undefined),
+      getTimerAlertSoundOptions: jest.fn().mockResolvedValue([
+        {id: 'alarm', label: 'DEFAULT ALARM', category: 'Default'},
+        {
+          id: 'uri:content://settings/system/alarm_alert',
+          label: 'Morning Xylophone',
+          category: 'Alarm',
+        },
+      ]),
+    };
     mockGazeDetector.getLatestReading.mockReturnValue(
       createWinkReading({
         leftEye: 0.85,
@@ -228,8 +280,10 @@ describe('SettingsScreen', () => {
     expect(text).toContain('LOOK MODE');
     expect(text).toContain('WINK MODE');
     expect(text).toContain('CAMERA');
+    expect(text).toContain('TIMER');
     expect(text).toContain('WINK TEST');
-    expect(text.indexOf('WINK TEST')).toBeGreaterThan(text.indexOf('CAMERA'));
+    expect(text.indexOf('TIMER')).toBeGreaterThan(text.indexOf('CAMERA'));
+    expect(text.indexOf('WINK TEST')).toBeGreaterThan(text.indexOf('TIMER'));
     expect(text).not.toContain('SENSITIVITY');
     expect(text).not.toContain('FACE DIRECTION');
     expect(text).not.toContain('LEFT EYE CLOSED');
@@ -248,6 +302,7 @@ describe('SettingsScreen', () => {
     expect(text).toContain('NORMAL');
     expect(text).toContain('WIDE');
     expect(text).not.toContain('SENSITIVITY');
+    expect(getUppercaseValueTextNodes(renderer)).toHaveLength(0);
     expect(renderer.root.findAllByProps({testID: 'sensitivity-levels'}))
       .toHaveLength(0);
 
@@ -270,6 +325,25 @@ describe('SettingsScreen', () => {
     expect(bodyStyle.backgroundColor).toBe('#F3F6F1');
   });
 
+  it('keeps only one settings accordion expanded at a time', () => {
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'look-settings-accordion');
+
+    expect(
+      renderer.root.findAllByProps({testID: 'look-settings-body'}).length,
+    ).toBeGreaterThan(0);
+
+    pressByTestID(renderer, 'camera-settings-accordion');
+
+    const text = getRenderedText(renderer);
+
+    expect(text).not.toContain('FACE DIRECTION');
+    expect(text).toContain('IMAGE SIZE');
+    expect(text).toContain('FRAME RATE');
+    expect(text).toContain('ANALYSIS MODE');
+  });
+
   it('uses wink mode calibration buttons while hiding non-distance threshold controls', () => {
     const renderer = renderSettingsScreen();
 
@@ -289,6 +363,7 @@ describe('SettingsScreen', () => {
     expect(text).not.toContain('RIGHT EYE GAP');
     expect(text).not.toContain('WINK MAX TIME');
     expect(text).not.toContain('WINK MIN TIME');
+    expect(getUppercaseValueTextNodes(renderer)).toHaveLength(0);
     expect(renderer.root.findAllByProps({
       testID: 'wink-left-eye-threshold-levels',
     })).toHaveLength(0);
@@ -321,10 +396,11 @@ describe('SettingsScreen', () => {
     expect(text).toContain('IMAGE SIZE');
     expect(text).toContain('FRAME RATE');
     expect(text).toContain('ANALYSIS MODE');
-    expect(text).toContain('640 x 480');
+    expect(text).toContain('640x480');
     expect(text).toContain('REALTIME');
     expect(text).toContain('FAST');
     expect(text).toContain('ACCURATE');
+    expect(getUppercaseValueTextNodes(renderer)).toHaveLength(0);
 
     pressToggleOption(renderer, 'detection-resolution-levels', 1);
     pressToggleOption(renderer, 'detection-frame-interval-levels', 2);
@@ -333,6 +409,194 @@ describe('SettingsScreen', () => {
     expect(mockSetDetectionResolutionLevel).toHaveBeenCalledWith(1);
     expect(mockSetDetectionFrameIntervalLevel).toHaveBeenCalledWith(2);
     expect(mockSetDetectionPerformanceMode).toHaveBeenCalledWith('accurate');
+  });
+
+  it('shows timer alert controls without separate value text and with stepper alert length in seconds', async () => {
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'timer-alert-settings-accordion');
+
+    const text = getRenderedText(renderer);
+
+    expect(text).toContain('VIBRATION');
+    expect(text).toContain('SOUND');
+    expect(text).toContain('SOUND SELECT');
+    expect(text).toContain('SELECT');
+    expect(text).toContain('ALERT LENGTH');
+    expect(text).toContain('UNTIL STOPPED');
+    expect(text).toContain('VIBRATION PATTERN');
+    expect(text).toContain('SHORT');
+    expect(text).toContain('DOUBLE');
+    expect(text).toContain('LONG REPEAT');
+    expect(text).toContain('DEFAULT ALARM');
+    expect(text).not.toContain('4 SEC');
+    expect(text).not.toContain('DEFAULT NOTIFICATION');
+    expect(text).not.toContain('DEFAULT RINGTONE');
+    expect(getUppercaseValueTextNodes(renderer)).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'timer-alert-sound-scroll',
+      }),
+    ).toHaveLength(0);
+    expect(
+      StyleSheet.flatten(
+        renderer.root.findByProps({
+          testID: 'timer-alert-sound-open',
+        }).props.style,
+      ).minWidth,
+    ).toBe(84);
+    expect(
+      flattenText(
+        renderer.root.findByProps({
+          testID: 'timer-alert-selected-sound-name',
+        }).props.children,
+      ),
+    ).toBe('DEFAULT ALARM');
+
+    pressByTestID(renderer, 'timer-alert-vibration-off');
+    pressByTestID(renderer, 'timer-alert-sound-off');
+
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'timer-alert-duration-value'}).props
+          .children,
+      ),
+    ).toBe('4 sec');
+
+    pressByTestID(renderer, 'timer-alert-duration-increment');
+    pressByTestID(renderer, 'timer-alert-duration-decrement');
+    pressByTestID(renderer, 'timer-alert-duration-untilStopped');
+    pressByTestID(renderer, 'timer-alert-vibration-pattern-longRepeat');
+
+    expect(mockSetTimerAlertVibrationEnabled).toHaveBeenCalledWith(false);
+    expect(mockSetTimerAlertSoundEnabled).toHaveBeenCalledWith(false);
+    expect(mockSetTimerAlertDurationId).toHaveBeenCalledWith('seconds:5');
+    expect(mockSetTimerAlertDurationId).toHaveBeenCalledWith('seconds:3');
+    expect(mockSetTimerAlertDurationId).toHaveBeenCalledWith('untilStopped');
+    expect(mockSetTimerAlertVibrationPatternId).toHaveBeenCalledWith(
+      'longRepeat',
+    );
+  });
+
+  it('allows alert length to increase up to 20 seconds', async () => {
+    mockState.timerAlertDurationId = 'seconds:19';
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'timer-alert-settings-accordion');
+
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'timer-alert-duration-value'}).props
+          .children,
+      ),
+    ).toBe('19 sec');
+
+    pressByTestID(renderer, 'timer-alert-duration-increment');
+
+    expect(mockSetTimerAlertDurationId).toHaveBeenCalledWith('seconds:20');
+  });
+
+  it('opens a scrollable sound popup for device alarm selection and preview', async () => {
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'timer-alert-settings-accordion');
+
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'timer-alert-sound-popup',
+      }),
+    ).toHaveLength(0);
+
+    pressByTestID(renderer, 'timer-alert-sound-open');
+
+    const text = getRenderedText(renderer);
+
+    expect(text).toContain('ALARM SOUNDS');
+    expect(text).toContain('Morning Xylophone');
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-alert-sound-scroll',
+      }),
+    ).toBeTruthy();
+    expect(getNodeStyle(renderer, 'timer-alert-sound-scroll')).toMatchObject({
+      backgroundColor: '#F3F6F1',
+      borderWidth: 1,
+    });
+    expect(
+      StyleSheet.flatten(
+        renderer.root.findByProps({
+          testID: 'timer-alert-sound-preview-1',
+        }).props.style,
+      ).minWidth,
+    ).toBe(44);
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-alert-sound-preview-1',
+      }).props.accessibilityLabel,
+    ).toBe('PREVIEW');
+    expect(getRenderedText(renderer)).toContain('▶');
+
+    pressByTestID(renderer, 'timer-alert-sound-preview-1');
+
+    expect(
+      (
+        NativeModules as {
+          NativeTimerAlert?: {previewTimerAlertSound: jest.Mock};
+        }
+      ).NativeTimerAlert?.previewTimerAlertSound,
+    ).toHaveBeenCalledWith(
+      'uri:content://settings/system/alarm_alert',
+      TIMER_ALERT_PREVIEW_DURATION_MS,
+    );
+
+    pressByTestID(renderer, 'timer-alert-sound-select-1');
+
+    expect(mockSetTimerAlertSoundId).toHaveBeenCalledWith(
+      'uri:content://settings/system/alarm_alert',
+    );
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'timer-alert-sound-popup',
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('disables the seconds stepper while timer alerts run until stopped', async () => {
+    mockState.timerAlertDurationId = 'untilStopped';
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'timer-alert-settings-accordion');
+
+    expect(getNodeStyle(renderer, 'timer-alert-duration-stepper').opacity).toBe(
+      0.46,
+    );
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-alert-duration-decrement',
+      }).props.disabled,
+    ).toBe(true);
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-alert-duration-increment',
+      }).props.disabled,
+    ).toBe(true);
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'timer-alert-duration-value'}).props
+          .children,
+      ),
+    ).toBe('--');
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'timer-alert-duration-drag',
+      }),
+    ).toHaveLength(0);
+
+    expect(mockSetTimerAlertDurationId).not.toHaveBeenCalledWith('seconds:20');
+
+    pressByTestID(renderer, 'timer-alert-duration-untilStopped');
+
+    expect(mockSetTimerAlertDurationId).toHaveBeenCalledWith('seconds:4');
   });
 
   it('shows wink test eye values in user-facing left and right positions', async () => {
@@ -474,6 +738,135 @@ describe('SettingsScreen', () => {
     })).toHaveLength(0);
     expect(mockGazeDetector.consumeSingleWink).not.toHaveBeenCalled();
     expect(mockGazeDetector.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the largest minimum closed-eye value from three calibration winks', async () => {
+    jest.useFakeTimers();
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'wink-settings-accordion');
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({testID: 'calibrate-left-wink'})
+        .props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({testID: 'start-wink-calibration'})
+        .props.onPress();
+    });
+    await advanceCalibrationTimersByTime(3000);
+
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.14,
+      rightEye: 0.84,
+      gap: 0.7,
+    });
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.06,
+      rightEye: 0.86,
+      gap: 0.8,
+    });
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.86,
+      rightEye: 0.84,
+      gap: 0.02,
+      eyeState: 'bothOpen',
+    });
+    await advanceCalibrationTimersByTime(300);
+
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.19,
+      rightEye: 0.82,
+      gap: 0.63,
+    });
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.08,
+      rightEye: 0.84,
+      gap: 0.76,
+    });
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.85,
+      rightEye: 0.83,
+      gap: 0.02,
+      eyeState: 'bothOpen',
+    });
+    await advanceCalibrationTimersByTime(300);
+
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.11,
+      rightEye: 0.81,
+      gap: 0.7,
+    });
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.074,
+      rightEye: 0.82,
+      gap: 0.74,
+    });
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.84,
+      rightEye: 0.82,
+      gap: 0.02,
+      eyeState: 'bothOpen',
+    });
+    await advanceCalibrationTimersByTime(300);
+
+    expect(mockSetWinkLeftEyeClosedThreshold).toHaveBeenCalledWith(0.09);
+    expect(mockSetWinkLeftEyeProbabilityGapThreshold).toHaveBeenCalledWith(
+      0.37,
+    );
+  });
+
+  it('shows an unavailable message and skips counting when calibration cannot judge winks', async () => {
+    jest.useFakeTimers();
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'wink-settings-accordion');
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({testID: 'calibrate-left-wink'})
+        .props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({testID: 'start-wink-calibration'})
+        .props.onPress();
+    });
+    await advanceCalibrationTimersByTime(3000);
+
+    queueCalibrationWink({
+      status: 'notLooking',
+      eyeState: 'unknown',
+      leftEye: 0.08,
+      rightEye: 0.86,
+      gap: 0.78,
+    });
+    await advanceCalibrationTimersByTime(100);
+
+    expect(getCalibrationUnavailableMessage(renderer)).toBe(
+      '윙크 판정 불가능 상태.',
+    );
+    expect(getCalibrationCount(renderer)).toBe('3');
+
+    queueCalibrationWink({
+      side: 'left',
+      leftEye: 0.067,
+      rightEye: 0.85,
+      gap: 0.783,
+    });
+    await advanceCalibrationTimersByTime(100);
+
+    expect(getCalibrationUnavailableMessage(renderer)).toBe('');
+    expect(getCalibrationCount(renderer)).toBe('2');
   });
 
   it('keeps the calibration popup open when the closed-eye average is too high', async () => {

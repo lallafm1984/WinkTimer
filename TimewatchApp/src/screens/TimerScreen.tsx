@@ -86,10 +86,6 @@ function canResetTimer(timer: TimerState, mode: TimerModePreset) {
 }
 
 function getStatusLabel(timer: TimerState, mode: TimerModePreset) {
-  if (isWinkJudgmentUnavailable(timer, mode)) {
-    return '윙크 판정 불가능 상태.';
-  }
-
   if (
     timer.phase === 'active' &&
     mode.pauseGesture === 'look' &&
@@ -117,8 +113,9 @@ function isWinkJudgmentUnavailable(
 ) {
   return (
     mode.id === 'winkControl' &&
-    timer.detectionStatus === 'looking' &&
-    timer.eyeState === 'unknown'
+    (timer.detectionStatus !== 'looking' ||
+      timer.eyeState === 'unknown' ||
+      timer.eyeState === 'bothClosed')
   );
 }
 
@@ -242,6 +239,8 @@ function getResponderPageY(event: GestureResponderEvent) {
 
 const TIMER_TARGET_DRAG_ACTIVATION_PX = 14;
 const TIMER_TARGET_DRAG_PX_PER_STEP = 22;
+const WINK_UNAVAILABLE_HINT_SHOW_DELAY_MS = 250;
+const WINK_UNAVAILABLE_HINT_HIDE_DELAY_MS = 800;
 
 function getTimerTargetDragStep(dy: number) {
   if (Math.abs(dy) < TIMER_TARGET_DRAG_ACTIVATION_PX) {
@@ -535,6 +534,8 @@ export function TimerScreen() {
     setTimerTargetDurationMs,
     timerModeId,
     setTimerModeId,
+    isTimerAlertActive,
+    stopTimerEndAlert,
     setGestureInputsBlocked,
     sessionHistory,
   } = useAppState();
@@ -548,6 +549,21 @@ export function TimerScreen() {
 
   const ghostState = getGhostState(timer);
   const selectedMode = getTimerModePreset(timerModeId);
+  const winkJudgmentUnavailable = isWinkJudgmentUnavailable(
+    timer,
+    selectedMode,
+  );
+  const [
+    winkUnavailableHintVisible,
+    setWinkUnavailableHintVisible,
+  ] = React.useState(winkJudgmentUnavailable);
+  const shouldRenderWinkJudgmentHint = selectedMode.id === 'winkControl';
+  const winkUnavailableHintShown =
+    shouldRenderWinkJudgmentHint && winkUnavailableHintVisible;
+  const winkReadyHintShown =
+    shouldRenderWinkJudgmentHint && !winkUnavailableHintVisible;
+  const winkJudgmentHintShown =
+    winkUnavailableHintShown || winkReadyHintShown;
   const historyEvents = React.useMemo(
     () =>
       sessionHistory.filter(event =>
@@ -558,7 +574,11 @@ export function TimerScreen() {
     [selectedMode.lapGesture, sessionHistory],
   );
   const latestHistoryRecord = historyEvents[historyEvents.length - 1] ?? null;
-  const canChangeMode = timer.phase === 'idle' || isStoppedState(timer, selectedMode);
+  const canChangeMode =
+    !isTimerAlertActive &&
+    (timer.phase === 'idle' ||
+      timer.phase === 'ended' ||
+      isStoppedState(timer, selectedMode));
   const canReset = canResetTimer(timer, selectedMode) && !isFinishingSession;
   const shouldShowLapAction =
     timer.phase === 'active' &&
@@ -615,6 +635,25 @@ export function TimerScreen() {
             onPress: startTimerSession,
             disabled: isFinishingSession || startBlockedByModeMenu,
           };
+
+  React.useEffect(() => {
+    if (winkUnavailableHintVisible === winkJudgmentUnavailable) {
+      return;
+    }
+
+    const timeoutId = setTimeout(
+      () => {
+        setWinkUnavailableHintVisible(winkJudgmentUnavailable);
+      },
+      winkJudgmentUnavailable
+        ? WINK_UNAVAILABLE_HINT_SHOW_DELAY_MS
+        : WINK_UNAVAILABLE_HINT_HIDE_DELAY_MS,
+    );
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [winkJudgmentUnavailable, winkUnavailableHintVisible]);
 
   React.useEffect(() => {
     if (!canChangeMode && modeMenuOpen) {
@@ -757,6 +796,27 @@ export function TimerScreen() {
               displayMode={timekeepingMode}
             />
           </Pressable>
+          {shouldRenderWinkJudgmentHint ? (
+            <Text
+              accessibilityElementsHidden={!winkJudgmentHintShown}
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              style={[
+                styles.winkJudgmentHint,
+                winkUnavailableHintShown
+                  ? styles.winkJudgmentHintUnavailable
+                  : winkReadyHintShown
+                    ? styles.winkJudgmentHintReady
+                    : styles.winkJudgmentHintHidden,
+              ]}
+              testID="timer-wink-unavailable-label">
+              {winkUnavailableHintShown
+                ? '윙크 판정 불가능 상태.'
+                : winkReadyHintShown
+                  ? '눈을 크게 뜬상태에서 윙크하세요'
+                  : ' '}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.timerContentArea}>
@@ -769,11 +829,7 @@ export function TimerScreen() {
               <Text
                 numberOfLines={2}
                 adjustsFontSizeToFit
-                style={[
-                  styles.statusLabel,
-                  isWinkJudgmentUnavailable(timer, selectedMode) &&
-                    styles.statusLabelDanger,
-                ]}
+                style={styles.statusLabel}
                 testID="timer-status-label">
                 {getStatusLabel(timer, selectedMode)}
               </Text>
@@ -840,11 +896,13 @@ export function TimerScreen() {
               variant="primary"
             />
             <TimerActionButton
-              label="HISTORY"
+              label={isTimerAlertActive ? 'STOP ALERT' : 'HISTORY'}
               gesture="Button"
-              onPress={handleToggleHistory}
+              onPress={
+                isTimerAlertActive ? stopTimerEndAlert : handleToggleHistory
+              }
               disabled={false}
-              accessibilityState={{selected: historyOpen}}
+              accessibilityState={{selected: !isTimerAlertActive && historyOpen}}
             />
           </View>
         </View>
@@ -1042,6 +1100,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderColor: arcadeTheme.colors.line,
     borderWidth: 1,
+    gap: 2,
     justifyContent: 'center',
     minHeight: 88,
     paddingHorizontal: arcadeTheme.spacing.sm,
@@ -1157,10 +1216,24 @@ const styles = StyleSheet.create({
     lineHeight: 46,
     textAlign: 'center',
   },
-  statusLabelDanger: {
+  winkJudgmentHint: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 16,
+    minHeight: 16,
+    textAlign: 'center',
+  },
+  winkJudgmentHintUnavailable: {
     color: arcadeTheme.colors.danger,
-    fontSize: 30,
-    lineHeight: 36,
+    opacity: 1,
+  },
+  winkJudgmentHintReady: {
+    color: arcadeTheme.colors.success,
+    opacity: 1,
+  },
+  winkJudgmentHintHidden: {
+    opacity: 0,
   },
   error: {
     ...arcadeTheme.typography.label,

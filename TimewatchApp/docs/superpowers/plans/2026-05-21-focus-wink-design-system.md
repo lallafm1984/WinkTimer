@@ -1,5 +1,7 @@
 # Focus Wink Design System Implementation Plan
 
+> Current product correction, 2026-05-25: the app name is **Wink Timer**. The product is a general-purpose timer app, not a focus-only timer. BASIC TIMER is the baseline normal timer experience; LOOK PAUSE, WINK CONTROL, and FLIP TIMER are optional camera/sensor-assisted modes. Treat older `Focus Wink` and `focus timer` wording in this historical plan as implementation-era naming, not current product positioning.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first Focus Wink visual slice: Arcade Ghost Console theme tokens, centisecond timer display, ghost expression component, mode cards, and a redesigned main timer screen.
