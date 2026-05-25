@@ -108,6 +108,9 @@ describe('mobile Android verification environment', () => {
     expect(nativeModule).not.toContain('LOOSE_LOOKING_ROLL_DEGREES');
     expect(nativeModule).not.toContain('DEFAULT_LOOKING_ROLL_DEGREES');
     expect(nativeModule).toContain('setLookAngleLevel');
+    expect(nativeModule).toContain('setPerformanceMode');
+    expect(nativeModule).toContain('setWinkThresholds');
+    expect(nativeModule).toContain('PERFORMANCE_MODE_ACCURATE');
     expect(nativeModule).toContain('getLookingAngleThresholds');
   });
 
@@ -155,13 +158,69 @@ describe('mobile Android verification environment', () => {
     );
 
     expect(nativeModule).toContain('setWinkDistanceLevel');
+    expect(nativeModule).toContain('setFaceHeightAngleLevel');
     expect(nativeModule).toContain('DEFAULT_WINK_DISTANCE_LEVEL = 5');
+    expect(nativeModule).toContain('DEFAULT_FACE_HEIGHT_ANGLE_LEVEL = 2');
     expect(nativeModule).toContain('normalizeWinkSensitivityLevel');
     expect(nativeModule).toContain('getWinkSensitivityOffset');
     expect(nativeModule).toContain('WINK_SENSITIVITY_STEP_COUNT = 9.0f');
+    expect(nativeModule).toContain('headEulerAngleX');
+    expect(nativeModule).toContain('maxPitchDegrees');
     expect(nativeModule).toContain('getMinFaceAreaRatioForEyeClassification');
     expect(nativeModule).toContain('frameArea');
     expect(nativeModule).toContain('faceAreaRatio');
-    expect(nativeModule).toContain('return EyeReading("unknown", null)');
+    expect(nativeModule).toContain('minOpenEyeProbabilityForWink');
+    expect(nativeModule).toContain('leftEyeClosedThreshold');
+    expect(nativeModule).toContain('rightEyeClosedThreshold');
+    expect(nativeModule).toContain('leftEyeProbabilityGapThreshold');
+    expect(nativeModule).toContain('rightEyeProbabilityGapThreshold');
+    expect(nativeModule).toContain(
+      'MIRROR_EYE_PROBABILITIES_FOR_FRONT_CAMERA = true',
+    );
+    expect(nativeModule).toContain('MIRROR_WINK_SIDES_FOR_FRONT_CAMERA = false');
+    expect(nativeModule).toContain('leftEye <= thresholds.leftEyeClosedThreshold');
+    expect(nativeModule).toContain('rightEye <= thresholds.rightEyeClosedThreshold');
+    expect(nativeModule).toContain(
+      'rightEye - leftEye >= thresholds.leftEyeProbabilityGapThreshold',
+    );
+    expect(nativeModule).toContain(
+      'leftEye - rightEye >= thresholds.rightEyeProbabilityGapThreshold',
+    );
+    expect(nativeModule).toContain('putDouble("leftEyeOpenProbability"');
+    expect(nativeModule).toContain('putDouble("rightEyeOpenProbability"');
+    expect(nativeModule).toContain('putDouble("eyeProbabilityGap"');
+    expect(nativeModule).toContain('putDouble("leftEyeClosedThreshold"');
+    expect(nativeModule).toContain('putDouble("rightEyeClosedThreshold"');
+    expect(nativeModule).toContain('putDouble("leftEyeProbabilityGapThreshold"');
+    expect(nativeModule).toContain('putDouble("rightEyeProbabilityGapThreshold"');
+    expect(nativeModule).toContain('putDouble("facePitchDegrees"');
+    expect(nativeModule).toContain('putDouble("maxFacePitchDegrees"');
+    expect(nativeModule).toContain('putDouble("analysisDurationMs"');
+    expect(nativeModule).toContain('return EyeReading("unknown", null, debug)');
+  });
+
+  test('native gaze module only allows wink classification when the face is facing the screen', () => {
+    const nativeModule = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'timewatchapp',
+        'gaze',
+        'NativeGazeDetectionModule.kt',
+      ),
+      'utf8',
+    );
+
+    expect(nativeModule).toMatch(
+      /val rawEyeReading =\s*resolveEyeReading\(/,
+    );
+    expect(nativeModule).toMatch(
+      /val eyeReading =\s*if \(facingScreen\) \{\s*rawEyeReading\s*\} else \{\s*EyeReading\("unknown", null, rawEyeReading\.debug\)\s*\}/,
+    );
   });
 });

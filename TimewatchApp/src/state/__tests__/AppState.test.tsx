@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
 import {
   AppState as NativeAppState,
@@ -16,11 +16,16 @@ type NativeGazeDetectionModuleForTest = {
   stop: jest.Mock<Promise<void>, []>;
   startDevicePosture?: jest.Mock<Promise<void>, []>;
   stopDevicePosture?: jest.Mock<Promise<void>, []>;
-  setWinkSensitivity?: jest.Mock<Promise<void>, [number]>;
+  setWinkThresholds?: jest.Mock<
+    Promise<void>,
+    [number, number, number, number]
+  >;
   setWinkDistanceLevel?: jest.Mock<Promise<void>, [number]>;
   setLookAngleLevel?: jest.Mock<Promise<void>, [number]>;
+  setFaceHeightAngleLevel?: jest.Mock<Promise<void>, [number]>;
   setAnalysisResolution?: jest.Mock<Promise<void>, [number, number]>;
   setFrameIntervalMs?: jest.Mock<Promise<void>, [number]>;
+  setPerformanceMode?: jest.Mock<Promise<void>, [string]>;
 };
 
 type MutableNativeModules = typeof NativeModules & {
@@ -29,6 +34,7 @@ type MutableNativeModules = typeof NativeModules & {
 
 const nativeModules = NativeModules as MutableNativeModules;
 const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
+const SETTINGS_STORAGE_KEY = '@timewatch:settings:v1';
 
 function AppStateHarness() {
   const app = useAppState();
@@ -39,15 +45,28 @@ function AppStateHarness() {
       <Text>{`phase:${app.timer.phase}`}</Text>
       <Text>{`focus:${app.timer.focusDurationMs}`}</Text>
       <Text>{`lookPaused:${app.timer.isLookPaused}`}</Text>
+      <Text>{`sensitivity:${app.sensitivity}`}</Text>
       <Text>{`mode:${app.statusDisplayMode}`}</Text>
+      <Text>{`normalTimerMode:${app.normalTimerMode}`}</Text>
+      <Text>{`timekeepingMode:${app.timekeepingMode}`}</Text>
+      <Text>{`timerTarget:${app.timerTargetDurationMs}`}</Text>
+      <Text>{`activeTarget:${app.timer.targetDurationMs ?? 'none'}`}</Text>
       <Text>{`timerMode:${app.timerModeId}`}</Text>
-      <Text>{`winkSensitivity:${app.winkSensitivityLevel}`}</Text>
+      <Text>{`gestureBlocked:${app.gestureInputsBlocked}`}</Text>
+      <Text>{`leftEyeClosed:${app.winkLeftEyeClosedThreshold}`}</Text>
+      <Text>{`rightEyeClosed:${app.winkRightEyeClosedThreshold}`}</Text>
+      <Text>{`leftGap:${app.winkLeftEyeProbabilityGapThreshold}`}</Text>
+      <Text>{`rightGap:${app.winkRightEyeProbabilityGapThreshold}`}</Text>
       <Text>{`winkDistance:${app.winkDistanceLevel}`}</Text>
       <Text>{`lookAngle:${app.lookAngleLevel}`}</Text>
+      <Text>{`faceHeightAngle:${app.faceHeightAngleLevel}`}</Text>
       <Text>{`winkTime:${app.winkTimeLevel}`}</Text>
+      <Text>{`winkMaxDuration:${app.winkMaxDurationMs}`}</Text>
       <Text>{`winkMinTime:${app.winkMinTimeLevel}`}</Text>
+      <Text>{`winkMinDuration:${app.winkMinDurationMs}`}</Text>
       <Text>{`resolution:${app.detectionResolutionLevel}`}</Text>
       <Text>{`frameInterval:${app.detectionFrameIntervalLevel}`}</Text>
+      <Text>{`performance:${app.detectionPerformanceMode}`}</Text>
       <Text>{`history:${app.sessionHistory
         .map(event => `${event.type}:${event.elapsedMs}:${event.deltaMs}`)
         .join('|')}`}</Text>
@@ -71,11 +90,51 @@ function AppStateHarness() {
       </Text>
       <Text
         accessibilityRole="button"
+        accessibilityLabel="sensitivity-strict"
+        onPress={() => {
+          app.setSensitivity('strict');
+        }}>
+        strict sensitivity
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="status-text"
+        onPress={() => {
+          app.setStatusDisplayMode('text');
+        }}>
+        text status
+      </Text>
+      <Text
+        accessibilityRole="button"
         accessibilityLabel="normal-mode"
         onPress={() => {
           app.setNormalTimerMode(true);
         }}>
         normal
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="timer-function"
+        onPress={() => {
+          app.setTimekeepingMode('timer');
+        }}>
+        timer function
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="stopwatch-function"
+        onPress={() => {
+          app.setTimekeepingMode('stopwatch');
+        }}>
+        stopwatch function
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="target-one-minute"
+        onPress={() => {
+          app.setTimerTargetDurationMs(60 * 1000);
+        }}>
+        target one minute
       </Text>
       <Text
         accessibilityRole="button"
@@ -103,11 +162,30 @@ function AppStateHarness() {
       </Text>
       <Text
         accessibilityRole="button"
-        accessibilityLabel="wink-sensitivity-5"
+        accessibilityLabel="block-gestures"
         onPress={() => {
-          app.setWinkSensitivityLevel(5);
+          app.setGestureInputsBlocked(true);
         }}>
-        wink sensitivity 5
+        block gestures
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="unblock-gestures"
+        onPress={() => {
+          app.setGestureInputsBlocked(false);
+        }}>
+        unblock gestures
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="wink-thresholds-custom"
+        onPress={() => {
+          app.setWinkLeftEyeClosedThreshold(0.15);
+          app.setWinkRightEyeClosedThreshold(0.2);
+          app.setWinkLeftEyeProbabilityGapThreshold(0.4);
+          app.setWinkRightEyeProbabilityGapThreshold(0.2);
+        }}>
+        wink thresholds custom
       </Text>
       <Text
         accessibilityRole="button"
@@ -127,9 +205,26 @@ function AppStateHarness() {
       </Text>
       <Text
         accessibilityRole="button"
+        accessibilityLabel="face-height-1"
+        onPress={() => {
+          app.setFaceHeightAngleLevel(1);
+        }}>
+        face height 1
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="face-height-3"
+        onPress={() => {
+          app.setFaceHeightAngleLevel(3);
+        }}>
+        face height 3
+      </Text>
+      <Text
+        accessibilityRole="button"
         accessibilityLabel="wink-time-3"
         onPress={() => {
           app.setWinkTimeLevel(3);
+          app.setWinkMaxDurationMs(1300);
         }}>
         wink time 3
       </Text>
@@ -138,6 +233,7 @@ function AppStateHarness() {
         accessibilityLabel="wink-min-time-3"
         onPress={() => {
           app.setWinkMinTimeLevel(3);
+          app.setWinkMinDurationMs(300);
         }}>
         wink min time 3
       </Text>
@@ -156,6 +252,14 @@ function AppStateHarness() {
           app.setDetectionFrameIntervalLevel(2);
         }}>
         frame interval 2
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="performance-accurate"
+        onPress={() => {
+          app.setDetectionPerformanceMode('accurate');
+        }}>
+        performance accurate
       </Text>
       <Text
         accessibilityRole="button"
@@ -313,7 +417,7 @@ describe('AppStateProvider app flow', () => {
     });
   }
 
-  async function startWinkControlByLeftWink(
+  async function startWinkControlByRightWink(
     renderer: ReactTestRenderer.ReactTestRenderer,
   ) {
     nowMs = 1000;
@@ -328,7 +432,7 @@ describe('AppStateProvider app flow', () => {
     emitGazeReading(1100, {
       status: 'looking',
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     emitGazeReading(1300, {
@@ -351,6 +455,226 @@ describe('AppStateProvider app flow', () => {
     const renderer = await renderHarness();
 
     expect(hasText(renderer, 'mode:minimal')).toBe(true);
+    expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
+    expect(hasText(renderer, 'timerTarget:300000')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('starts countdown timers with the configured target duration', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 62000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(61 * 1000);
+    });
+
+    expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
+    expect(hasText(renderer, 'activeTarget:60000')).toBe(true);
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(hasText(renderer, 'focus:60000')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('resets the active timer when switching back to stopwatch', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 11000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10 * 1000);
+    });
+
+    expect(hasText(renderer, 'focus:10000')).toBe(true);
+
+    await press(renderer, 'stopwatch-function');
+
+    expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
+    expect(hasText(renderer, 'phase:idle')).toBe(true);
+    expect(hasText(renderer, 'focus:0')).toBe(true);
+    expect(hasText(renderer, 'activeTarget:none')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('resets a paused countdown when changing the timer target so it can start again', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'start');
+    await press(renderer, 'not-looking');
+
+    nowMs = 11000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(10 * 1000);
+    });
+    await press(renderer, 'pause');
+
+    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
+    expect(hasText(renderer, 'focus:10000')).toBe(true);
+
+    nowMs = 12000;
+    await press(renderer, 'target-one-minute');
+
+    expect(hasText(renderer, 'timerTarget:60000')).toBe(true);
+    expect(hasText(renderer, 'activeTarget:60000')).toBe(true);
+    expect(hasText(renderer, 'phase:idle')).toBe(true);
+    expect(hasText(renderer, 'focus:0')).toBe(true);
+
+    nowMs = 13000;
+    await press(renderer, 'start');
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(hasText(renderer, 'activeTarget:60000')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('loads persisted settings from local storage and pushes detector settings to native', async () => {
+    await AsyncStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        sensitivity: 'strict',
+        statusDisplayMode: 'text',
+        normalTimerMode: true,
+        timekeepingMode: 'timer',
+        timerTargetDurationMs: 60000,
+        timerModeId: 'winkControl',
+        winkLeftEyeClosedThreshold: 0.5,
+        winkRightEyeClosedThreshold: 0.55,
+        winkLeftEyeProbabilityGapThreshold: 0.4,
+        winkRightEyeProbabilityGapThreshold: 0.2,
+        winkDistanceLevel: 4,
+        lookAngleLevel: 3,
+        faceHeightAngleLevel: 1,
+        winkTimeLevel: 3,
+        winkMaxDurationMs: 1200,
+        winkMinTimeLevel: 3,
+        winkMinDurationMs: 250,
+        detectionResolutionLevel: 1,
+        detectionFrameIntervalLevel: 2,
+        detectionPerformanceMode: 'accurate',
+      }),
+    );
+    const setWinkThresholds = jest.fn().mockResolvedValue(undefined);
+    const setWinkDistanceLevel = jest.fn().mockResolvedValue(undefined);
+    const setLookAngleLevel = jest.fn().mockResolvedValue(undefined);
+    const setFaceHeightAngleLevel = jest.fn().mockResolvedValue(undefined);
+    const setAnalysisResolution = jest.fn().mockResolvedValue(undefined);
+    const setFrameIntervalMs = jest.fn().mockResolvedValue(undefined);
+    const setPerformanceMode = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+      setWinkThresholds,
+      setWinkDistanceLevel,
+      setLookAngleLevel,
+      setFaceHeightAngleLevel,
+      setAnalysisResolution,
+      setFrameIntervalMs,
+      setPerformanceMode,
+    };
+    const renderer = await renderHarness();
+
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'sensitivity:strict')).toBe(true);
+    expect(hasText(renderer, 'mode:text')).toBe(true);
+    expect(hasText(renderer, 'normalTimerMode:true')).toBe(true);
+    expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
+    expect(hasText(renderer, 'timerTarget:60000')).toBe(true);
+    expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(hasText(renderer, 'leftEyeClosed:0.5')).toBe(true);
+    expect(hasText(renderer, 'rightEyeClosed:0.55')).toBe(true);
+    expect(hasText(renderer, 'leftGap:0.4')).toBe(true);
+    expect(hasText(renderer, 'rightGap:0.2')).toBe(true);
+    expect(hasText(renderer, 'winkDistance:5')).toBe(true);
+    expect(hasText(renderer, 'lookAngle:3')).toBe(true);
+    expect(hasText(renderer, 'faceHeightAngle:1')).toBe(true);
+    expect(hasText(renderer, 'winkTime:2')).toBe(true);
+    expect(hasText(renderer, 'winkMaxDuration:1000')).toBe(true);
+    expect(hasText(renderer, 'winkMinTime:2')).toBe(true);
+    expect(hasText(renderer, 'winkMinDuration:200')).toBe(true);
+    expect(hasText(renderer, 'resolution:1')).toBe(true);
+    expect(hasText(renderer, 'frameInterval:2')).toBe(true);
+    expect(hasText(renderer, 'performance:accurate')).toBe(true);
+    expect(setWinkThresholds).toHaveBeenLastCalledWith(
+      0.5,
+      0.55,
+      0.4,
+      0.2,
+    );
+    expect(setWinkDistanceLevel).toHaveBeenLastCalledWith(5);
+    expect(setLookAngleLevel).toHaveBeenLastCalledWith(3);
+    expect(setFaceHeightAngleLevel).toHaveBeenLastCalledWith(1);
+    expect(setAnalysisResolution).toHaveBeenLastCalledWith(480, 360);
+    expect(setFrameIntervalMs).toHaveBeenLastCalledWith(120);
+    expect(setPerformanceMode).toHaveBeenLastCalledWith('accurate');
+
+    await unmount(renderer);
+  });
+
+  it('persists changed settings after local settings load completes', async () => {
+    const renderer = await renderHarness();
+
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(await AsyncStorage.getItem(SETTINGS_STORAGE_KEY)).toBeNull();
+
+    await press(renderer, 'sensitivity-strict');
+    await press(renderer, 'status-text');
+    await press(renderer, 'normal-mode');
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'wink-control-mode');
+    await press(renderer, 'wink-thresholds-custom');
+    await press(renderer, 'wink-distance-3');
+    await press(renderer, 'look-angle-3');
+    await press(renderer, 'face-height-1');
+    await press(renderer, 'resolution-1');
+    await press(renderer, 'frame-interval-2');
+    await press(renderer, 'performance-accurate');
+    await ReactTestRenderer.act(async () => undefined);
+
+    const persistedSettings = JSON.parse(
+      (await AsyncStorage.getItem(SETTINGS_STORAGE_KEY)) ?? '{}',
+    );
+
+    expect(persistedSettings).toEqual({
+      sensitivity: 'strict',
+      statusDisplayMode: 'text',
+      normalTimerMode: true,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 60000,
+      timerModeId: 'winkControl',
+      winkLeftEyeClosedThreshold: 0.15,
+      winkRightEyeClosedThreshold: 0.2,
+      winkLeftEyeProbabilityGapThreshold: 0.4,
+      winkRightEyeProbabilityGapThreshold: 0.2,
+      winkDistanceLevel: 3,
+      lookAngleLevel: 3,
+      faceHeightAngleLevel: 1,
+      winkTimeLevel: 2,
+      winkMaxDurationMs: 1000,
+      winkMinTimeLevel: 2,
+      winkMinDurationMs: 200,
+      detectionResolutionLevel: 1,
+      detectionFrameIntervalLevel: 2,
+      detectionPerformanceMode: 'accurate',
+    });
 
     await unmount(renderer);
   });
@@ -380,7 +704,7 @@ describe('AppStateProvider app flow', () => {
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5000;
     await ReactTestRenderer.act(async () => {
@@ -418,6 +742,46 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('keeps look-pause stopped while gesture inputs are blocked', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'start');
+    await ReactTestRenderer.act(async () => undefined);
+    emitGazeReading(1000, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+    });
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    nowMs = 2600;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(1600);
+    });
+
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(hasText(renderer, 'lookPaused:true')).toBe(true);
+
+    await press(renderer, 'block-gestures');
+    emitGazeReading(2800, {
+      status: 'notLooking',
+      eyeState: 'bothOpen',
+    });
+
+    nowMs = 4200;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(1400);
+    });
+
+    expect(hasText(renderer, 'gestureBlocked:true')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(hasText(renderer, 'lookPaused:true')).toBe(true);
+
+    await unmount(renderer);
+  });
+
   it('ignores wink gestures while the settings screen is open', async () => {
     const renderer = await renderHarness();
 
@@ -432,7 +796,7 @@ describe('AppStateProvider app flow', () => {
     emitGazeReading(1100, {
       status: 'looking',
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
     emitGazeReading(1300, {
       status: 'looking',
@@ -646,6 +1010,52 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('clears current session history when the preset mode changes', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'basic-mode');
+    await press(renderer, 'start');
+
+    nowMs = 6000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await press(renderer, 'lap');
+
+    expect(hasText(renderer, 'history:LAP:5000:5000')).toBe(true);
+
+    await press(renderer, 'flip-mode');
+
+    expect(hasText(renderer, 'timerMode:flipTimer')).toBe(true);
+    expect(hasText(renderer, 'history:')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('clears current session history when switching between stopwatch and timer', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'basic-mode');
+    await press(renderer, 'start');
+
+    nowMs = 6000;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await press(renderer, 'lap');
+
+    expect(hasText(renderer, 'history:LAP:5000:5000')).toBe(true);
+
+    await press(renderer, 'timer-function');
+
+    expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
+    expect(hasText(renderer, 'history:')).toBe(true);
+
+    await unmount(renderer);
+  });
+
   it('completes the session when save succeeds even if refreshing the session list fails', async () => {
     const renderer = await renderHarness();
 
@@ -693,23 +1103,108 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('pushes the configured wink sensitivity level to native gaze detection', async () => {
+  it('does not start gesture detectors while gesture inputs are blocked', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
-    const setWinkSensitivity = jest.fn().mockResolvedValue(undefined);
-    nativeModules.NativeGazeDetection = {start, stop, setWinkSensitivity};
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    await press(renderer, 'block-gestures');
+    await press(renderer, 'wink-control-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'gestureBlocked:true')).toBe(true);
+    expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(start).not.toHaveBeenCalled();
+
+    await press(renderer, 'unblock-gestures');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'gestureBlocked:false')).toBe(true);
+    expect(start).toHaveBeenCalledTimes(1);
+
+    await unmount(renderer);
+  });
+
+  it('does not start device posture gestures while gesture inputs are blocked', async () => {
+    const startDevicePosture = jest.fn().mockResolvedValue(undefined);
+    const stopDevicePosture = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+      startDevicePosture,
+      stopDevicePosture,
+    };
+    const renderer = await renderHarness();
+
+    await press(renderer, 'block-gestures');
+    await press(renderer, 'flip-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'gestureBlocked:true')).toBe(true);
+    expect(hasText(renderer, 'timerMode:flipTimer')).toBe(true);
+    expect(startDevicePosture).not.toHaveBeenCalled();
+
+    await press(renderer, 'unblock-gestures');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(startDevicePosture).toHaveBeenCalledTimes(1);
+
+    await unmount(renderer);
+  });
+
+  it('ignores wink gestures while gesture inputs are blocked', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    await startWinkControlByRightWink(renderer);
+    await press(renderer, 'block-gestures');
+
+    emitGazeReading(5100, {
+      status: 'looking',
+      eyeState: 'oneEyeClosed',
+      winkSide: 'right',
+    });
+    emitGazeReading(5400, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+
+    expect(hasText(renderer, 'gestureBlocked:true')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('pushes the configured manual wink thresholds to native gaze detection', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    const setWinkThresholds = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop, setWinkThresholds};
     const renderer = await renderHarness();
 
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(hasText(renderer, 'winkSensitivity:3')).toBe(true);
-    expect(setWinkSensitivity).toHaveBeenCalledWith(1);
+    expect(hasText(renderer, 'leftEyeClosed:0.1')).toBe(true);
+    expect(hasText(renderer, 'rightEyeClosed:0.1')).toBe(true);
+    expect(hasText(renderer, 'leftGap:0.3')).toBe(true);
+    expect(hasText(renderer, 'rightGap:0.3')).toBe(true);
+    expect(setWinkThresholds).toHaveBeenCalledWith(0.1, 0.1, 0.3, 0.3);
 
-    await press(renderer, 'wink-sensitivity-5');
+    await press(renderer, 'wink-thresholds-custom');
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(hasText(renderer, 'winkSensitivity:5')).toBe(true);
-    expect(setWinkSensitivity).toHaveBeenCalledWith(3);
+    expect(hasText(renderer, 'leftEyeClosed:0.15')).toBe(true);
+    expect(hasText(renderer, 'rightEyeClosed:0.2')).toBe(true);
+    expect(hasText(renderer, 'leftGap:0.4')).toBe(true);
+    expect(hasText(renderer, 'rightGap:0.2')).toBe(true);
+    expect(setWinkThresholds).toHaveBeenLastCalledWith(0.15, 0.2, 0.4, 0.2);
 
     await unmount(renderer);
   });
@@ -737,6 +1232,27 @@ describe('AppStateProvider app flow', () => {
     expect(setFrameIntervalMs).toHaveBeenLastCalledWith(120);
     expect(hasText(renderer, 'resolution:1')).toBe(true);
     expect(hasText(renderer, 'frameInterval:2')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('pushes the configured ML Kit performance mode to native gaze detection', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    const setPerformanceMode = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop, setPerformanceMode};
+    const renderer = await renderHarness();
+
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'performance:fast')).toBe(true);
+    expect(setPerformanceMode).toHaveBeenCalledWith('fast');
+
+    await press(renderer, 'performance-accurate');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'performance:accurate')).toBe(true);
+    expect(setPerformanceMode).toHaveBeenCalledWith('accurate');
 
     await unmount(renderer);
   });
@@ -783,32 +1299,64 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('keeps the configured wink time level in app state', async () => {
+  it('uses the strict face height angle level for wink-control mode', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    const setFaceHeightAngleLevel = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop, setFaceHeightAngleLevel};
+    const renderer = await renderHarness();
+
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'faceHeightAngle:2')).toBe(true);
+    expect(setFaceHeightAngleLevel).toHaveBeenLastCalledWith(2);
+
+    await press(renderer, 'face-height-3');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'faceHeightAngle:3')).toBe(true);
+    expect(setFaceHeightAngleLevel).toHaveBeenLastCalledWith(3);
+
+    await press(renderer, 'wink-control-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(hasText(renderer, 'faceHeightAngle:3')).toBe(true);
+    expect(setFaceHeightAngleLevel).toHaveBeenLastCalledWith(1);
+
+    await unmount(renderer);
+  });
+
+  it('keeps the wink maximum time fixed at level 2', async () => {
     const renderer = await renderHarness();
 
     await ReactTestRenderer.act(async () => undefined);
 
     expect(hasText(renderer, 'winkTime:2')).toBe(true);
+    expect(hasText(renderer, 'winkMaxDuration:1000')).toBe(true);
 
     await press(renderer, 'wink-time-3');
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(hasText(renderer, 'winkTime:3')).toBe(true);
+    expect(hasText(renderer, 'winkTime:2')).toBe(true);
+    expect(hasText(renderer, 'winkMaxDuration:1000')).toBe(true);
 
     await unmount(renderer);
   });
 
-  it('keeps the configured wink minimum time level in app state', async () => {
+  it('keeps the wink minimum time fixed at level 2', async () => {
     const renderer = await renderHarness();
 
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(hasText(renderer, 'winkMinTime:1')).toBe(true);
+    expect(hasText(renderer, 'winkMinTime:2')).toBe(true);
+    expect(hasText(renderer, 'winkMinDuration:200')).toBe(true);
 
     await press(renderer, 'wink-min-time-3');
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(hasText(renderer, 'winkMinTime:3')).toBe(true);
+    expect(hasText(renderer, 'winkMinTime:2')).toBe(true);
+    expect(hasText(renderer, 'winkMinDuration:200')).toBe(true);
 
     await unmount(renderer);
   });
@@ -1138,7 +1686,7 @@ describe('AppStateProvider app flow', () => {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     nowMs = 4500;
@@ -1152,27 +1700,62 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('pauses wink-control mode on a short left wink', async () => {
+  it('starts wink-control mode from the live right wink shown in settings test mode', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    nowMs = 1000;
+    await press(renderer, 'wink-control-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    emitGazeReading(1000, {
+      status: 'looking',
+      eyeState: 'bothOpen',
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    emitGazeReading(1100, {
+      status: 'looking',
+      eyeState: 'oneEyeClosed',
+      winkSide: 'right',
+    });
+
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'timerMode:winkControl')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('pauses wink-control mode on the live right wink shown in settings test mode', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     await ReactTestRenderer.act(async () => {
-      jest.advanceTimersByTime(500);
+      jest.advanceTimersByTime(50);
     });
 
-    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
 
     nowMs = 5600;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
@@ -1196,7 +1779,7 @@ describe('AppStateProvider app flow', () => {
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5000;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
@@ -1238,7 +1821,7 @@ describe('AppStateProvider app flow', () => {
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     emitGazeReading(5000, {
       status: 'notLooking',
@@ -1252,7 +1835,7 @@ describe('AppStateProvider app flow', () => {
     emitGazeReading(6500, {
       status: 'looking',
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     emitGazeReading(6800, {
@@ -1271,20 +1854,20 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('pauses wink-control mode when a short left wink happens between ticks', async () => {
+  it('pauses wink-control mode when a short right wink happens between ticks', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     nowMs = 5300;
@@ -1303,20 +1886,20 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('resumes wink-control mode after a short left wink while paused', async () => {
+  it('resumes wink-control mode after a short right wink while paused', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
     await ReactTestRenderer.act(async () => {
       jest.advanceTimersByTime(500);
@@ -1339,7 +1922,7 @@ describe('AppStateProvider app flow', () => {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     nowMs = 6400;
@@ -1359,20 +1942,20 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('resets wink-control mode from a short right wink while paused', async () => {
+  it('resets wink-control mode from a short left wink while paused', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     nowMs = 5300;
@@ -1393,7 +1976,7 @@ describe('AppStateProvider app flow', () => {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'right',
+      winkSide: 'left',
     });
 
     nowMs = 6400;
@@ -1413,20 +1996,20 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('records a wink-control lap from a short right wink while running', async () => {
+  it('records a wink-control lap from a short left wink while running', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'right',
+      winkSide: 'left',
     });
 
     nowMs = 5400;
@@ -1460,14 +2043,14 @@ describe('AppStateProvider app flow', () => {
     nativeModules.NativeGazeDetection = {start, stop};
     const renderer = await renderHarness();
 
-    await startWinkControlByLeftWink(renderer);
+    await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
     DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
-      winkSide: 'left',
+      winkSide: 'right',
     });
 
     nowMs = 5300;

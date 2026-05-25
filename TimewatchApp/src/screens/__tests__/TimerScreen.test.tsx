@@ -1,5 +1,5 @@
 import React from 'react';
-import {ScrollView, Text, View} from 'react-native';
+import {ScrollView, StyleSheet, Text} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import type {TimerState} from '../../domain/timerEngine';
 import {TimerScreen} from '../TimerScreen';
@@ -13,6 +13,9 @@ const mockRecordLapSession = jest.fn();
 const mockFinishTimerSession = jest.fn();
 const mockSetMockDetectionStatus = jest.fn();
 const mockSetTimerModeId = jest.fn();
+const mockSetGestureInputsBlocked = jest.fn();
+const mockSetTimekeepingMode = jest.fn();
+const mockSetTimerTargetDurationMs = jest.fn();
 
 const baseTimer: TimerState = {
   phase: 'active',
@@ -58,8 +61,14 @@ const baseState = {
   setStatusDisplayMode: jest.fn(),
   normalTimerMode: false,
   setNormalTimerMode: jest.fn(),
+  timekeepingMode: 'stopwatch',
+  setTimekeepingMode: mockSetTimekeepingMode,
+  timerTargetDurationMs: 5 * 60 * 1000,
+  setTimerTargetDurationMs: mockSetTimerTargetDurationMs,
   timerModeId: 'lookPause',
   setTimerModeId: mockSetTimerModeId,
+  gestureInputsBlocked: false,
+  setGestureInputsBlocked: mockSetGestureInputsBlocked,
   finishError: null,
   isFinishingSession: false,
   repository: {},
@@ -109,7 +118,11 @@ function getRenderedText(renderer: ReactTestRenderer.ReactTestRenderer) {
 function getPressedStyleEntries(
   button: ReactTestRenderer.ReactTestInstance,
 ) {
-  const style = button.props.style;
+  const pressable =
+    typeof button.props.style === 'function'
+      ? button
+      : button.findByProps({accessibilityRole: 'button'});
+  const style = pressable.props.style;
   const resolvedStyle =
     typeof style === 'function' ? style({pressed: true}) : style;
 
@@ -129,11 +142,12 @@ describe('TimerScreen', () => {
     const textContent = getRenderedText(renderer);
     const header = renderer.root.findByProps({testID: 'timer-header'});
 
-    expect(textContent).toContain('WINK TIMER');
+    expect(textContent).toContain('WINK STOPWATCH');
     expect(
       header.findByProps({testID: 'timer-title'}).props.style,
     ).toEqual(expect.objectContaining({flex: 1}));
-    expect(header.findByProps({testID: 'exit-button'})).toBeTruthy();
+    expect(header.findByProps({testID: 'settings-button'})).toBeTruthy();
+    expect(header.findAllByProps({testID: 'exit-button'})).toHaveLength(0);
     expect(textContent).not.toContain('ARCADE GHOST TIMER');
     expect(textContent).toContain('LOOK PAUSE');
     expect(textContent).toContain('01:01.04');
@@ -168,25 +182,587 @@ describe('TimerScreen', () => {
     expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
   });
 
-  it('places settings before exit in the timer header', () => {
+  it('keeps stopwatch and timer controls out of the timer header', () => {
     const renderer = renderTimerScreen();
     const header = renderer.root.findByProps({testID: 'timer-header'});
-    const navButtonContainer = header.findAllByType(View).find(node =>
-      React.Children.toArray(node.props.children).some(
-        child =>
-          React.isValidElement<{testID?: string}>(child) &&
-          child.props.testID === 'exit-button',
-      ),
-    );
-    const navButtonLabels = React.Children.toArray(
-      navButtonContainer?.props.children,
-    ).map(child =>
-      React.isValidElement<{label?: string}>(child)
-        ? child.props.label
-        : undefined,
-    );
 
-    expect(navButtonLabels).toEqual(['SETTINGS', 'EXIT']);
+    expect(header.findByProps({testID: 'settings-button'})).toBeTruthy();
+    expect(header.findAllByProps({testID: 'timekeeping-toggle-button'}))
+      .toHaveLength(0);
+    expect(header.findAllByProps({accessibilityLabel: 'STOPWATCH'}))
+      .toHaveLength(0);
+    expect(header.findAllByProps({accessibilityLabel: 'TIMER'}))
+      .toHaveLength(0);
+    expect(header.findAllByProps({accessibilityLabel: 'EXIT'})).toHaveLength(0);
+  });
+
+  it('uses the selected timekeeping mode in the top-left title', () => {
+    const stopwatchRenderer = renderTimerScreen();
+
+    expect(
+      stopwatchRenderer.root.findByProps({testID: 'timer-title'}).props.children,
+    ).toBe('WINK STOPWATCH');
+
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+    };
+    const timerRenderer = renderTimerScreen();
+
+    expect(
+      timerRenderer.root.findByProps({testID: 'timer-title'}).props.children,
+    ).toBe('WINK TIMER');
+  });
+
+  it('expands the bottom mode button into 5-5 timekeeping controls and shows the mode popup', () => {
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
+        .onPress();
+    });
+
+    const optionText = renderer.root
+      .findByProps({testID: 'timekeeping-mode-options'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children));
+    const stopwatchButton = renderer.root.findByProps({
+      testID: 'timekeeping-stopwatch-button',
+    });
+    const timerButton = renderer.root.findByProps({
+      testID: 'timekeeping-timer-button',
+    });
+    const modeOptions = renderer.root.findByProps({
+      testID: 'timekeeping-mode-options',
+    });
+    const modeMenu = renderer.root.findByProps({testID: 'mode-menu'});
+    const modeMenuText = renderer.root
+      .findByProps({testID: 'mode-menu'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children));
+
+    expect(optionText).toEqual(['STOPWATCH', 'TIMER']);
+    expect(modeOptions.props.style).toEqual(
+      expect.objectContaining({elevation: 70, zIndex: 70}),
+    );
+    expect(modeMenu.props.style).toEqual(
+      expect.objectContaining({elevation: 50, zIndex: 50}),
+    );
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-cancel-button'}))
+      .toHaveLength(0);
+    expect(getPressedStyleEntries(stopwatchButton)).toContainEqual(
+      expect.objectContaining({flex: 5}),
+    );
+    expect(getPressedStyleEntries(stopwatchButton)).toContainEqual(
+      expect.objectContaining({
+        backgroundColor: '#1D4D3A',
+      }),
+    );
+    expect(getPressedStyleEntries(stopwatchButton)).not.toContainEqual(
+      expect.objectContaining({backgroundColor: '#FFFFFF'}),
+    );
+    expect(stopwatchButton.findByType(Text).props.style).toContainEqual(
+      expect.objectContaining({
+        fontSize: 18,
+        fontWeight: '900',
+        lineHeight: 22,
+      }),
+    );
+    expect(getPressedStyleEntries(timerButton)).toContainEqual(
+      expect.objectContaining({flex: 5}),
+    );
+    expect(getPressedStyleEntries(timerButton)).toContainEqual(
+      expect.objectContaining({backgroundColor: '#FFFFFF'}),
+    );
+    expect(timerButton.findByType(Text).props.style).toContainEqual(
+      expect.objectContaining({
+        fontSize: 18,
+        fontWeight: '900',
+        lineHeight: 22,
+      }),
+    );
+    expect(
+      modeMenuText.filter(text =>
+        ['BASIC TIMER', 'LOOK PAUSE', 'WINK CONTROL', 'FLIP TIMER'].includes(
+          text,
+        ),
+      ),
+    ).toEqual(['BASIC TIMER', 'LOOK PAUSE', 'WINK CONTROL', 'FLIP TIMER']);
+    expect(modeMenuText).not.toContain('BETA');
+  });
+
+  it('selects Basic Timer from the restored mode popup while ready', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
+        .onPress();
+    });
+
+    const basicTimerCard = renderer.root.findByProps({
+      accessibilityLabel: 'BASIC TIMER mode',
+    });
+
+    expect(basicTimerCard.props.accessibilityState).toEqual({selected: false});
+
+    ReactTestRenderer.act(() => {
+      basicTimerCard.props.onPress();
+    });
+
+    expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
+    expect(mockSetTimerModeId).toHaveBeenCalledWith('basicTimer');
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
+  });
+
+  it('keeps the timer value when selecting the current preset mode', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'manualPaused',
+        focusDurationMs: 61042,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'lookPause',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
+        .onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .props.onPress();
+    });
+
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
+  });
+
+  it('switches from stopwatch to timer from the bottom mode controls', () => {
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
+        .onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({testID: 'timekeeping-timer-button'}).props
+        .onPress();
+    });
+
+    expect(mockSetTimekeepingMode).toHaveBeenCalledWith('timer');
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
+      .toBeTruthy();
+
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        isLookPaused: false,
+      },
+    };
+
+    ReactTestRenderer.act(() => {
+      renderer.update(<TimerScreen />);
+    });
+
+    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
+      .toBeTruthy();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
+  });
+
+  it('switches from timer to stopwatch from the bottom mode controls', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
+        .onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
+        .onPress();
+    });
+
+    expect(mockSetTimekeepingMode).toHaveBeenCalledWith('stopwatch');
+  });
+
+  it('shows remaining time while the timer function is selected', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const topTimerText = renderer.root
+      .findByProps({testID: 'top-timer-readout'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(topTimerText).toBe('1:01:02');
+    expect(topTimerText).not.toContain('.');
+    expect(renderer.root.findAllByProps({testID: 'timer-target-controls'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
+      .toHaveLength(0);
+  });
+
+  it('opens the timer target picker popup from the timer readout while idle', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    expect(renderer.root.findAllByProps({testID: 'timer-target-controls'}))
+      .toHaveLength(0);
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    const popupText = renderer.root
+      .findByProps({testID: 'timer-target-popup'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(popupText).toContain('01');
+    expect(popupText).toContain('02');
+    expect(popupText).toContain('03');
+    expect(popupText).toContain('HOUR');
+    expect(popupText).toContain('MIN');
+    expect(popupText).toContain('SEC');
+  });
+
+  it('opens the timer target picker popup while the timer is manually paused', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'manualPaused',
+        focusDurationMs: 10 * 1000,
+        isLookPaused: false,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const targetButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open timer target settings',
+    });
+
+    expect(targetButton.props.disabled).toBe(false);
+
+    ReactTestRenderer.act(() => {
+      targetButton.props.onPress();
+    });
+
+    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
+      .toBeTruthy();
+  });
+
+  it('renders animated reels for the timer target wheels', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    expect(renderer.root.findByProps({testID: 'timer-target-hour-reel'}))
+      .toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timer-target-minute-reel'}))
+      .toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timer-target-second-reel'}))
+      .toBeTruthy();
+  });
+
+  it('adjusts the timer target from the popup wheels while idle', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      const minuteWheel = renderer.root.findByProps({
+        testID: 'timer-target-minute-wheel',
+      });
+
+      minuteWheel.props.onResponderGrant({nativeEvent: {pageY: 100}});
+      minuteWheel.props.onResponderRelease({nativeEvent: {pageY: 60}});
+    });
+
+    ReactTestRenderer.act(() => {
+      const secondWheel = renderer.root.findByProps({
+        testID: 'timer-target-second-wheel',
+      });
+
+      secondWheel.props.onResponderGrant({nativeEvent: {pageY: 100}});
+      secondWheel.props.onResponderRelease({nativeEvent: {pageY: 140}});
+    });
+
+    expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
+      64 * 60 * 1000 + 3000,
+    );
+    expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
+      62 * 60 * 1000 + 1000,
+    );
+  });
+
+  it('adjusts the timer target while the wheel is still moving with relaxed sensitivity', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      const minuteWheel = renderer.root.findByProps({
+        testID: 'timer-target-minute-wheel',
+      });
+
+      minuteWheel.props.onResponderGrant({nativeEvent: {pageY: 100}});
+      minuteWheel.props.onResponderMove({nativeEvent: {pageY: 28}});
+    });
+
+    expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
+      65 * 60 * 1000 + 3000,
+    );
+  });
+
+  it('ignores small timer target wheel drags below the activation distance', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      const minuteWheel = renderer.root.findByProps({
+        testID: 'timer-target-minute-wheel',
+      });
+
+      minuteWheel.props.onResponderGrant({nativeEvent: {pageY: 100}});
+      minuteWheel.props.onResponderRelease({nativeEvent: {pageY: 87}});
+    });
+
+    expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
+  });
+
+  it('does not continue changing the timer target after release', () => {
+    jest.useFakeTimers();
+    try {
+      mockState = {
+        ...baseState,
+        timekeepingMode: 'timer',
+        timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+        timer: {
+          ...baseTimer,
+          phase: 'idle',
+          startedAtMs: null,
+          focusDurationMs: 0,
+          targetDurationMs: 62 * 60 * 1000 + 3000,
+        },
+      };
+      const renderer = renderTimerScreen();
+
+      ReactTestRenderer.act(() => {
+        renderer.root
+          .findByProps({accessibilityLabel: 'Open timer target settings'})
+          .props.onPress();
+      });
+
+      ReactTestRenderer.act(() => {
+        const minuteWheel = renderer.root.findByProps({
+          testID: 'timer-target-minute-wheel',
+        });
+
+        minuteWheel.props.onResponderGrant({
+          nativeEvent: {pageY: 160, timestamp: 0},
+        });
+        minuteWheel.props.onResponderMove({
+          nativeEvent: {pageY: 124, timestamp: 40},
+        });
+        minuteWheel.props.onResponderRelease({
+          nativeEvent: {pageY: 96, timestamp: 70},
+        });
+      });
+
+      ReactTestRenderer.act(() => {
+        jest.advanceTimersByTime(500);
+      });
+
+      expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
+        65 * 60 * 1000 + 3000,
+      );
+      expect(mockSetTimerTargetDurationMs).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not update a bounded wheel when a drag cannot change the value', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 99 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59000,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 99 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      const hourWheel = renderer.root.findByProps({
+        testID: 'timer-target-hour-wheel',
+      });
+
+      hourWheel.props.onResponderGrant({nativeEvent: {pageY: 120}});
+      hourWheel.props.onResponderRelease({nativeEvent: {pageY: 60}});
+    });
+
+    expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
+  });
+
+  it('does not open the timer target popup while the timer is active', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 5 * 60 * 1000,
+      timer: {
+        ...baseTimer,
+        targetDurationMs: 5 * 60 * 1000,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const targetButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open timer target settings',
+    });
+
+    expect(targetButton.props.disabled).toBe(true);
+    expect(targetButton.props.onPress).toBeUndefined();
+    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
+      .toHaveLength(0);
+    expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
   });
 
   it('shows reset, pause, and history action buttons with gestures', () => {
@@ -218,7 +794,27 @@ describe('TimerScreen', () => {
     ).toBe('- \uC815\uC9C0 -');
   });
 
-  it('enables reset, exit, and history while look-pause is stopped by looking', () => {
+  it('shows a red wink unavailable status when eyes are not fully open in wink control', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'looking',
+        eyeState: 'unknown',
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+    const statusLabel = renderer.root.findByProps({
+      testID: 'timer-status-label',
+    });
+
+    expect(statusLabel.props.children).toBe('윙크 판정 불가능 상태.');
+    expect(StyleSheet.flatten(statusLabel.props.style).color).toBe('#B42318');
+  });
+
+  it('enables reset and history while look-pause is stopped by looking', () => {
     const renderer = renderTimerScreen();
 
     expect(
@@ -226,15 +822,12 @@ describe('TimerScreen', () => {
         .disabled,
     ).toBe(false);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'EXIT'}).props.disabled,
-    ).toBe(false);
-    expect(
       renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
         .disabled,
     ).toBe(false);
   });
 
-  it('enables reset, exit, and history as soon as look-pause visually enters stopped state', () => {
+  it('enables reset and history as soon as look-pause visually enters stopped state', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -251,15 +844,12 @@ describe('TimerScreen', () => {
         .disabled,
     ).toBe(false);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'EXIT'}).props.disabled,
-    ).toBe(false);
-    expect(
       renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
         .disabled,
     ).toBe(false);
   });
 
-  it('keeps reset and exit disabled while Look Pause is actively running', () => {
+  it('keeps reset disabled while Look Pause is actively running', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -276,9 +866,6 @@ describe('TimerScreen', () => {
     ).toBe(true);
     expect(renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}))
       .toHaveLength(0);
-    expect(
-      renderer.root.findByProps({accessibilityLabel: 'EXIT'}).props.disabled,
-    ).toBe(true);
     expect(
       renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
         .disabled,
@@ -314,6 +901,52 @@ describe('TimerScreen', () => {
     expect(mockRecordLapSession).toHaveBeenCalledTimes(1);
   });
 
+  it('uses mark labeling for lap records while the timer function is selected', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 60 * 1000,
+      timerModeId: 'basicTimer',
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+        targetDurationMs: 60 * 1000,
+      },
+      sessionHistory: [
+        {
+          id: 'LAP-11000',
+          type: 'LAP',
+          atMs: 11000,
+          elapsedMs: 10000,
+          deltaMs: 10000,
+        },
+      ],
+    };
+    const renderer = renderTimerScreen();
+    const markButton = renderer.root.findByProps({
+      accessibilityLabel: 'MARK Button',
+    });
+    const latestMarkText = renderer.root
+      .findByProps({testID: 'latest-history-record'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}))
+      .toHaveLength(0);
+    expect(markButton.props.disabled).toBe(false);
+    expect(latestMarkText).toContain('LAST MARK');
+    expect(latestMarkText).toContain('E 00:10.00');
+    expect(latestMarkText).toContain('L 00:50.00');
+
+    ReactTestRenderer.act(() => {
+      markButton.props.onPress();
+    });
+
+    expect(mockRecordLapSession).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the latest lap in the upper-right timer content area', () => {
     mockState = {
       ...baseState,
@@ -343,11 +976,11 @@ describe('TimerScreen', () => {
       .map(node => flattenText(node.props.children))
       .join(' ');
 
-    expect(latestLapText).toContain('LAP');
+    expect(latestLapText).toContain('LAST LAP');
     expect(latestLapText).toContain('00:08.50');
   });
 
-  it('enables reset, exit, and history while the timer is manually paused', () => {
+  it('enables reset and history while the timer is manually paused', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -363,12 +996,12 @@ describe('TimerScreen', () => {
         .disabled,
     ).toBe(false);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'EXIT'}).props.disabled,
-    ).toBe(false);
-    expect(
       renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
         .disabled,
     ).toBe(false);
+    expect(
+      renderer.root.findByProps({testID: 'timer-status-label'}).props.children,
+    ).toBe('- \uC815\uC9C0 -');
   });
 
   it('allows gesture-start modes to be controlled by button taps too', () => {
@@ -443,7 +1076,7 @@ describe('TimerScreen', () => {
     expect(mockStartTimerSession).toHaveBeenCalledTimes(1);
   });
 
-  it('disables the start button while the mode menu is open', () => {
+  it('disables the start button while the timekeeping mode controls are open', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -470,6 +1103,59 @@ describe('TimerScreen', () => {
 
     expect(startButton.props.disabled).toBe(true);
     expect(startButton.props.onPress).toBeUndefined();
+  });
+
+  it('blocks gesture inputs while the timekeeping mode controls are open', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+    const modeButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open mode menu',
+    });
+
+    expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
+
+    ReactTestRenderer.act(() => {
+      modeButton.props.onPress();
+    });
+
+    expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(true);
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
+        .onPress();
+    });
+
+    expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps gesture inputs enabled while the history overlay is open', () => {
+    const renderer = renderTimerScreen();
+
+    expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+        .onPress();
+    });
+
+    expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+        .onPress();
+    });
+
+    expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
   });
 
   it('shows pressed feedback for button-assigned actions', () => {
@@ -537,7 +1223,7 @@ describe('TimerScreen', () => {
     expect(resumeButton.props.onPress).toBeUndefined();
   });
 
-  it('connects look-pause reset and exit actions because their gesture is Button', () => {
+  it('connects look-pause reset because its gesture is Button', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -550,19 +1236,13 @@ describe('TimerScreen', () => {
     const resetButton = renderer.root.findByProps({
       accessibilityLabel: 'RESET Button',
     });
-    const exitButton = renderer.root.findByProps({accessibilityLabel: 'EXIT'});
 
     expect(resetButton.props.disabled).toBe(false);
     ReactTestRenderer.act(() => {
       resetButton.props.onPress();
     });
-    expect(exitButton.props.disabled).toBe(false);
-    ReactTestRenderer.act(() => {
-      exitButton.props.onPress();
-    });
 
     expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
-    expect(mockFinishTimerSession).toHaveBeenCalledTimes(1);
   });
 
   it('shows the looking ghost when the user is look paused with both eyes open', () => {
@@ -617,7 +1297,38 @@ describe('TimerScreen', () => {
     ).toBeTruthy();
   });
 
-  it('disables the mode selector when the timer is not ready', () => {
+  it('enables the mode selector while the timer is stopped by looking', () => {
+    const renderer = renderTimerScreen();
+    const modeButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open mode menu',
+    });
+
+    expect(modeButton.props.disabled).toBe(false);
+    expect(typeof modeButton.props.onPress).toBe('function');
+    expect(modeButton.props.accessibilityState).toEqual(
+      expect.objectContaining({disabled: false, expanded: false}),
+    );
+    expect(getPressedStyleEntries(modeButton)).toContainEqual(
+      expect.objectContaining({opacity: 0.82}),
+    );
+
+    ReactTestRenderer.act(() => {
+      modeButton.props.onPress();
+    });
+
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length)
+      .toBeGreaterThan(0);
+  });
+
+  it('disables the mode selector while the timer is actively running', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+    };
     const renderer = renderTimerScreen();
     const modeButton = renderer.root.findByProps({
       accessibilityLabel: 'Open mode menu',
@@ -625,85 +1336,11 @@ describe('TimerScreen', () => {
 
     expect(modeButton.props.disabled).toBe(true);
     expect(modeButton.props.onPress).toBeUndefined();
-    expect(modeButton.props.accessibilityState).toEqual(
-      expect.objectContaining({disabled: true, expanded: false}),
-    );
-    expect(getPressedStyleEntries(modeButton)).not.toContainEqual(
-      expect.objectContaining({opacity: 0.82}),
-    );
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
   });
 
-  it('selects Basic Timer from the mode selector while ready', () => {
-    mockState = {
-      ...baseState,
-      timer: {
-        ...baseTimer,
-        phase: 'idle',
-        startedAtMs: null,
-        focusDurationMs: 0,
-        detectionStatus: 'notLooking',
-        isLookPaused: false,
-      },
-    };
-    const renderer = renderTimerScreen();
-
-    expect(
-      renderer.root.findAllByProps({
-        accessibilityLabel: 'BASIC TIMER mode',
-      }),
-    ).toHaveLength(0);
-
-    ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
-    });
-
-    expect(
-      renderer.root.findAllByProps({
-        accessibilityLabel: 'WINK START mode',
-      }),
-    ).toHaveLength(0);
-
-    const basicTimerCard = renderer.root.findByProps({
-      accessibilityLabel: 'BASIC TIMER mode',
-    });
-
-    expect(basicTimerCard.props.accessibilityState).toEqual({selected: false});
-
-    ReactTestRenderer.act(() => {
-      basicTimerCard.props.onPress();
-    });
-
-    expect(mockSetTimerModeId).toHaveBeenCalledWith('basicTimer');
-
-    mockState = {
-      ...baseState,
-      timer: {
-        ...baseTimer,
-        phase: 'idle',
-        startedAtMs: null,
-        focusDurationMs: 0,
-        detectionStatus: 'notLooking',
-        isLookPaused: false,
-      },
-      timerModeId: 'basicTimer',
-    };
-
-    ReactTestRenderer.act(() => {
-      renderer.update(<TimerScreen />);
-    });
-
-    expect(
-      renderer.root.findAllByProps({
-        accessibilityLabel: 'BASIC TIMER mode',
-      }),
-    ).toHaveLength(0);
-
-    expect(getRenderedText(renderer)).toContain('START');
-    expect(getRenderedText(renderer)).toContain('Button');
-  });
-
-  it('shows mode presets in production order without beta badges', () => {
+  it('shows preset mode cards alongside the timekeeping selector', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -721,19 +1358,147 @@ describe('TimerScreen', () => {
       renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
     });
 
-    const menuText = renderer.root
-      .findByProps({testID: 'mode-menu'})
-      .findAllByType(Text)
-      .map(node => flattenText(node.props.children));
+    expect(
+      renderer.root.findAllByProps({
+        accessibilityLabel: 'BASIC TIMER mode',
+      }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAllByProps({
+        accessibilityLabel: 'LOOK PAUSE mode',
+      }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAllByProps({
+        accessibilityLabel: 'WINK CONTROL mode',
+      }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAllByProps({
+        accessibilityLabel: 'FLIP TIMER mode',
+      }).length,
+    ).toBeGreaterThan(0);
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+  });
+
+  it('keeps the timer value when selecting the current timekeeping mode', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'manualPaused',
+        focusDurationMs: 61042,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'lookPause',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'timekeeping-stopwatch-button'})
+        .props.onPress();
+    });
+
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(mockSetTimekeepingMode).not.toHaveBeenCalled();
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
+  });
+
+  it('does not render a cancel button in the timekeeping selector', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'manualPaused',
+        focusDurationMs: 61042,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'lookPause',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+    });
+
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(mockSetTimekeepingMode).not.toHaveBeenCalled();
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-cancel-button'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({accessibilityLabel: 'Close mode menu'}))
+      .toHaveLength(0);
+  });
+
+  it('renders the restored preset mode menu above the timekeeping controls', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'manualPaused',
+        focusDurationMs: 61042,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'lookPause',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+    });
+
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
+      .toBeTruthy();
+  });
+
+  it('marks the selected timekeeping mode in the bottom controls', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+    });
 
     expect(
-      menuText.filter(text =>
-        ['BASIC TIMER', 'LOOK PAUSE', 'WINK CONTROL', 'FLIP TIMER'].includes(
-          text,
-        ),
+      renderer.root.findByProps({testID: 'timekeeping-timer-button'}).props
+        .accessibilityState,
+    ).toEqual({selected: true});
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
+        .accessibilityState,
+    ).toEqual({selected: false});
+    expect(
+      getPressedStyleEntries(
+        renderer.root.findByProps({testID: 'timekeeping-timer-button'}),
       ),
-    ).toEqual(['BASIC TIMER', 'LOOK PAUSE', 'WINK CONTROL', 'FLIP TIMER']);
-    expect(menuText).not.toContain('BETA');
+    ).toContainEqual(expect.objectContaining({backgroundColor: '#1D4D3A'}));
+    expect(
+      getPressedStyleEntries(
+        renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}),
+      ),
+    ).toContainEqual(expect.objectContaining({backgroundColor: '#FFFFFF'}));
   });
 
   it('toggles the current mode history overlay from the bottom History button', () => {
@@ -748,6 +1513,13 @@ describe('TimerScreen', () => {
           atMs: 6000,
           elapsedMs: 5000,
           deltaMs: 5000,
+        },
+        {
+          id: 'LAP-8000',
+          type: 'LAP',
+          atMs: 8000,
+          elapsedMs: 7000,
+          deltaMs: 2000,
         },
         {
           id: 'STOP-7000',
@@ -778,10 +1550,23 @@ describe('TimerScreen', () => {
       .findAllByType(Text)
       .map(node => flattenText(node.props.children))
       .join(' ');
+    const historyRows = renderer.root.findAllByProps({
+      testID: 'session-history-row',
+    });
 
     expect(historyButton.props.accessibilityState).toEqual({selected: true});
     expect(overlay).toBeTruthy();
     expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
+    expect(historyRows.map(row => row.props.style)).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          expect.objectContaining({backgroundColor: '#FFFFFF'}),
+        ]),
+        expect.arrayContaining([
+          expect.objectContaining({backgroundColor: '#F7F8F4'}),
+        ]),
+      ]),
+    );
     expect(overlayText).toContain('HISTORY');
     expect(overlayText).toContain('LAP');
     expect(overlayText).toContain('+00:05.00');
@@ -797,15 +1582,44 @@ describe('TimerScreen', () => {
       .toHaveLength(0);
   });
 
-  it('uses the top Exit button for the former End action', () => {
+  it('shows timer mark history with elapsed and left times', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 60 * 1000,
+      timerModeId: 'basicTimer',
+      timer: {
+        ...baseTimer,
+        targetDurationMs: 60 * 1000,
+      },
+      sessionHistory: [
+        {
+          id: 'LAP-11000',
+          type: 'LAP',
+          atMs: 11000,
+          elapsedMs: 10000,
+          deltaMs: 10000,
+        },
+      ],
+    };
     const renderer = renderTimerScreen();
-    const exitButton = renderer.root.findByProps({accessibilityLabel: 'EXIT'});
 
     ReactTestRenderer.act(() => {
-      exitButton.props.onPress();
+      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+        .onPress();
     });
 
-    expect(mockFinishTimerSession).toHaveBeenCalledTimes(1);
+    const overlayText = renderer.root
+      .findByProps({testID: 'session-history-overlay'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(overlayText).toContain('MARK');
+    expect(overlayText).toContain('E 00:10.00');
+    expect(overlayText).toContain('L 00:50.00');
+    expect(overlayText).not.toContain('LAP');
+    expect(overlayText).not.toContain('+00:10.00');
   });
 
   it('shows flip timer mode with device posture gestures', () => {
@@ -823,7 +1637,6 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
 
-    expect(getRenderedText(renderer)).toContain('FLIP TIMER');
     expect(getRenderedText(renderer)).toContain('START');
     expect(getRenderedText(renderer)).toContain('Flip Down');
     ReactTestRenderer.act(() => {
@@ -872,14 +1685,24 @@ describe('TimerScreen', () => {
       .findAllByType(Text)
       .map(node => flattenText(node.props.children))
       .join(' ');
+    const historyRows = renderer.root.findAllByProps({
+      testID: 'session-history-row',
+    });
 
+    expect(historyRows.map(row => row.props.style)).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          expect.objectContaining({backgroundColor: '#F7F8F4'}),
+        ]),
+      ]),
+    );
     expect(overlayText).toContain('STOP');
     expect(overlayText).not.toContain('LAP');
     expect(renderer.root.findByProps({testID: 'latest-history-record'}))
       .toBeTruthy();
   });
 
-  it('stacks the mode menu above the history overlay', () => {
+  it('stacks the restored mode menu above the history overlay', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -924,6 +1747,9 @@ describe('TimerScreen', () => {
     const modeSection = renderer.root.findByProps({
       testID: 'mode-selector-bottom',
     });
+    const modeOptions = renderer.root.findByProps({
+      testID: 'timekeeping-mode-options',
+    });
     const modeMenu = renderer.root.findByProps({testID: 'mode-menu'});
 
     expect(historyOverlay.props.style).toEqual(
@@ -934,6 +1760,9 @@ describe('TimerScreen', () => {
     );
     expect(modeMenu.props.style).toEqual(
       expect.objectContaining({elevation: 50, zIndex: 50}),
+    );
+    expect(modeOptions.props.style).toEqual(
+      expect.objectContaining({elevation: 70, zIndex: 70}),
     );
   });
 

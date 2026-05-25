@@ -1,7 +1,7 @@
 import {
   modeRunsWithoutGaze,
   modeUsesDeviceFlip,
-  modeUsesRightWinkLap,
+  modeUsesWinkLap,
   timerModePresets,
 } from '../timerMode';
 
@@ -54,9 +54,14 @@ describe('timer mode presets', () => {
 
     expect(basic?.lapGesture).toBe('button');
     expect(basic?.actions).toContainEqual({label: 'LAP', value: 'Button'});
-    expect(wink?.lapGesture).toBe('rightWink');
+    expect(wink?.startGesture).toBe('rightWink');
+    expect(wink?.pauseGesture).toBe('rightWink');
+    expect(wink?.resumeGesture).toBe('rightWink');
+    expect(wink?.resetGesture).toBe('leftWink');
+    expect(wink?.lapGesture).toBe('leftWink');
     expect(wink?.actions).toContainEqual({label: 'LAP', value: 'Left Wink'});
-    expect(modeUsesRightWinkLap('winkControl')).toBe(true);
-    expect(modeUsesRightWinkLap('lookPause')).toBe(false);
+    expect(modeUsesWinkLap('winkControl', 'left')).toBe(true);
+    expect(modeUsesWinkLap('winkControl', 'right')).toBe(false);
+    expect(modeUsesWinkLap('lookPause', 'left')).toBe(false);
   });
 });

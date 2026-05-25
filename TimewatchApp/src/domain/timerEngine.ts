@@ -270,14 +270,39 @@ function accumulate(
     state.detectionStatus === 'notLooking' ||
     (!behavior.lookPauseEnabled && state.detectionStatus === 'looking')
   ) {
-    return {
+    return finishTargetIfReached({
       ...state,
       focusDurationMs: state.focusDurationMs + deltaMs,
       lastUpdatedAtMs: nowMs,
-    };
+    });
   }
 
   return {...state, lastUpdatedAtMs: nowMs};
+}
+
+function finishTargetIfReached(state: TimerState): TimerState {
+  if (
+    state.phase !== 'active' ||
+    state.targetDurationMs === null ||
+    state.focusDurationMs < state.targetDurationMs
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    phase: 'ended',
+    focusDurationMs: state.targetDurationMs,
+    detectionStatus: 'unknown',
+    eyeState: 'unknown',
+    winkSide: null,
+    recentWinkSide: null,
+    recentWinkAtMs: null,
+    lookingStartedAtMs: null,
+    isLookPaused: false,
+    oneEyeClosedStartedAtMs: null,
+    oneEyeResetArmed: true,
+  };
 }
 
 function resolveLookGrace(

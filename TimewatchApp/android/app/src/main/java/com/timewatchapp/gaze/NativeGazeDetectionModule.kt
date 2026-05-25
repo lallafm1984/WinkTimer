@@ -40,7 +40,10 @@ class NativeGazeDetectionModule(
 ) : ReactContextBaseJavaModule(reactContext), SensorEventListener {
   private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
   private val isProcessingFrame = AtomicBoolean(false)
-  private val detector: FaceDetector = createFaceDetector()
+  private val fastDetector: FaceDetector =
+    createFaceDetector(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+  private val accurateDetector: FaceDetector =
+    createFaceDetector(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
   private val sensorManager: SensorManager? =
     reactContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
   private val accelerometer: Sensor? =
@@ -58,11 +61,17 @@ class NativeGazeDetectionModule(
   private var cameraStartGeneration = 0
   private var lastFrameAnalysisAtMs = 0L
   @Volatile private var winkSensitivityLevel = DEFAULT_WINK_SENSITIVITY_LEVEL
+  @Volatile private var winkLeftEyeClosedThreshold = DEFAULT_WINK_EYE_CLOSED_THRESHOLD
+  @Volatile private var winkRightEyeClosedThreshold = DEFAULT_WINK_EYE_CLOSED_THRESHOLD
+  @Volatile private var winkLeftEyeProbabilityGapThreshold = DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD
+  @Volatile private var winkRightEyeProbabilityGapThreshold = DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD
   @Volatile private var winkDistanceLevel = DEFAULT_WINK_DISTANCE_LEVEL
   @Volatile private var lookAngleLevel = DEFAULT_LOOK_ANGLE_LEVEL
+  @Volatile private var faceHeightAngleLevel = DEFAULT_FACE_HEIGHT_ANGLE_LEVEL
   @Volatile private var analysisResolutionWidth = DEFAULT_ANALYSIS_WIDTH
   @Volatile private var analysisResolutionHeight = DEFAULT_ANALYSIS_HEIGHT
   @Volatile private var frameIntervalMs = DEFAULT_FRAME_INTERVAL_MS
+  @Volatile private var performanceMode = FaceDetectorOptions.PERFORMANCE_MODE_FAST
 
   override fun getName(): String = NAME
 
@@ -152,6 +161,33 @@ class NativeGazeDetectionModule(
   }
 
   @ReactMethod
+  fun setWinkThresholds(
+    leftEyeClosedThreshold: Double,
+    rightEyeClosedThreshold: Double,
+    leftEyeProbabilityGapThreshold: Double,
+    rightEyeProbabilityGapThreshold: Double,
+    promise: Promise,
+  ) {
+    winkLeftEyeClosedThreshold =
+      leftEyeClosedThreshold
+        .toFloat()
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    winkRightEyeClosedThreshold =
+      rightEyeClosedThreshold
+        .toFloat()
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    winkLeftEyeProbabilityGapThreshold =
+      leftEyeProbabilityGapThreshold
+        .toFloat()
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    winkRightEyeProbabilityGapThreshold =
+      rightEyeProbabilityGapThreshold
+        .toFloat()
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun setWinkDistanceLevel(level: Double, promise: Promise) {
     winkDistanceLevel =
       level
@@ -166,6 +202,15 @@ class NativeGazeDetectionModule(
       level
         .toInt()
         .coerceIn(MIN_LOOK_ANGLE_LEVEL, MAX_LOOK_ANGLE_LEVEL)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun setFaceHeightAngleLevel(level: Double, promise: Promise) {
+    faceHeightAngleLevel =
+      level
+        .toInt()
+        .coerceIn(MIN_FACE_HEIGHT_ANGLE_LEVEL, MAX_FACE_HEIGHT_ANGLE_LEVEL)
     promise.resolve(null)
   }
 
@@ -207,6 +252,17 @@ class NativeGazeDetectionModule(
   }
 
   @ReactMethod
+  fun setPerformanceMode(mode: String, promise: Promise) {
+    performanceMode =
+      if (mode == PERFORMANCE_MODE_ACCURATE_NAME) {
+        FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE
+      } else {
+        FaceDetectorOptions.PERFORMANCE_MODE_FAST
+      }
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun addListener(eventName: String) {
     // Required by React Native's native event emitter contract.
   }
@@ -220,7 +276,8 @@ class NativeGazeDetectionModule(
     super.invalidate()
     stopCamera()
     stopDevicePostureSensor()
-    detector.close()
+    fastDetector.close()
+    accurateDetector.close()
     analysisExecutor.shutdown()
   }
 
@@ -298,9 +355,10 @@ class NativeGazeDetectionModule(
     }
     lastFrameAnalysisAtMs = now
 
+    val analysisStartedAtMs = System.currentTimeMillis()
     val mediaImage = imageProxy.image
     if (mediaImage == null) {
-      emitReading("unknown", 0.0, "unknown", null)
+      emitReading("unknown", 0.0, "unknown", null, analysisDurationMs = 0.0)
       imageProxy.close()
       isProcessingFrame.set(false)
       return
@@ -309,13 +367,24 @@ class NativeGazeDetectionModule(
     val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
     val frameWidth = imageProxy.width
     val frameHeight = imageProxy.height
-    detector
+    getActiveDetector()
       .process(image)
       .addOnSuccessListener { faces ->
-        emitReadingForFaces(faces, frameWidth, frameHeight)
+        emitReadingForFaces(
+          faces,
+          frameWidth,
+          frameHeight,
+          (System.currentTimeMillis() - analysisStartedAtMs).toDouble(),
+        )
       }
       .addOnFailureListener {
-        emitReading("unknown", 0.0, "unknown", null)
+        emitReading(
+          "unknown",
+          0.0,
+          "unknown",
+          null,
+          analysisDurationMs = (System.currentTimeMillis() - analysisStartedAtMs).toDouble(),
+        )
       }
       .addOnCompleteListener {
         imageProxy.close()
@@ -323,9 +392,14 @@ class NativeGazeDetectionModule(
       }
   }
 
-  private fun emitReadingForFaces(faces: List<Face>, frameWidth: Int, frameHeight: Int) {
+  private fun emitReadingForFaces(
+    faces: List<Face>,
+    frameWidth: Int,
+    frameHeight: Int,
+    analysisDurationMs: Double,
+  ) {
     if (faces.isEmpty()) {
-      emitReading("notLooking", 1.0, "unknown", null)
+      emitReading("notLooking", 1.0, "unknown", null, analysisDurationMs = analysisDurationMs)
       return
     }
 
@@ -333,53 +407,114 @@ class NativeGazeDetectionModule(
       faces.maxByOrNull {
         max(0, it.boundingBox.width()) * max(0, it.boundingBox.height())
       } ?: run {
-        emitReading("notLooking", 1.0, "unknown", null)
+        emitReading("notLooking", 1.0, "unknown", null, analysisDurationMs = analysisDurationMs)
         return
       }
 
     val lookingAngles = getLookingAngleThresholds()
     val facingScreen =
-      abs(face.headEulerAngleY) <= lookingAngles.maxYawDegrees &&
+      abs(face.headEulerAngleX) <= lookingAngles.maxPitchDegrees &&
+        abs(face.headEulerAngleY) <= lookingAngles.maxYawDegrees &&
         abs(face.headEulerAngleZ) <= lookingAngles.maxRollDegrees
     val frameArea = max(1, frameWidth) * max(1, frameHeight)
-    val eyeReading = resolveEyeReading(face, frameArea.toDouble())
+    val rawEyeReading =
+      resolveEyeReading(face, frameArea.toDouble(), lookingAngles, analysisDurationMs)
+    val eyeReading =
+      if (facingScreen) {
+        rawEyeReading
+      } else {
+        EyeReading("unknown", null, rawEyeReading.debug)
+      }
     val status = if (facingScreen) "looking" else "notLooking"
     val confidence = calculateConfidence(face, facingScreen, eyeReading.eyeState, lookingAngles)
 
-    emitReading(status, confidence, eyeReading.eyeState, eyeReading.winkSide)
+    emitReading(status, confidence, eyeReading.eyeState, eyeReading.winkSide, eyeReading.debug)
   }
 
-  private fun resolveEyeReading(face: Face, frameArea: Double): EyeReading {
+  private fun resolveEyeReading(
+    face: Face,
+    frameArea: Double,
+    lookingAngles: LookingAngleThresholds,
+    analysisDurationMs: Double,
+  ): EyeReading {
     val faceArea =
       max(0, face.boundingBox.width()) * max(0, face.boundingBox.height())
     val faceAreaRatio = faceArea.toDouble() / frameArea
-    if (faceAreaRatio < getMinFaceAreaRatioForEyeClassification()) {
-      return EyeReading("unknown", null)
-    }
+    val minFaceAreaRatio = getMinFaceAreaRatioForEyeClassification()
+    val thresholds = getWinkThresholds()
 
-    val leftEye = face.leftEyeOpenProbability
-    val rightEye = face.rightEyeOpenProbability
+    val rawLeftEye = face.leftEyeOpenProbability
+    val rawRightEye = face.rightEyeOpenProbability
+    val leftEye =
+      if (MIRROR_EYE_PROBABILITIES_FOR_FRONT_CAMERA) {
+        rawRightEye
+      } else {
+        rawLeftEye
+      }
+    val rightEye =
+      if (MIRROR_EYE_PROBABILITIES_FOR_FRONT_CAMERA) {
+        rawLeftEye
+      } else {
+        rawRightEye
+      }
+    val eyeProbabilityGap =
+      if (leftEye != null && rightEye != null) {
+        abs(leftEye - rightEye)
+      } else {
+        null
+      }
+    val debug =
+      EyeDebug(
+        leftEyeOpenProbability = leftEye?.toDouble(),
+        rightEyeOpenProbability = rightEye?.toDouble(),
+        eyeProbabilityGap = eyeProbabilityGap?.toDouble(),
+        faceAreaRatio = faceAreaRatio,
+        minFaceAreaRatio = minFaceAreaRatio,
+        minEyeOpenProbability = thresholds.minEyeOpenProbability.toDouble(),
+        maxWinkEyeOpenProbability = thresholds.maxWinkEyeOpenProbability.toDouble(),
+        minWinkEyeProbabilityGap = thresholds.minWinkEyeProbabilityGap.toDouble(),
+        minOpenEyeProbabilityForWink = thresholds.minOpenEyeProbabilityForWink.toDouble(),
+        leftEyeClosedThreshold = thresholds.leftEyeClosedThreshold.toDouble(),
+        rightEyeClosedThreshold = thresholds.rightEyeClosedThreshold.toDouble(),
+        leftEyeProbabilityGapThreshold = thresholds.leftEyeProbabilityGapThreshold.toDouble(),
+        rightEyeProbabilityGapThreshold = thresholds.rightEyeProbabilityGapThreshold.toDouble(),
+        facePitchDegrees = face.headEulerAngleX.toDouble(),
+        faceYawDegrees = face.headEulerAngleY.toDouble(),
+        faceRollDegrees = face.headEulerAngleZ.toDouble(),
+        maxFacePitchDegrees = lookingAngles.maxPitchDegrees,
+        maxFaceYawDegrees = lookingAngles.maxYawDegrees,
+        maxFaceRollDegrees = lookingAngles.maxRollDegrees,
+        analysisDurationMs = analysisDurationMs,
+      )
+
+    if (faceAreaRatio < minFaceAreaRatio) {
+      return EyeReading("unknown", null, debug)
+    }
 
     if (leftEye == null || rightEye == null) {
-      return EyeReading("unknown", null)
+      return EyeReading("unknown", null, debug)
     }
 
-    val thresholds = getWinkThresholds()
-    val leftClosed = leftEye < thresholds.minEyeOpenProbability
-    val rightClosed = rightEye < thresholds.minEyeOpenProbability
-    val lowerEye = min(leftEye, rightEye)
-    val higherEye = max(leftEye, rightEye)
-    val oneEyeLikelyClosed =
-      lowerEye < thresholds.maxWinkEyeOpenProbability &&
-        higherEye - lowerEye >= thresholds.minWinkEyeProbabilityGap
-    val likelyClosedSide = if (leftEye <= rightEye) "left" else "right"
+    val bothOpen =
+      leftEye >= thresholds.minEyeOpenProbability &&
+        rightEye >= thresholds.minEyeOpenProbability
+    val leftClosed = leftEye <= thresholds.leftEyeClosedThreshold
+    val rightClosed = rightEye <= thresholds.rightEyeClosedThreshold
+    val leftWink =
+      leftClosed &&
+        rightEye - leftEye >= thresholds.leftEyeProbabilityGapThreshold &&
+        rightEye >= thresholds.minOpenEyeProbabilityForWink
+    val rightWink =
+      rightClosed &&
+        leftEye - rightEye >= thresholds.rightEyeProbabilityGapThreshold &&
+        leftEye >= thresholds.minOpenEyeProbabilityForWink
 
     return when {
-      leftClosed && rightClosed -> EyeReading("bothClosed", null)
-      leftClosed -> EyeReading("oneEyeClosed", normalizeWinkSide("left"))
-      rightClosed -> EyeReading("oneEyeClosed", normalizeWinkSide("right"))
-      oneEyeLikelyClosed -> EyeReading("oneEyeClosed", normalizeWinkSide(likelyClosedSide))
-      else -> EyeReading("bothOpen", null)
+      bothOpen -> EyeReading("bothOpen", null, debug)
+      leftClosed && rightClosed -> EyeReading("bothClosed", null, debug)
+      leftWink -> EyeReading("oneEyeClosed", normalizeWinkSide("left"), debug)
+      rightWink -> EyeReading("oneEyeClosed", normalizeWinkSide("right"), debug)
+      else -> EyeReading("unknown", null, debug)
     }
   }
 
@@ -395,14 +530,36 @@ class NativeGazeDetectionModule(
     }
 
   private fun getWinkThresholds(): WinkThresholds {
-    val ratio =
+    val sensitivityRatio =
       getWinkSensitivityOffset(winkSensitivityLevel).toFloat() /
         WINK_SENSITIVITY_STEP_COUNT
+    val closedEyeAdjustment =
+      WINK_EYE_CLOSED_THRESHOLD_SENSITIVITY_RANGE * sensitivityRatio
+    val gapAdjustment =
+      WINK_EYE_GAP_THRESHOLD_SENSITIVITY_RANGE * sensitivityRatio
+    val leftEyeClosedThreshold =
+      (winkLeftEyeClosedThreshold + closedEyeAdjustment)
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    val rightEyeClosedThreshold =
+      (winkRightEyeClosedThreshold + closedEyeAdjustment)
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    val leftEyeProbabilityGapThreshold =
+      (winkLeftEyeProbabilityGapThreshold - gapAdjustment)
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
+    val rightEyeProbabilityGapThreshold =
+      (winkRightEyeProbabilityGapThreshold - gapAdjustment)
+        .coerceIn(MIN_WINK_EYE_THRESHOLD, MAX_WINK_EYE_THRESHOLD)
 
     return WinkThresholds(
-      minEyeOpenProbability = lerp(STRICT_MIN_EYE_OPEN_PROBABILITY, LOOSE_MIN_EYE_OPEN_PROBABILITY, ratio),
-      maxWinkEyeOpenProbability = lerp(STRICT_MAX_WINK_EYE_OPEN_PROBABILITY, LOOSE_MAX_WINK_EYE_OPEN_PROBABILITY, ratio),
-      minWinkEyeProbabilityGap = lerp(STRICT_MIN_WINK_EYE_PROBABILITY_GAP, LOOSE_MIN_WINK_EYE_PROBABILITY_GAP, ratio),
+      leftEyeClosedThreshold = leftEyeClosedThreshold,
+      rightEyeClosedThreshold = rightEyeClosedThreshold,
+      leftEyeProbabilityGapThreshold = leftEyeProbabilityGapThreshold,
+      rightEyeProbabilityGapThreshold = rightEyeProbabilityGapThreshold,
+      minEyeOpenProbability = FIXED_WINK_READY_EYE_OPEN_PROBABILITY,
+      maxWinkEyeOpenProbability = max(leftEyeClosedThreshold, rightEyeClosedThreshold),
+      minWinkEyeProbabilityGap =
+        min(leftEyeProbabilityGapThreshold, rightEyeProbabilityGapThreshold),
+      minOpenEyeProbabilityForWink = FIXED_WINK_OPPOSITE_EYE_OPEN_PROBABILITY,
     )
   }
 
@@ -417,11 +574,21 @@ class NativeGazeDetectionModule(
   }
 
   private fun getLookingAngleThresholds(): LookingAngleThresholds =
-    when (lookAngleLevel.coerceIn(MIN_LOOK_ANGLE_LEVEL, MAX_LOOK_ANGLE_LEVEL)) {
-      1 -> LookingAngleThresholds(STRICT_LOOKING_YAW_DEGREES, FIXED_LOOKING_ROLL_DEGREES)
-      3 -> LookingAngleThresholds(LOOSE_LOOKING_YAW_DEGREES, FIXED_LOOKING_ROLL_DEGREES)
-      else -> LookingAngleThresholds(DEFAULT_LOOKING_YAW_DEGREES, FIXED_LOOKING_ROLL_DEGREES)
-    }
+    LookingAngleThresholds(
+      maxPitchDegrees =
+        when (faceHeightAngleLevel.coerceIn(MIN_FACE_HEIGHT_ANGLE_LEVEL, MAX_FACE_HEIGHT_ANGLE_LEVEL)) {
+          1 -> STRICT_FACE_HEIGHT_PITCH_DEGREES
+          3 -> LOOSE_FACE_HEIGHT_PITCH_DEGREES
+          else -> DEFAULT_FACE_HEIGHT_PITCH_DEGREES
+        },
+      maxYawDegrees =
+        when (lookAngleLevel.coerceIn(MIN_LOOK_ANGLE_LEVEL, MAX_LOOK_ANGLE_LEVEL)) {
+          1 -> STRICT_LOOKING_YAW_DEGREES
+          3 -> LOOSE_LOOKING_YAW_DEGREES
+          else -> DEFAULT_LOOKING_YAW_DEGREES
+        },
+      maxRollDegrees = FIXED_LOOKING_ROLL_DEGREES,
+    )
 
   private fun lerp(start: Float, end: Float, ratio: Float): Float =
     start + ((end - start) * ratio)
@@ -450,6 +617,7 @@ class NativeGazeDetectionModule(
     eyeState: String,
     lookingAngles: LookingAngleThresholds,
   ): Double {
+    val pitchScore = 1.0 - min(1.0, abs(face.headEulerAngleX).toDouble() / lookingAngles.maxPitchDegrees)
     val yawScore = 1.0 - min(1.0, abs(face.headEulerAngleY).toDouble() / lookingAngles.maxYawDegrees)
     val rollScore = 1.0 - min(1.0, abs(face.headEulerAngleZ).toDouble() / lookingAngles.maxRollDegrees)
     val eyeScore =
@@ -460,7 +628,7 @@ class NativeGazeDetectionModule(
         else -> 0.8
       }
 
-    val score = (yawScore * 0.4) + (rollScore * 0.2) + (eyeScore * 0.4)
+    val score = (pitchScore * 0.25) + (yawScore * 0.25) + (rollScore * 0.15) + (eyeScore * 0.35)
     return if (facingScreen) {
       max(0.55, min(1.0, score))
     } else {
@@ -468,7 +636,14 @@ class NativeGazeDetectionModule(
     }
   }
 
-  private fun emitReading(status: String, confidence: Double, eyeState: String, winkSide: String?) {
+  private fun emitReading(
+    status: String,
+    confidence: Double,
+    eyeState: String,
+    winkSide: String?,
+    eyeDebug: EyeDebug? = null,
+    analysisDurationMs: Double? = null,
+  ) {
     val now = System.currentTimeMillis()
     if (
       status == lastEmittedStatus &&
@@ -494,6 +669,30 @@ class NativeGazeDetectionModule(
           putString("winkSide", winkSide)
         }
         putDouble("confidence", confidence)
+        (analysisDurationMs ?: eyeDebug?.analysisDurationMs)?.let {
+          putDouble("analysisDurationMs", it)
+        }
+        eyeDebug?.let { debug ->
+          debug.leftEyeOpenProbability?.let { putDouble("leftEyeOpenProbability", it) }
+          debug.rightEyeOpenProbability?.let { putDouble("rightEyeOpenProbability", it) }
+          debug.eyeProbabilityGap?.let { putDouble("eyeProbabilityGap", it) }
+          debug.faceAreaRatio?.let { putDouble("faceAreaRatio", it) }
+          putDouble("minFaceAreaRatio", debug.minFaceAreaRatio)
+          putDouble("minEyeOpenProbability", debug.minEyeOpenProbability)
+          putDouble("maxWinkEyeOpenProbability", debug.maxWinkEyeOpenProbability)
+          putDouble("minWinkEyeProbabilityGap", debug.minWinkEyeProbabilityGap)
+          putDouble("minOpenEyeProbabilityForWink", debug.minOpenEyeProbabilityForWink)
+          putDouble("leftEyeClosedThreshold", debug.leftEyeClosedThreshold)
+          putDouble("rightEyeClosedThreshold", debug.rightEyeClosedThreshold)
+          putDouble("leftEyeProbabilityGapThreshold", debug.leftEyeProbabilityGapThreshold)
+          putDouble("rightEyeProbabilityGapThreshold", debug.rightEyeProbabilityGapThreshold)
+          putDouble("facePitchDegrees", debug.facePitchDegrees)
+          putDouble("faceYawDegrees", debug.faceYawDegrees)
+          putDouble("faceRollDegrees", debug.faceRollDegrees)
+          putDouble("maxFacePitchDegrees", debug.maxFacePitchDegrees)
+          putDouble("maxFaceYawDegrees", debug.maxFaceYawDegrees)
+          putDouble("maxFaceRollDegrees", debug.maxFaceRollDegrees)
+        }
       }
 
     reactContext
@@ -542,10 +741,17 @@ class NativeGazeDetectionModule(
     isDevicePostureRunning = false
   }
 
-  private fun createFaceDetector(): FaceDetector {
+  private fun getActiveDetector(): FaceDetector =
+    if (performanceMode == FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE) {
+      accurateDetector
+    } else {
+      fastDetector
+    }
+
+  private fun createFaceDetector(performanceMode: Int): FaceDetector {
     val options =
       FaceDetectorOptions.Builder()
-        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+        .setPerformanceMode(performanceMode)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
         .setMinFaceSize(0.15f)
@@ -564,12 +770,28 @@ class NativeGazeDetectionModule(
     private const val DEFAULT_LOOKING_YAW_DEGREES = 18.0
     private const val LOOSE_LOOKING_YAW_DEGREES = 26.0
     private const val FIXED_LOOKING_ROLL_DEGREES = 50.0
+    private const val STRICT_FACE_HEIGHT_PITCH_DEGREES = 10.0
+    private const val DEFAULT_FACE_HEIGHT_PITCH_DEGREES = 16.0
+    private const val LOOSE_FACE_HEIGHT_PITCH_DEGREES = 24.0
     private const val MIRROR_WINK_SIDES_FOR_FRONT_CAMERA = false
+    private const val MIRROR_EYE_PROBABILITIES_FOR_FRONT_CAMERA = true
     private const val MIN_LOOK_ANGLE_LEVEL = 1
     private const val MAX_LOOK_ANGLE_LEVEL = 3
     private const val DEFAULT_LOOK_ANGLE_LEVEL = 2
+    private const val MIN_FACE_HEIGHT_ANGLE_LEVEL = 1
+    private const val MAX_FACE_HEIGHT_ANGLE_LEVEL = 3
+    private const val DEFAULT_FACE_HEIGHT_ANGLE_LEVEL = 2
     private const val DEFAULT_WINK_SENSITIVITY_LEVEL = 1
     private const val WINK_SENSITIVITY_STEP_COUNT = 9.0f
+    private const val MIN_WINK_EYE_THRESHOLD = 0.0f
+    private const val MAX_WINK_EYE_THRESHOLD = 1.0f
+    private const val DEFAULT_WINK_EYE_CLOSED_THRESHOLD = 0.1f
+    private const val DEFAULT_WINK_EYE_PROBABILITY_GAP_THRESHOLD = 0.4f
+    private const val FIXED_WINK_READY_EYE_OPEN_PROBABILITY = 0.85f
+    private const val FIXED_WINK_CLOSED_EYE_OPEN_PROBABILITY = 0.1f
+    private const val FIXED_WINK_OPPOSITE_EYE_OPEN_PROBABILITY = 0.5f
+    private const val WINK_EYE_CLOSED_THRESHOLD_SENSITIVITY_RANGE = 0.09f
+    private const val WINK_EYE_GAP_THRESHOLD_SENSITIVITY_RANGE = 0.18f
     private const val MIN_WINK_DISTANCE_LEVEL = 1
     private const val MAX_WINK_DISTANCE_LEVEL = 5
     private const val DEFAULT_WINK_DISTANCE_LEVEL = 5
@@ -579,6 +801,8 @@ class NativeGazeDetectionModule(
     private const val LOOSE_MAX_WINK_EYE_OPEN_PROBABILITY = 0.72f
     private const val STRICT_MIN_WINK_EYE_PROBABILITY_GAP = 0.34f
     private const val LOOSE_MIN_WINK_EYE_PROBABILITY_GAP = 0.12f
+    private const val STRICT_MIN_OPEN_EYE_PROBABILITY_FOR_WINK = 0.62f
+    private const val LOOSE_MIN_OPEN_EYE_PROBABILITY_FOR_WINK = 0.50f
     private const val CLOSE_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION = 0.065
     private const val FAR_MIN_FACE_AREA_RATIO_FOR_EYE_CLASSIFICATION = 0.0
     private const val EMIT_THROTTLE_MS = 350L
@@ -592,15 +816,22 @@ class NativeGazeDetectionModule(
     private const val DEFAULT_FRAME_INTERVAL_MS = 0L
     private const val MIN_FRAME_INTERVAL_MS = 0L
     private const val MAX_FRAME_INTERVAL_MS = 1000L
+    private const val PERFORMANCE_MODE_ACCURATE_NAME = "accurate"
   }
 
   private data class WinkThresholds(
+    val leftEyeClosedThreshold: Float,
+    val rightEyeClosedThreshold: Float,
+    val leftEyeProbabilityGapThreshold: Float,
+    val rightEyeProbabilityGapThreshold: Float,
     val minEyeOpenProbability: Float,
     val maxWinkEyeOpenProbability: Float,
     val minWinkEyeProbabilityGap: Float,
+    val minOpenEyeProbabilityForWink: Float,
   )
 
   private data class LookingAngleThresholds(
+    val maxPitchDegrees: Double,
     val maxYawDegrees: Double,
     val maxRollDegrees: Double,
   )
@@ -608,5 +839,29 @@ class NativeGazeDetectionModule(
   private data class EyeReading(
     val eyeState: String,
     val winkSide: String?,
+    val debug: EyeDebug?,
+  )
+
+  private data class EyeDebug(
+    val leftEyeOpenProbability: Double?,
+    val rightEyeOpenProbability: Double?,
+    val eyeProbabilityGap: Double?,
+    val faceAreaRatio: Double,
+    val minFaceAreaRatio: Double,
+    val minEyeOpenProbability: Double,
+    val maxWinkEyeOpenProbability: Double,
+    val minWinkEyeProbabilityGap: Double,
+    val minOpenEyeProbabilityForWink: Double,
+    val leftEyeClosedThreshold: Double,
+    val rightEyeClosedThreshold: Double,
+    val leftEyeProbabilityGapThreshold: Double,
+    val rightEyeProbabilityGapThreshold: Double,
+    val facePitchDegrees: Double,
+    val faceYawDegrees: Double,
+    val faceRollDegrees: Double,
+    val maxFacePitchDegrees: Double,
+    val maxFaceYawDegrees: Double,
+    val maxFaceRollDegrees: Double,
+    val analysisDurationMs: Double,
   )
 }

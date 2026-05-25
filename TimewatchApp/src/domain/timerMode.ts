@@ -63,11 +63,11 @@ export const timerModePresets: TimerModePreset[] = [
     id: 'winkControl',
     title: 'WINK CONTROL',
     description: 'Right wink toggles the timer, left wink resets while paused',
-    startGesture: 'leftWink',
-    pauseGesture: 'leftWink',
-    resumeGesture: 'leftWink',
-    resetGesture: 'rightWink',
-    lapGesture: 'rightWink',
+    startGesture: 'rightWink',
+    pauseGesture: 'rightWink',
+    resumeGesture: 'rightWink',
+    resetGesture: 'leftWink',
+    lapGesture: 'leftWink',
     actions: [
       {label: 'START', value: 'Right Wink'},
       {label: 'PAUSE', value: 'Right Wink'},
@@ -107,20 +107,61 @@ export function modeUsesLeftWinkStart(modeId: TimerModeId): boolean {
   return getTimerModePreset(modeId).startGesture === 'leftWink';
 }
 
+export type WinkGestureSide = 'left' | 'right';
+
+function getWinkGesture(side: WinkGestureSide): TimerModeGesture {
+  return side === 'left' ? 'leftWink' : 'rightWink';
+}
+
+export function modeUsesWinkStart(
+  modeId: TimerModeId,
+  side: WinkGestureSide,
+): boolean {
+  return getTimerModePreset(modeId).startGesture === getWinkGesture(side);
+}
+
 export function modeUsesLeftWinkPause(modeId: TimerModeId): boolean {
   return getTimerModePreset(modeId).pauseGesture === 'leftWink';
+}
+
+export function modeUsesWinkPause(
+  modeId: TimerModeId,
+  side: WinkGestureSide,
+): boolean {
+  return getTimerModePreset(modeId).pauseGesture === getWinkGesture(side);
 }
 
 export function modeUsesLeftWinkResume(modeId: TimerModeId): boolean {
   return getTimerModePreset(modeId).resumeGesture === 'leftWink';
 }
 
+export function modeUsesWinkResume(
+  modeId: TimerModeId,
+  side: WinkGestureSide,
+): boolean {
+  return getTimerModePreset(modeId).resumeGesture === getWinkGesture(side);
+}
+
 export function modeUsesRightWinkReset(modeId: TimerModeId): boolean {
   return getTimerModePreset(modeId).resetGesture === 'rightWink';
 }
 
+export function modeUsesWinkReset(
+  modeId: TimerModeId,
+  side: WinkGestureSide,
+): boolean {
+  return getTimerModePreset(modeId).resetGesture === getWinkGesture(side);
+}
+
 export function modeUsesRightWinkLap(modeId: TimerModeId): boolean {
   return getTimerModePreset(modeId).lapGesture === 'rightWink';
+}
+
+export function modeUsesWinkLap(
+  modeId: TimerModeId,
+  side: WinkGestureSide,
+): boolean {
+  return getTimerModePreset(modeId).lapGesture === getWinkGesture(side);
 }
 
 export function modeHasLap(modeId: TimerModeId): boolean {

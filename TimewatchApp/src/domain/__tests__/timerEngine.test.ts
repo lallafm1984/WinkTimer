@@ -297,6 +297,24 @@ describe('timerEngine', () => {
     expect(ended.isLookPaused).toBe(false);
   });
 
+  it('ends automatically when a target duration is reached', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 1000, 5000);
+    state = applyDetection(state, {
+      status: 'notLooking',
+      confidence: 0.9,
+      atMs: 1000,
+    });
+
+    state = tickTimer(state, 7000);
+
+    expect(state.phase).toBe('ended');
+    expect(state.focusDurationMs).toBe(5000);
+    expect(state.targetDurationMs).toBe(5000);
+    expect(state.detectionStatus).toBe('unknown');
+    expect(state.isLookPaused).toBe(false);
+  });
+
   it('ignores stale looking readings after newer notLooking state', () => {
     let state = createInitialTimerState(0);
     state = startTimer(state, 0, undefined);
