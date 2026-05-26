@@ -29,6 +29,7 @@ import {
   type TimerAlertVibrationPatternId,
 } from '../alerts/timerAlert';
 import {
+  ensureBackgroundTimekeepingNotificationPermission,
   hideBackgroundTimekeepingNotification,
   showBackgroundTimekeepingNotification,
 } from '../notifications/timekeepingNotification';
@@ -933,6 +934,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const lastTimerAlertKeyRef = useRef<string | null>(null);
   const scheduledTimerAlertKeyRef = useRef<string | null>(null);
   const backgroundTimekeepingNotificationKeyRef = useRef<string | null>(null);
+  const notificationPermissionRequestedRef = useRef(false);
   const isTimerAlertActiveRef = useRef(false);
   const timerAlertAutoClearTimeoutRef = useRef<ReturnType<
     typeof setTimeout
@@ -991,6 +993,15 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
 
     backgroundTimekeepingNotificationKeyRef.current = null;
     hideBackgroundTimekeepingNotification().catch(() => undefined);
+  }, []);
+
+  const requestBackgroundNotificationPermissionIfNeeded = useCallback(() => {
+    if (notificationPermissionRequestedRef.current) {
+      return;
+    }
+
+    notificationPermissionRequestedRef.current = true;
+    ensureBackgroundTimekeepingNotificationPermission().catch(() => undefined);
   }, []);
 
   const stopTimerEndAlert = useCallback(() => {
@@ -1311,6 +1322,12 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     timerAlertVibrationEnabled,
     timerAlertVibrationPatternId,
   ]);
+
+  useEffect(() => {
+    if (timer.phase === 'active' || timer.phase === 'manualPaused') {
+      requestBackgroundNotificationPermissionIfNeeded();
+    }
+  }, [requestBackgroundNotificationPermissionIfNeeded, timer.phase]);
 
   useEffect(() => {
     const canShowBackgroundTime =

@@ -194,6 +194,12 @@ try {
     Write-Warning "Camera permission grant failed. You can still grant it from Android Settings."
   }
 
+  Write-Step "Granting notification permission"
+  & $adb @adbTarget shell pm grant com.winktimer.app android.permission.POST_NOTIFICATIONS
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Notification permission grant failed. You can still grant it from Android Settings."
+  }
+
   Write-Step "Launching Wink Timer"
   & $adb @adbTarget shell am force-stop $PackageName | Out-Null
   Invoke-Checked "Starting MainActivity" {

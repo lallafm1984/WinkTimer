@@ -4,6 +4,8 @@ import {
   AppState as NativeAppState,
   DeviceEventEmitter,
   NativeModules,
+  PermissionsAndroid,
+  Platform,
   Text,
   View,
 } from 'react-native';
@@ -65,6 +67,14 @@ const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
 const originalNativeTimerAlert = nativeModules.NativeTimerAlert;
 const originalI18nManager = nativeModules.I18nManager;
 const originalSettingsManager = nativeModules.SettingsManager;
+const originalPlatformOSDescriptor = Object.getOwnPropertyDescriptor(
+  Platform,
+  'OS',
+);
+const originalPlatformVersionDescriptor = Object.getOwnPropertyDescriptor(
+  Platform,
+  'Version',
+);
 const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
 
 function AppStateHarness() {
@@ -476,6 +486,30 @@ function getHistoryText(renderer: ReactTestRenderer.ReactTestRenderer) {
   );
 }
 
+function setAndroidPlatformVersion(version: number) {
+  Object.defineProperty(Platform, 'OS', {
+    configurable: true,
+    value: 'android',
+  });
+  Object.defineProperty(Platform, 'Version', {
+    configurable: true,
+    value: version,
+  });
+}
+
+function restorePlatform() {
+  if (originalPlatformOSDescriptor) {
+    Object.defineProperty(Platform, 'OS', originalPlatformOSDescriptor);
+  }
+  if (originalPlatformVersionDescriptor) {
+    Object.defineProperty(
+      Platform,
+      'Version',
+      originalPlatformVersionDescriptor,
+    );
+  }
+}
+
 async function press(
   renderer: ReactTestRenderer.ReactTestRenderer,
   accessibilityLabel: string,
@@ -536,6 +570,7 @@ describe('AppStateProvider app flow', () => {
       delete nativeModules.SettingsManager;
     }
 
+    restorePlatform();
     jest.restoreAllMocks();
     jest.useRealTimers();
   });
@@ -1088,6 +1123,30 @@ describe('AppStateProvider app flow', () => {
     });
 
     expect(hasText(renderer, 'focus:0')).toBe(false);
+
+    await unmount(renderer);
+  });
+
+  it('requests Android notification permission when timekeeping starts so the background icon can show', async () => {
+    setAndroidPlatformVersion(36);
+    const checkNotificationPermission = jest
+      .spyOn(PermissionsAndroid, 'check')
+      .mockResolvedValue(false);
+    const requestNotificationPermission = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'start');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(checkNotificationPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    expect(requestNotificationPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
 
     await unmount(renderer);
   });

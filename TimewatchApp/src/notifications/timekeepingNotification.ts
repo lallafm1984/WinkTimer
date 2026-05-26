@@ -1,4 +1,4 @@
-import {NativeModules} from 'react-native';
+import {NativeModules, PermissionsAndroid, Platform} from 'react-native';
 
 export type BackgroundTimekeepingMode = 'stopwatch' | 'timer';
 
@@ -17,6 +17,31 @@ function getNativeTimekeepingNotification() {
   return NativeModules.NativeTimerAlert as
     | NativeTimekeepingNotificationModule
     | undefined;
+}
+
+export async function ensureBackgroundTimekeepingNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+
+  const androidVersion =
+    typeof Platform.Version === 'number'
+      ? Platform.Version
+      : Number.parseInt(String(Platform.Version), 10);
+
+  if (!Number.isFinite(androidVersion) || androidVersion < 33) {
+    return true;
+  }
+
+  const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+  const alreadyGranted = await PermissionsAndroid.check(permission);
+
+  if (alreadyGranted) {
+    return true;
+  }
+
+  const result = await PermissionsAndroid.request(permission);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
 }
 
 export function showBackgroundTimekeepingNotification(

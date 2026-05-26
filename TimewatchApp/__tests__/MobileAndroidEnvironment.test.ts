@@ -33,6 +33,9 @@ describe('mobile Android verification environment', () => {
     expect(script).toContain(
       'pm grant com.winktimer.app android.permission.CAMERA',
     );
+    expect(script).toContain(
+      'pm grant com.winktimer.app android.permission.POST_NOTIFICATIONS',
+    );
     expect(script).toContain('am start -n com.winktimer.app/.MainActivity');
   });
 
