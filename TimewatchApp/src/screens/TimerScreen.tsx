@@ -22,6 +22,12 @@ import {
 } from '../components/GhostMascot';
 import {PrimaryButton} from '../components/PrimaryButton';
 import {formatDuration, TimerDisplay} from '../components/TimerDisplay';
+import {AdMobBanner} from '../ads/AdMobBanner';
+import {showRewardedAdForAccess} from '../ads/rewardedAdAccess';
+import {
+  createRewardedModeAccessRepository,
+  modeRequiresRewardedAd,
+} from '../ads/rewardedModeAccess';
 import type {SessionHistoryEvent} from '../domain/sessionHistory';
 import {
   getTimerModePreset,
@@ -40,11 +46,94 @@ import {
   type TimekeepingMode,
 } from '../domain/timekeeping';
 import {useAppState} from '../state/AppState';
+import {
+  createTranslator,
+  getLocalizedModeActionSummary,
+  getLocalizedModeHint,
+  getLocalizedTimerModeTitle,
+  type TranslationKey,
+} from '../i18n/localization';
 import {arcadeTheme} from '../theme/arcadeTheme';
 
 const MODE_MENU_MAX_HEIGHT = 440;
+const MODE_MENU_ULTRA_MAX_HEIGHT = 560;
 const MODE_MENU_MIN_HEIGHT = 360;
 const MODE_MENU_SCREEN_HEIGHT_RATIO = 0.56;
+const MODE_MENU_ULTRA_WINDOW_HEIGHT = 900;
+const REWARDED_MODE_ACCESS_PROBE_MODE_ID: TimerModeId = 'lookPause';
+const RESPONSIVE_LAYOUT_BASE_HEIGHT = 780;
+const RESPONSIVE_LAYOUT_MAX_SCALE = 1.2;
+const RESPONSIVE_LAYOUT_MIN_HEIGHT = 900;
+const TIMER_TOP_STRIP_MIN_HEIGHT = 88;
+const MODE_MENU_ITEM_MIN_HEIGHT = 76;
+
+type Translator = ReturnType<typeof createTranslator>;
+
+type RewardedAdAccessState = 'idle' | 'loading' | 'error';
+type RewardedModeAccessStatus = 'active' | 'inactive';
+
+function getScaledValue(value: number, scale: number) {
+  return Math.round(value * scale);
+}
+
+export function getResponsiveLayoutScale(windowHeight: number) {
+  if (windowHeight < RESPONSIVE_LAYOUT_MIN_HEIGHT) {
+    return 1;
+  }
+
+  return Math.min(
+    RESPONSIVE_LAYOUT_MAX_SCALE,
+    Math.max(1, windowHeight / RESPONSIVE_LAYOUT_BASE_HEIGHT),
+  );
+}
+
+export function getTimerLayoutMetrics(layoutScale: number) {
+  return {
+    mascotScale: layoutScale,
+    timerDisplayScale: layoutScale,
+    topStripMinHeight: getScaledValue(
+      TIMER_TOP_STRIP_MIN_HEIGHT,
+      layoutScale,
+    ),
+  };
+}
+
+export function getModeMenuLayoutMetrics(layoutScale: number) {
+  return {
+    itemMinHeight: getScaledValue(MODE_MENU_ITEM_MIN_HEIGHT, layoutScale),
+    itemPadding: getScaledValue(arcadeTheme.spacing.sm, layoutScale),
+    listGap: getScaledValue(arcadeTheme.spacing.sm, layoutScale),
+    panelPadding: getScaledValue(arcadeTheme.spacing.sm, layoutScale),
+    summaryFontSize: getScaledValue(
+      arcadeTheme.typography.label.fontSize as number,
+      layoutScale,
+    ),
+    summaryLineHeight: getScaledValue(18, layoutScale),
+    titleFontSize: getScaledValue(
+      arcadeTheme.typography.body.fontSize as number,
+      layoutScale,
+    ),
+    titleLineHeight: getScaledValue(
+      arcadeTheme.typography.body.lineHeight as number,
+      layoutScale,
+    ),
+  };
+}
+
+export function getModeMenuScrollMaxHeight(windowHeight: number) {
+  const maxHeight =
+    windowHeight >= MODE_MENU_ULTRA_WINDOW_HEIGHT
+      ? MODE_MENU_ULTRA_MAX_HEIGHT
+      : MODE_MENU_MAX_HEIGHT;
+
+  return Math.max(
+    MODE_MENU_MIN_HEIGHT,
+    Math.min(
+      maxHeight,
+      Math.floor(windowHeight * MODE_MENU_SCREEN_HEIGHT_RATIO),
+    ),
+  );
+}
 
 type TimerActionButtonProps = {
   label: string;
@@ -66,6 +155,7 @@ type SessionHistoryOverlayProps = {
   events: SessionHistoryEvent[];
   targetDurationMs: number;
   timekeepingMode: TimekeepingMode;
+  t: Translator;
 };
 
 type TimelineClipboardModule = {
@@ -76,6 +166,7 @@ type TimerTargetWheelProps = {
   wheelTestID: string;
   reelTestID: string;
   label: string;
+  accessibilityLabel: string;
   value: number;
   min: number;
   max: number;
@@ -97,25 +188,29 @@ function canResetTimer(timer: TimerState, mode: TimerModePreset) {
   return isStoppedState(timer, mode);
 }
 
-function getStatusLabel(timer: TimerState, mode: TimerModePreset) {
+function getStatusLabel(
+  timer: TimerState,
+  mode: TimerModePreset,
+  t: ReturnType<typeof createTranslator>,
+) {
   if (
     timer.phase === 'active' &&
     mode.pauseGesture === 'look' &&
     (timer.isLookPaused || timer.detectionStatus === 'looking')
   ) {
-    return '- 정지 -';
+    return t('timer.stopped');
   }
 
   switch (timer.phase) {
     case 'active':
-      return '- 측정중 -';
+      return t('timer.running');
     case 'manualPaused':
-      return '- 정지 -';
+      return t('timer.stopped');
     case 'ended':
-      return '- 종료 -';
+      return t('timer.ended');
     case 'idle':
     default:
-      return '- 준비 -';
+      return t('timer.ready');
   }
 }
 
@@ -178,27 +273,35 @@ function getGhostState(
   return {expression: 'ready', winkSide: 'any'};
 }
 
-function getModeHint(mode: TimerModePreset, label: string) {
-  return mode.actions.find(action => action.label === label)?.value ?? '-';
+const ghostExpressionLabelKeys: Record<GhostExpression, TranslationKey> = {
+  leftWink: 'mascot.leftWink',
+  looking: 'mascot.looking',
+  ready: 'mascot.ready',
+  resetFlash: 'mascot.resetFlash',
+  rightWink: 'mascot.rightWink',
+  running: 'mascot.running',
+};
+
+function getLocalizedGhostExpressionLabel(
+  expression: GhostExpression,
+  t: Translator,
+) {
+  return t(ghostExpressionLabelKeys[expression]);
 }
 
-function getModeActionSummary(mode: TimerModePreset) {
-  const actionGroups: Array<{labels: string[]; value: string}> = [];
+function getModeHint(
+  mode: TimerModePreset,
+  label: string,
+  locale: Parameters<typeof createTranslator>[0],
+) {
+  return getLocalizedModeHint(locale, mode, label);
+}
 
-  mode.actions.forEach(action => {
-    const previousGroup = actionGroups[actionGroups.length - 1];
-
-    if (previousGroup?.value === action.value) {
-      previousGroup.labels.push(action.label);
-      return;
-    }
-
-    actionGroups.push({labels: [action.label], value: action.value});
-  });
-
-  return actionGroups
-    .map(group => `${group.labels.join('/')} ${group.value}`)
-    .join(' · ');
+function getModeActionSummary(
+  mode: TimerModePreset,
+  locale: Parameters<typeof createTranslator>[0],
+) {
+  return getLocalizedModeActionSummary(locale, mode);
 }
 
 function formatHistoryDurationMs(durationMs: number) {
@@ -215,33 +318,57 @@ function isTimerMarkEvent(
 function getHistoryTypeLabel(
   event: SessionHistoryEvent,
   timekeepingMode: TimekeepingMode,
+  t: Translator,
 ) {
-  return isTimerMarkEvent(event, timekeepingMode) ? 'MARK' : event.type;
+  if (isTimerMarkEvent(event, timekeepingMode)) {
+    return t('timer.mark');
+  }
+
+  if (event.type === 'LAP') {
+    return t('timer.lap');
+  }
+
+  const eventLabelKeys: Record<Exclude<SessionHistoryEvent['type'], 'LAP'>, TranslationKey> = {
+    END: 'event.END',
+    RESET: 'event.RESET',
+    RESUME: 'event.RESUME',
+    START: 'event.START',
+    STOP: 'event.STOP',
+  };
+
+  return t(eventLabelKeys[event.type]);
 }
 
 function getHistoryElapsedLabel(
   event: SessionHistoryEvent,
   timekeepingMode: TimekeepingMode,
+  t: Translator,
 ) {
   const elapsed = formatHistoryDurationMs(event.elapsedMs);
 
-  return isTimerMarkEvent(event, timekeepingMode) ? `E ${elapsed}` : elapsed;
+  return isTimerMarkEvent(event, timekeepingMode)
+    ? t('timer.elapsedAt', {time: elapsed})
+    : elapsed;
 }
 
 function getTimerMarkLeftLabel(
   event: SessionHistoryEvent,
   targetDurationMs: number,
+  t: Translator,
 ) {
-  return `L ${formatHistoryDurationMs(targetDurationMs - event.elapsedMs)}`;
+  return t('timer.leftAt', {
+    time: formatHistoryDurationMs(targetDurationMs - event.elapsedMs),
+  });
 }
 
 function getHistoryDeltaLabel(
   event: SessionHistoryEvent,
   timekeepingMode: TimekeepingMode,
   targetDurationMs: number,
+  t: Translator,
 ) {
   if (isTimerMarkEvent(event, timekeepingMode)) {
-    return getTimerMarkLeftLabel(event, targetDurationMs);
+    return getTimerMarkLeftLabel(event, targetDurationMs, t);
   }
 
   return `+${formatHistoryDurationMs(event.deltaMs)}`;
@@ -257,12 +384,13 @@ function getTimelineClipboardText(
   events: SessionHistoryEvent[],
   targetDurationMs: number,
   timekeepingMode: TimekeepingMode,
+  t: Translator,
 ) {
   const orderedEvents = [...events].reverse();
-  const lines = ['TIMELINE', `${events.length} EVENTS`];
+  const lines = [t('timer.timeline'), t('timer.events', {count: events.length})];
 
   if (events.length === 0) {
-    lines.push('NO EVENTS YET');
+    lines.push(t('timer.noEventsYet'));
     return lines.join('\n');
   }
 
@@ -272,9 +400,9 @@ function getTimelineClipboardText(
     lines.push(
       [
         String(recordNumber).padStart(2, '0'),
-        getHistoryTypeLabel(event, timekeepingMode),
-        getHistoryElapsedLabel(event, timekeepingMode),
-        getHistoryDeltaLabel(event, timekeepingMode, targetDurationMs),
+        getHistoryTypeLabel(event, timekeepingMode, t),
+        getHistoryElapsedLabel(event, timekeepingMode, t),
+        getHistoryDeltaLabel(event, timekeepingMode, targetDurationMs, t),
       ].join('  '),
     );
   });
@@ -286,6 +414,7 @@ async function copyTimelineToClipboard(
   events: SessionHistoryEvent[],
   targetDurationMs: number,
   timekeepingMode: TimekeepingMode,
+  t: Translator,
 ) {
   const clipboard = getTimelineClipboardModule();
 
@@ -295,7 +424,7 @@ async function copyTimelineToClipboard(
 
   try {
     await clipboard.copyText(
-      getTimelineClipboardText(events, targetDurationMs, timekeepingMode),
+      getTimelineClipboardText(events, targetDurationMs, timekeepingMode, t),
     );
     return true;
   } catch {
@@ -375,18 +504,19 @@ function SessionHistoryOverlay({
   events,
   targetDurationMs,
   timekeepingMode,
+  t,
 }: SessionHistoryOverlayProps) {
   const orderedEvents = [...events].reverse();
   const handleCopyTimeline = () =>
-    copyTimelineToClipboard(events, targetDurationMs, timekeepingMode);
+    copyTimelineToClipboard(events, targetDurationMs, timekeepingMode, t);
 
   return (
     <View style={styles.historyOverlay} testID="session-history-overlay">
       <View style={styles.historyHeader}>
         <View style={styles.historyTitleGroup}>
-          <Text style={styles.historyTitle}>TIMELINE</Text>
+          <Text style={styles.historyTitle}>{t('timer.timeline')}</Text>
           <Pressable
-            accessibilityLabel="Copy timeline to clipboard"
+            accessibilityLabel={t('timer.copyTimeline')}
             accessibilityRole="button"
             onPress={handleCopyTimeline}
             style={({pressed}) => [
@@ -400,13 +530,15 @@ function SessionHistoryOverlay({
             </View>
           </Pressable>
         </View>
-        <Text style={styles.historyCount}>{events.length} EVENTS</Text>
+        <Text style={styles.historyCount}>
+          {t('timer.events', {count: events.length})}
+        </Text>
       </View>
       <ScrollView
         style={styles.historyScroll}
         contentContainerStyle={styles.historyList}>
         {events.length === 0 ? (
-          <Text style={styles.historyEmpty}>NO EVENTS YET</Text>
+          <Text style={styles.historyEmpty}>{t('timer.noEventsYet')}</Text>
         ) : (
           orderedEvents.map((event, index) => {
             const recordNumber = events.length - index;
@@ -424,16 +556,17 @@ function SessionHistoryOverlay({
                   {String(recordNumber).padStart(2, '0')}
                 </Text>
                 <Text style={styles.historyType}>
-                  {getHistoryTypeLabel(event, timekeepingMode)}
+                  {getHistoryTypeLabel(event, timekeepingMode, t)}
                 </Text>
                 <Text style={styles.historyElapsed}>
-                  {getHistoryElapsedLabel(event, timekeepingMode)}
+                  {getHistoryElapsedLabel(event, timekeepingMode, t)}
                 </Text>
                 <Text style={styles.historyDelta}>
                   {getHistoryDeltaLabel(
                     event,
                     timekeepingMode,
                     targetDurationMs,
+                    t,
                   )}
                 </Text>
               </View>
@@ -515,6 +648,7 @@ function TimerTargetWheel({
   wheelTestID,
   reelTestID,
   label,
+  accessibilityLabel,
   value,
   min,
   max,
@@ -611,7 +745,7 @@ function TimerTargetWheel({
 
   return (
     <View
-      accessibilityLabel={`${label} timer target wheel`}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="adjustable"
       accessibilityState={{disabled}}
       onMoveShouldSetResponder={() => !disabled}
@@ -675,27 +809,52 @@ export function TimerScreen() {
     stopTimerEndAlert,
     setGestureInputsBlocked,
     sessionHistory,
+    locale,
   } = useAppState();
+  const t = createTranslator(locale);
   const [modeMenuOpen, setModeMenuOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [timerTargetPopupOpen, setTimerTargetPopupOpen] =
     React.useState(false);
   const [timerTargetDraftDurationMs, setTimerTargetDraftDurationMsState] =
     React.useState(timer.targetDurationMs ?? timerTargetDurationMs);
+  const [pendingTimekeepingMode, setPendingTimekeepingMode] =
+    React.useState<TimekeepingMode | null>(null);
+  const [rewardedAdAccessState, setRewardedAdAccessState] =
+    React.useState<RewardedAdAccessState>('idle');
+  const [rewardedModeAccessStatus, setRewardedModeAccessStatusState] =
+    React.useState<RewardedModeAccessStatus>('active');
+  const rewardedModeAccessStatusRef =
+    React.useRef<RewardedModeAccessStatus>('active');
   const timerTargetDraftDurationMsRef = React.useRef(
     timer.targetDurationMs ?? timerTargetDurationMs,
   );
-  const openTimerTargetAfterModeSwitchRef = React.useRef(false);
+  const rewardedModeAccessRepository = React.useMemo(
+    () => createRewardedModeAccessRepository(),
+    [],
+  );
+  const setRewardedModeAccessStatus = React.useCallback(
+    (status: RewardedModeAccessStatus) => {
+      if (rewardedModeAccessStatusRef.current === status) {
+        return;
+      }
+
+      rewardedModeAccessStatusRef.current = status;
+      setRewardedModeAccessStatusState(status);
+    },
+    [],
+  );
 
   const selectedMode = getTimerModePreset(timerModeId);
+  const selectedModeTitle = getLocalizedTimerModeTitle(locale, selectedMode.id);
+  const visibleTimekeepingMode = pendingTimekeepingMode ?? timekeepingMode;
   const ghostState = getGhostState(timer, selectedMode);
-  const modeMenuScrollMaxHeight = Math.max(
-    MODE_MENU_MIN_HEIGHT,
-    Math.min(
-      MODE_MENU_MAX_HEIGHT,
-      Math.floor(windowHeight * MODE_MENU_SCREEN_HEIGHT_RATIO),
-    ),
-  );
+  const responsiveLayoutScale = getResponsiveLayoutScale(windowHeight);
+  const timerLayoutMetrics = getTimerLayoutMetrics(responsiveLayoutScale);
+  const modeMenuLayoutMetrics =
+    getModeMenuLayoutMetrics(responsiveLayoutScale);
+  const scaledLayoutActive = responsiveLayoutScale > 1;
+  const modeMenuScrollMaxHeight = getModeMenuScrollMaxHeight(windowHeight);
   const gestureJudgmentUnavailable =
     selectedMode.id === 'smileMode'
       ? isSmileJudgmentUnavailable(timer, selectedMode)
@@ -728,31 +887,33 @@ export function TimerScreen() {
     [selectedMode.lapGesture, sessionHistory],
   );
   const latestHistoryRecord = historyEvents[historyEvents.length - 1] ?? null;
+  const stoppedState = isStoppedState(timer, selectedMode);
   const canChangeMode =
     !isTimerAlertActive &&
     (timer.phase === 'idle' ||
       timer.phase === 'ended' ||
-      isStoppedState(timer, selectedMode));
+      stoppedState);
   const canReset = canResetTimer(timer, selectedMode) && !isFinishingSession;
   const shouldShowLapAction =
     timer.phase === 'active' &&
     selectedMode.lapGesture !== undefined &&
-    !isStoppedState(timer, selectedMode);
+    !stoppedState;
   const canRecordLap =
     shouldShowLapAction && !isFinishingSession;
-  const startGesture = getModeHint(selectedMode, 'START');
-  const pauseGesture = getModeHint(selectedMode, 'PAUSE');
-  const resumeGesture = getModeHint(selectedMode, 'RESUME');
-  const resetGesture = getModeHint(selectedMode, 'RESET');
-  const lapGesture = getModeHint(selectedMode, 'LAP');
-  const lapActionLabel = timekeepingMode === 'timer' ? 'MARK' : 'LAP';
+  const startGesture = getModeHint(selectedMode, 'START', locale);
+  const pauseGesture = getModeHint(selectedMode, 'PAUSE', locale);
+  const resumeGesture = getModeHint(selectedMode, 'RESUME', locale);
+  const resetGesture = getModeHint(selectedMode, 'RESET', locale);
+  const lapGesture = getModeHint(selectedMode, 'LAP', locale);
+  const lapActionLabel =
+    visibleTimekeepingMode === 'timer' ? t('timer.mark') : t('timer.lap');
   const resumeRequiresDeviceFlip =
     timer.phase === 'manualPaused' &&
     selectedMode.resumeGesture === 'deviceFaceDown';
   const startBlockedByModeMenu = timer.phase === 'idle' && modeMenuOpen;
   const timerDisplayDurationMs = getTimekeepingDisplayDurationMs(
     timer.focusDurationMs,
-    timekeepingMode,
+    visibleTimekeepingMode,
     timer.targetDurationMs,
     timerTargetDurationMs,
   );
@@ -763,13 +924,20 @@ export function TimerScreen() {
     recentTimerTargetDurationsMs.length > 0
       ? recentTimerTargetDurationsMs.slice(0, 3)
       : DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS;
-  const showsTimerTargetControls = timekeepingMode === 'timer';
+  const showsTimerTargetControls = visibleTimekeepingMode === 'timer';
   const canAdjustTimerTarget =
     showsTimerTargetControls &&
     (timer.phase === 'idle' ||
       timer.phase === 'manualPaused' ||
       timer.phase === 'ended');
   const canOpenTimerTargetPopup = showsTimerTargetControls && canAdjustTimerTarget;
+  const rewardedAdAccessPending = rewardedAdAccessState === 'loading';
+  const rewardedAdAccessMessage =
+    rewardedAdAccessState === 'loading'
+      ? t('timer.adLoading')
+      : rewardedAdAccessState === 'error'
+        ? t('timer.adError')
+        : null;
   const setTimerTargetDraftDurationMs = React.useCallback(
     (durationMs: number) => {
       timerTargetDraftDurationMsRef.current = durationMs;
@@ -816,24 +984,88 @@ export function TimerScreen() {
 
     startTimerSession();
   }, [isTimerAlertActive, startTimerSession, stopTimerEndAlert]);
-  const appTitle = timekeepingMode === 'timer' ? 'TIMER' : 'STOPWATCH';
+  const ensureRewardedModeAccess = React.useCallback(async () => {
+    if (!modeRequiresRewardedAd(timerModeId)) {
+      return true;
+    }
+
+    if (await rewardedModeAccessRepository.hasActiveAccess(timerModeId)) {
+      setRewardedModeAccessStatus('active');
+      setRewardedAdAccessState('idle');
+      return true;
+    }
+
+    setRewardedModeAccessStatus('inactive');
+    setRewardedAdAccessState('loading');
+
+    try {
+      await showRewardedAdForAccess();
+      await rewardedModeAccessRepository.grantAccess(Date.now());
+      setRewardedModeAccessStatus('active');
+      setRewardedAdAccessState('idle');
+      return true;
+    } catch {
+      setRewardedModeAccessStatus('inactive');
+      setRewardedAdAccessState('error');
+      return false;
+    }
+  }, [
+    rewardedModeAccessRepository,
+    setRewardedModeAccessStatus,
+    timerModeId,
+  ]);
+  const completeTimekeepingModeSelection = React.useCallback(
+    (mode: TimekeepingMode) => {
+      if (mode !== timekeepingMode) {
+        setPendingTimekeepingMode(mode);
+      } else {
+        setPendingTimekeepingMode(null);
+      }
+
+      if (mode === 'timer') {
+        setTimerTargetDraftDurationMs(effectiveTimerTargetDurationMs);
+        setTimerTargetPopupOpen(true);
+      } else {
+        setTimerTargetPopupOpen(false);
+      }
+
+      setModeMenuOpen(false);
+
+      if (mode === timekeepingMode) {
+        return;
+      }
+
+      setTimekeepingMode(mode);
+    },
+    [
+      effectiveTimerTargetDurationMs,
+      setTimekeepingMode,
+      setTimerTargetDraftDurationMs,
+      timekeepingMode,
+    ],
+  );
+  const appTitle =
+    visibleTimekeepingMode === 'timer'
+      ? t('timer.timer')
+      : t('timer.stopwatch');
   const primaryAction =
-    timer.phase === 'active'
+    stoppedState
       ? {
-          label: 'PAUSE',
-          gesture: pauseGesture,
-          onPress: pauseTimerSession,
-          disabled: isFinishingSession,
+          label: t('timer.resume'),
+          gesture: resumeGesture,
+          onPress: resumeTimerSession,
+          disabled: isFinishingSession || resumeRequiresDeviceFlip,
         }
-      : timer.phase === 'manualPaused'
+      : timer.phase === 'active'
         ? {
-            label: 'RESUME',
-            gesture: resumeGesture,
-            onPress: resumeTimerSession,
-            disabled: isFinishingSession || resumeRequiresDeviceFlip,
+            label: t('timer.pause'),
+            gesture: pauseGesture,
+            onPress: pauseTimerSession,
+            disabled: isFinishingSession,
           }
         : {
-            label: timer.phase === 'ended' ? 'RESTART' : 'START',
+            label:
+              timer.phase === 'ended' ? t('timer.restart') : t('common.start'),
             gesture: startGesture,
             onPress: handleStartTimerSession,
             disabled: isFinishingSession || startBlockedByModeMenu,
@@ -865,37 +1097,87 @@ export function TimerScreen() {
   }, [canChangeMode, modeMenuOpen]);
 
   React.useEffect(() => {
-    const shouldBlockGestures = modeMenuOpen;
+    if (!modeMenuOpen) {
+      return;
+    }
+
+    let cancelled = false;
+
+    rewardedModeAccessRepository
+      .hasActiveAccess(REWARDED_MODE_ACCESS_PROBE_MODE_ID)
+      .then(hasActiveAccess => {
+        if (cancelled) {
+          return;
+        }
+
+        setRewardedModeAccessStatus(
+          hasActiveAccess ? 'active' : 'inactive',
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRewardedModeAccessStatus('inactive');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    modeMenuOpen,
+    rewardedModeAccessRepository,
+    setRewardedModeAccessStatus,
+  ]);
+
+  React.useEffect(() => {
+    const shouldBlockGestures = modeMenuOpen || timerTargetPopupOpen;
 
     setGestureInputsBlocked(shouldBlockGestures);
 
     return () => {
       setGestureInputsBlocked(false);
     };
-  }, [modeMenuOpen, setGestureInputsBlocked]);
+  }, [modeMenuOpen, setGestureInputsBlocked, timerTargetPopupOpen]);
 
   React.useEffect(() => {
-    if (openTimerTargetAfterModeSwitchRef.current && canOpenTimerTargetPopup) {
-      openTimerTargetAfterModeSwitchRef.current = false;
-      openTimerTargetPopup();
+    if (
+      pendingTimekeepingMode !== null &&
+      pendingTimekeepingMode === timekeepingMode
+    ) {
+      setPendingTimekeepingMode(null);
       return;
     }
+  }, [pendingTimekeepingMode, timekeepingMode]);
 
-    if (!canOpenTimerTargetPopup && timerTargetPopupOpen) {
+  React.useEffect(() => {
+    if (
+      showsTimerTargetControls &&
+      !canOpenTimerTargetPopup &&
+      timerTargetPopupOpen
+    ) {
       setTimerTargetPopupOpen(false);
     }
-  }, [canOpenTimerTargetPopup, openTimerTargetPopup, timerTargetPopupOpen]);
+  }, [
+    canOpenTimerTargetPopup,
+    showsTimerTargetControls,
+    timerTargetPopupOpen,
+  ]);
 
   const handleSelectTimekeepingMode = (mode: TimekeepingMode) => {
-    setModeMenuOpen(false);
-    setTimerTargetPopupOpen(false);
-
-    if (mode === timekeepingMode) {
+    if (rewardedAdAccessPending) {
       return;
     }
 
-    openTimerTargetAfterModeSwitchRef.current = mode === 'timer';
-    setTimekeepingMode(mode);
+    if (!modeRequiresRewardedAd(timerModeId)) {
+      completeTimekeepingModeSelection(mode);
+      return;
+    }
+
+    return ensureRewardedModeAccess().then(hasRewardedModeAccess => {
+      if (hasRewardedModeAccess) {
+        completeTimekeepingModeSelection(mode);
+      }
+    });
   };
 
   const handleSelectMode = (modeId: TimerModeId) => {
@@ -904,6 +1186,7 @@ export function TimerScreen() {
     }
 
     if (modeId !== timerModeId) {
+      setRewardedAdAccessState('idle');
       resetTimerSession();
       setTimerModeId(modeId);
     }
@@ -955,7 +1238,7 @@ export function TimerScreen() {
         </Text>
         <View style={styles.navButtons}>
           <PrimaryButton
-            label="SETTINGS"
+            label={t('common.settings')}
             onPress={() => {
               setScreen('settings');
             }}
@@ -968,9 +1251,14 @@ export function TimerScreen() {
 
       {modeMenuOpen ? null : (
         <ArcadePanel style={styles.timerPanel}>
-        <View style={styles.timerTopStrip} testID="top-timer-readout">
+        <View
+          style={[
+            styles.timerTopStrip,
+            {minHeight: timerLayoutMetrics.topStripMinHeight},
+          ]}
+          testID="top-timer-readout">
           <Pressable
-            accessibilityLabel="Open timer target settings"
+            accessibilityLabel={t('timer.openTargetSettings')}
             accessibilityRole="button"
             accessibilityState={{disabled: !canOpenTimerTargetPopup}}
             disabled={!canOpenTimerTargetPopup}
@@ -984,8 +1272,10 @@ export function TimerScreen() {
               pressed && canOpenTimerTargetPopup && styles.pressedControl,
             ]}>
             <TimerDisplay
+              accessibilityLabelPrefix={t('timer.timer')}
               durationMs={timerDisplayDurationMs}
-              displayMode={timekeepingMode}
+              displayMode={visibleTimekeepingMode}
+              scale={timerLayoutMetrics.timerDisplayScale}
             />
           </Pressable>
           {shouldRenderWinkJudgmentHint ? (
@@ -1003,9 +1293,9 @@ export function TimerScreen() {
               ]}
               testID="timer-wink-unavailable-label">
               {winkUnavailableHintShown
-                ? '윙크 판정 불가능 상태.'
+                ? t('timer.winkUnavailable')
                 : winkReadyHintShown
-                  ? '눈을 크게 뜬상태에서 윙크하세요'
+                  ? t('timer.winkReady')
                   : ' '}
             </Text>
           ) : null}
@@ -1024,11 +1314,11 @@ export function TimerScreen() {
               ]}
               testID="timer-smile-unavailable-label">
               {smileUnavailableHintShown
-                ? 'SMILE UNAVAILABLE'
+                ? t('timer.smileUnavailable')
                 : smileReadyHintShown
                   ? timer.smileDetected === true
-                    ? 'SMILE DETECTED'
-                    : 'SMILE READY'
+                    ? t('timer.smileDetected')
+                    : t('timer.smileReady')
                   : ' '}
             </Text>
           ) : null}
@@ -1038,7 +1328,7 @@ export function TimerScreen() {
           <View style={styles.timerStage} testID="timer-history-stage">
             {showsTimerTargetControls ? (
               <Pressable
-                accessibilityLabel="Reset timer time"
+                accessibilityLabel={t('timer.resetTime')}
                 accessibilityRole="button"
                 accessibilityState={{disabled: !canOpenTimerTargetPopup}}
                 disabled={!canOpenTimerTargetPopup}
@@ -1056,12 +1346,19 @@ export function TimerScreen() {
                   pointerEvents="none"
                   size={14}
                 />
-                <Text style={styles.timerTargetResetLabel}>TIME</Text>
+                <Text style={styles.timerTargetResetLabel}>
+                  {t('timer.time')}
+                </Text>
               </Pressable>
             ) : null}
             <View style={styles.timerBlock} testID="timer-main-content">
               <GhostMascot
+                accessibilityLabel={getLocalizedGhostExpressionLabel(
+                  ghostState.expression,
+                  t,
+                )}
                 expression={ghostState.expression}
+                scale={timerLayoutMetrics.mascotScale}
                 winkSide={ghostState.winkSide}
               />
               <Text
@@ -1069,9 +1366,11 @@ export function TimerScreen() {
                 adjustsFontSizeToFit
                 style={styles.statusLabel}
                 testID="timer-status-label">
-                {getStatusLabel(timer, selectedMode)}
+                {getStatusLabel(timer, selectedMode, t)}
               </Text>
-              {finishError ? <Text style={styles.error}>{finishError}</Text> : null}
+              {finishError ? (
+                <Text style={styles.error}>{t(finishError)}</Text>
+              ) : null}
             </View>
 
             {latestHistoryRecord ? (
@@ -1079,19 +1378,30 @@ export function TimerScreen() {
                 style={styles.latestLapRecord}
                 testID="latest-history-record">
                 <Text style={styles.latestLapLabel}>
-                  {isTimerMarkEvent(latestHistoryRecord, timekeepingMode)
-                    ? 'LAST MARK'
+                  {isTimerMarkEvent(latestHistoryRecord, visibleTimekeepingMode)
+                    ? t('timer.lastMark')
                     : latestHistoryRecord.type === 'LAP'
-                      ? 'LAST LAP'
-                      : latestHistoryRecord.type}
+                      ? t('timer.lastLap')
+                      : getHistoryTypeLabel(
+                          latestHistoryRecord,
+                          visibleTimekeepingMode,
+                          t,
+                        )}
                 </Text>
                 <Text
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   style={styles.latestLapValue}>
-                  {getHistoryElapsedLabel(latestHistoryRecord, timekeepingMode)}
+                  {getHistoryElapsedLabel(
+                    latestHistoryRecord,
+                    visibleTimekeepingMode,
+                    t,
+                  )}
                 </Text>
-                {isTimerMarkEvent(latestHistoryRecord, timekeepingMode) ? (
+                {isTimerMarkEvent(
+                  latestHistoryRecord,
+                  visibleTimekeepingMode,
+                ) ? (
                   <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
@@ -1099,6 +1409,7 @@ export function TimerScreen() {
                     {getTimerMarkLeftLabel(
                       latestHistoryRecord,
                       effectiveTimerTargetDurationMs,
+                      t,
                     )}
                   </Text>
                 ) : null}
@@ -1109,14 +1420,15 @@ export function TimerScreen() {
               <SessionHistoryOverlay
                 events={historyEvents}
                 targetDurationMs={effectiveTimerTargetDurationMs}
-                timekeepingMode={timekeepingMode}
+                timekeepingMode={visibleTimekeepingMode}
+                t={t}
               />
             ) : null}
           </View>
 
           <View style={styles.actionDock}>
             <TimerActionButton
-              label={shouldShowLapAction ? lapActionLabel : 'RESET'}
+              label={shouldShowLapAction ? lapActionLabel : t('timer.reset')}
               gesture={shouldShowLapAction ? lapGesture : resetGesture}
               onPress={
                 shouldShowLapAction
@@ -1134,8 +1446,10 @@ export function TimerScreen() {
               variant="primary"
             />
             <TimerActionButton
-              label={isTimerAlertActive ? 'STOP ALERT' : 'TIMELINE'}
-              gesture="Button"
+              label={
+                isTimerAlertActive ? t('timer.stopAlert') : t('timer.timeline')
+              }
+              gesture={t('gesture.Button')}
               onPress={
                 isTimerAlertActive ? stopTimerEndAlert : handleToggleHistory
               }
@@ -1154,10 +1468,10 @@ export function TimerScreen() {
                 <Text
                   style={styles.timerTargetPopupTitle}
                   testID="timer-target-popup-title">
-                  SET TIMER
+                  {t('timer.setTimer')}
                 </Text>
                 <Pressable
-                  accessibilityLabel="Cancel timer target settings"
+                  accessibilityLabel={t('common.cancel')}
                   accessibilityRole="button"
                   onPress={cancelTimerTargetPopup}
                   style={({pressed}) => [
@@ -1174,7 +1488,10 @@ export function TimerScreen() {
               <TimerTargetWheel
                 wheelTestID="timer-target-hour-wheel"
                 reelTestID="timer-target-hour-reel"
-                label="HOUR"
+                label={t('timer.hour')}
+                accessibilityLabel={t('timer.targetWheel', {
+                  label: t('timer.hour'),
+                })}
                 value={timerTargetDraftParts.hours}
                 min={0}
                 max={MAX_TIMER_TARGET_HOURS}
@@ -1186,7 +1503,10 @@ export function TimerScreen() {
               <TimerTargetWheel
                 wheelTestID="timer-target-minute-wheel"
                 reelTestID="timer-target-minute-reel"
-                label="MIN"
+                label={t('timer.minute')}
+                accessibilityLabel={t('timer.targetWheel', {
+                  label: t('timer.minute'),
+                })}
                 value={timerTargetDraftParts.minutes}
                 min={0}
                 max={MAX_TIMER_TARGET_UNIT_VALUE}
@@ -1199,7 +1519,10 @@ export function TimerScreen() {
               <TimerTargetWheel
                 wheelTestID="timer-target-second-wheel"
                 reelTestID="timer-target-second-reel"
-                label="SEC"
+                label={t('timer.second')}
+                accessibilityLabel={t('timer.targetWheel', {
+                  label: t('timer.second'),
+                })}
                 value={timerTargetDraftParts.seconds}
                 min={0}
                 max={MAX_TIMER_TARGET_UNIT_VALUE}
@@ -1214,7 +1537,9 @@ export function TimerScreen() {
                 <View
                   style={styles.timerTargetRecentSection}
                   testID="timer-target-recent-section">
-                  <Text style={styles.timerTargetRecentTitle}>RECENT</Text>
+                  <Text style={styles.timerTargetRecentTitle}>
+                    {t('timer.recent')}
+                  </Text>
                   <View style={styles.timerTargetRecentList}>
                     {visibleRecentTimerTargetDurationsMs.map(durationMs => {
                       const selected =
@@ -1222,9 +1547,11 @@ export function TimerScreen() {
 
                       return (
                         <Pressable
-                          accessibilityLabel={`Use recent timer target ${formatRecentTimerTargetDurationMs(
-                            durationMs,
-                          )}`}
+                          accessibilityLabel={t('timer.useRecentTarget', {
+                            target: formatRecentTimerTargetDurationMs(
+                              durationMs,
+                            ),
+                          })}
                           accessibilityRole="button"
                           accessibilityState={{selected}}
                           key={durationMs}
@@ -1247,7 +1574,7 @@ export function TimerScreen() {
                 </View>
               ) : null}
               <PrimaryButton
-                label="DONE"
+                label={t('common.done')}
                 onPress={applyTimerTargetPopup}
                 variant="secondary"
                 style={styles.timerTargetDoneButton}
@@ -1262,10 +1589,22 @@ export function TimerScreen() {
       <View style={styles.modeSection} testID="mode-selector-bottom">
         {canChangeMode && modeMenuOpen ? (
           <>
-            <View style={styles.modeMenu} testID="mode-menu">
+            <View
+              style={[
+                styles.modeMenu,
+                scaledLayoutActive && {
+                  padding: modeMenuLayoutMetrics.panelPadding,
+                },
+              ]}
+              testID="mode-menu">
               <ScrollView
                 bounces={false}
-                contentContainerStyle={styles.modeMenuList}
+                contentContainerStyle={[
+                  styles.modeMenuList,
+                  scaledLayoutActive && {
+                    gap: modeMenuLayoutMetrics.listGap,
+                  },
+                ]}
                 nestedScrollEnabled
                 showsVerticalScrollIndicator
                 style={[
@@ -1275,23 +1614,60 @@ export function TimerScreen() {
                 testID="mode-menu-scroll">
                 {timerModePresets.map(mode => {
                   const active = mode.id === timerModeId;
+                  const modeTitle = getLocalizedTimerModeTitle(
+                    locale,
+                    mode.id,
+                  );
 
                   return (
                     <Pressable
-                      accessibilityLabel={`${mode.title} mode`}
+                      accessibilityLabel={t('timer.modeAccessibility', {
+                        mode: modeTitle,
+                      })}
                       accessibilityRole="button"
                       accessibilityState={{selected: active}}
                       key={mode.id}
                       onPress={() => handleSelectMode(mode.id)}
                       style={({pressed}) => [
                         styles.modeMenuItem,
+                        scaledLayoutActive && {
+                          minHeight: modeMenuLayoutMetrics.itemMinHeight,
+                          padding: modeMenuLayoutMetrics.itemPadding,
+                        },
                         active && styles.activeModeMenuItem,
                         pressed && canChangeMode && styles.pressedControl,
                       ]}>
                       <View style={styles.modeMenuCopy}>
-                        <Text style={styles.modeMenuTitle}>{mode.title}</Text>
-                        <Text style={styles.modeMenuSummary}>
-                          {getModeActionSummary(mode)}
+                        <View style={styles.modeMenuTitleRow}>
+                          <Text
+                            style={[
+                              styles.modeMenuTitle,
+                              scaledLayoutActive && {
+                                fontSize: modeMenuLayoutMetrics.titleFontSize,
+                                lineHeight: modeMenuLayoutMetrics.titleLineHeight,
+                              },
+                            ]}>
+                            {modeTitle}
+                          </Text>
+                          {modeRequiresRewardedAd(mode.id) &&
+                          rewardedModeAccessStatus === 'inactive' ? (
+                            <Text
+                              style={styles.rewardedModeAccessLabel}
+                              testID="rewarded-mode-access-label">
+                              {t('rewarded.accessLabel')}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Text
+                          style={[
+                            styles.modeMenuSummary,
+                            scaledLayoutActive && {
+                              fontSize: modeMenuLayoutMetrics.summaryFontSize,
+                              lineHeight:
+                                modeMenuLayoutMetrics.summaryLineHeight,
+                            },
+                          ]}>
+                          {getModeActionSummary(mode, locale)}
                         </Text>
                       </View>
                       <View style={styles.modeMenuState}>
@@ -1316,30 +1692,51 @@ export function TimerScreen() {
               style={styles.timekeepingModeOptions}
               testID="timekeeping-mode-options">
               <TimerActionButton
-                accessibilityState={{selected: timekeepingMode === 'stopwatch'}}
+                accessibilityState={{
+                  selected: visibleTimekeepingMode === 'stopwatch',
+                }}
                 hideGesture
-                label="STOPWATCH"
+                label={t('timer.stopwatch')}
                 onPress={() => handleSelectTimekeepingMode('stopwatch')}
+                disabled={rewardedAdAccessPending}
                 variant={
-                  timekeepingMode === 'stopwatch' ? 'primary' : 'secondary'
+                  visibleTimekeepingMode === 'stopwatch'
+                    ? 'primary'
+                    : 'secondary'
                 }
                 testID="timekeeping-stopwatch-button"
                 style={styles.timekeepingModeChoice}
               />
               <TimerActionButton
-                accessibilityState={{selected: timekeepingMode === 'timer'}}
+                accessibilityState={{
+                  selected: visibleTimekeepingMode === 'timer',
+                }}
                 hideGesture
-                label="TIMER"
+                label={t('timer.timer')}
                 onPress={() => handleSelectTimekeepingMode('timer')}
-                variant={timekeepingMode === 'timer' ? 'primary' : 'secondary'}
+                disabled={rewardedAdAccessPending}
+                variant={
+                  visibleTimekeepingMode === 'timer' ? 'primary' : 'secondary'
+                }
                 testID="timekeeping-timer-button"
                 style={styles.timekeepingModeChoice}
               />
             </View>
+            {rewardedAdAccessMessage ? (
+              <Text
+                style={[
+                  styles.rewardedAdAccessMessage,
+                  rewardedAdAccessState === 'error' &&
+                    styles.rewardedAdAccessErrorMessage,
+                ]}
+                testID="rewarded-ad-access-message">
+                {rewardedAdAccessMessage}
+              </Text>
+            ) : null}
           </>
         ) : (
           <Pressable
-            accessibilityLabel="Open mode menu"
+            accessibilityLabel={t('timer.openModeMenu')}
             accessibilityRole="button"
             accessibilityState={{
               disabled: !canChangeMode,
@@ -1353,15 +1750,18 @@ export function TimerScreen() {
               pressed && canChangeMode && styles.pressedControl,
             ]}>
             <View style={styles.modeButtonCopy}>
-              <Text style={styles.modeButtonLabel}>MODE</Text>
-              <Text style={styles.modeButtonTitle}>{selectedMode.title}</Text>
+              <Text style={styles.modeButtonLabel}>{t('timer.mode')}</Text>
+              <Text style={styles.modeButtonTitle}>{selectedModeTitle}</Text>
             </View>
-            <Text style={styles.modeButtonCue}>CHANGE</Text>
+            <Text style={styles.modeButtonCue}>{t('timer.change')}</Text>
           </Pressable>
         )}
       </View>
 
-      <View style={styles.adSlot} testID="ad-slot" />
+      {modeMenuOpen ? (
+        <View style={styles.modeMenuAdSpacer} testID="mode-menu-ad-spacer" />
+      ) : null}
+      <AdMobBanner />
     </View>
   );
 }
@@ -1689,6 +2089,10 @@ const styles = StyleSheet.create({
     elevation: 40,
     zIndex: 40,
   },
+  modeMenuAdSpacer: {
+    flex: 1,
+    minHeight: 0,
+  },
   modeButton: {
     alignItems: 'center',
     backgroundColor: arcadeTheme.colors.panel,
@@ -1773,16 +2177,41 @@ const styles = StyleSheet.create({
     gap: arcadeTheme.spacing.xs,
     minWidth: 0,
   },
+  modeMenuTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: arcadeTheme.spacing.xs,
+  },
   modeMenuTitle: {
     ...arcadeTheme.typography.body,
     color: arcadeTheme.colors.ink,
     fontWeight: '900',
+  },
+  rewardedModeAccessLabel: {
+    ...arcadeTheme.typography.label,
+    backgroundColor: arcadeTheme.colors.panelMuted,
+    borderColor: arcadeTheme.colors.line,
+    borderRadius: arcadeTheme.radii.chip,
+    borderWidth: 1,
+    color: arcadeTheme.colors.softInk,
+    overflow: 'hidden',
+    paddingHorizontal: arcadeTheme.spacing.sm,
+    paddingVertical: 2,
   },
   modeMenuSummary: {
     ...arcadeTheme.typography.label,
     color: arcadeTheme.colors.softInk,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  rewardedAdAccessMessage: {
+    ...arcadeTheme.typography.label,
+    color: arcadeTheme.colors.mutedInk,
+    textAlign: 'center',
+  },
+  rewardedAdAccessErrorMessage: {
+    color: arcadeTheme.colors.danger,
   },
   modeMenuState: {
     alignItems: 'center',
@@ -1962,8 +2391,5 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     minWidth: 72,
     textAlign: 'right',
-  },
-  adSlot: {
-    minHeight: 86,
   },
 });

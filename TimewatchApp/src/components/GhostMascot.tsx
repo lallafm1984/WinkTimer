@@ -11,7 +11,9 @@ export type {GhostExpression} from './mascotImages';
 export type WinkSide = 'left' | 'right' | 'any';
 
 type GhostMascotProps = {
+  accessibilityLabel?: string;
   expression: GhostExpression;
+  scale?: number;
   size?: 'large' | 'medium';
   winkSide?: WinkSide;
 };
@@ -37,7 +39,9 @@ export function getGhostExpressionLabel(
 }
 
 export function GhostMascot({
+  accessibilityLabel,
   expression,
+  scale = 1,
   size = 'large',
   winkSide = 'any',
 }: GhostMascotProps) {
@@ -46,9 +50,11 @@ export function GhostMascot({
   );
   const lastExpressionRef = React.useRef(expression);
   const mascotSize =
-    size === 'large'
-      ? arcadeTheme.dimensions.mascotLarge
-      : arcadeTheme.dimensions.mascotMedium;
+    Math.round(
+      (size === 'large'
+        ? arcadeTheme.dimensions.mascotLarge
+        : arcadeTheme.dimensions.mascotMedium) * scale,
+    );
 
   React.useEffect(() => {
     if (lastExpressionRef.current === expression) {
@@ -62,7 +68,9 @@ export function GhostMascot({
   return (
     <View
       accessibilityRole="image"
-      accessibilityLabel={getGhostExpressionLabel(expression, winkSide)}
+      accessibilityLabel={
+        accessibilityLabel ?? getGhostExpressionLabel(expression, winkSide)
+      }
       style={[styles.stage, {height: mascotSize, width: mascotSize}]}>
       <Image
         fadeDuration={0}

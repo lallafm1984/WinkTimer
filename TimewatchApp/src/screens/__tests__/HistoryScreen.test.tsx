@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
-import {Text} from 'react-native';
+import {NativeModules, Text} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import {AppStateProvider} from '../../state/AppState';
 import {HistoryScreen} from '../HistoryScreen';
@@ -16,11 +16,22 @@ function flattenText(value: unknown): string {
 }
 
 describe('HistoryScreen', () => {
+  const nativeModules = NativeModules as typeof NativeModules & {
+    I18nManager?: {localeIdentifier?: string};
+  };
+  const originalI18nManager = nativeModules.I18nManager;
+
   beforeEach(() => {
     jest.useFakeTimers();
+    nativeModules.I18nManager = {localeIdentifier: 'ko_KR'};
   });
 
   afterEach(() => {
+    if (originalI18nManager) {
+      nativeModules.I18nManager = originalI18nManager;
+    } else {
+      delete nativeModules.I18nManager;
+    }
     jest.restoreAllMocks();
     jest.useRealTimers();
   });

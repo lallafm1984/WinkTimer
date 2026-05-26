@@ -49,6 +49,8 @@ export function PrimaryButton({
         style,
       ]}>
       <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
         style={[
           styles.label,
           variant === 'secondary' ? styles.secondaryLabel : styles.primaryLabel,

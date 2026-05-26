@@ -1,4 +1,7 @@
 {
   "name": "WinkTimer",
-  "displayName": "Wink Timer"
+  "displayName": "Wink Timer",
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-9163944262143117~4717352665"
+  }
 }

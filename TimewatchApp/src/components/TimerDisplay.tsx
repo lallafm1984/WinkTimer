@@ -3,8 +3,10 @@ import {StyleSheet, Text} from 'react-native';
 import {arcadeTheme} from '../theme/arcadeTheme';
 
 type TimerDisplayProps = {
+  accessibilityLabelPrefix?: string;
   durationMs: number;
   displayMode?: 'stopwatch' | 'timer';
+  scale?: number;
   size?: 'large' | 'medium';
 };
 
@@ -49,22 +51,39 @@ export function formatTimerDuration(durationMs: number): string {
 }
 
 export function TimerDisplay({
+  accessibilityLabelPrefix = 'Timer',
   durationMs,
   displayMode = 'stopwatch',
+  scale = 1,
   size = 'large',
 }: TimerDisplayProps) {
   const formatted =
     displayMode === 'timer'
       ? formatTimerDuration(durationMs)
       : formatDuration(durationMs);
+  const baseTypography =
+    size === 'medium'
+      ? arcadeTheme.typography.timerMedium
+      : arcadeTheme.typography.timerLarge;
+  const scaledTypography =
+    scale > 1
+      ? {
+          fontSize: Math.round((baseTypography.fontSize as number) * scale),
+          lineHeight: Math.round((baseTypography.lineHeight as number) * scale),
+        }
+      : null;
 
   return (
     <Text
       adjustsFontSizeToFit
       minimumFontScale={0.72}
       numberOfLines={1}
-      accessibilityLabel={`타이머 ${formatted}`}
-      style={[styles.time, size === 'medium' && styles.medium]}>
+      accessibilityLabel={`${accessibilityLabelPrefix} ${formatted}`}
+      style={[
+        styles.time,
+        size === 'medium' && styles.medium,
+        scaledTypography,
+      ]}>
       {formatted}
     </Text>
   );

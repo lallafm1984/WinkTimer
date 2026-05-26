@@ -2,17 +2,19 @@ import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {PrimaryButton} from '../components/PrimaryButton';
 import {TimerDisplay} from '../components/TimerDisplay';
+import {createTranslator} from '../i18n/localization';
 import {useAppState} from '../state/AppState';
 
 export function SessionSummaryScreen() {
-  const {lastSummary, setScreen} = useAppState();
+  const {lastSummary, locale, setScreen} = useAppState();
+  const t = createTranslator(locale);
 
   if (lastSummary === null) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>완료된 세션이 없습니다.</Text>
+        <Text style={styles.title}>{t('summary.noSession')}</Text>
         <PrimaryButton
-          label="타이머로 돌아가기"
+          label={t('summary.returnTimer')}
           onPress={() => {
             setScreen('timer');
           }}
@@ -23,29 +25,36 @@ export function SessionSummaryScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.eyebrow}>세션 요약</Text>
-      <Text style={styles.title}>이번 집중 시간</Text>
+      <Text style={styles.eyebrow}>{t('summary.eyebrow')}</Text>
+      <Text style={styles.title}>{t('summary.title')}</Text>
 
       <View style={styles.metricHero}>
-        <TimerDisplay durationMs={lastSummary.focusDurationMs} />
+        <TimerDisplay
+          accessibilityLabelPrefix={t('summary.title')}
+          durationMs={lastSummary.focusDurationMs}
+        />
       </View>
 
       <View style={styles.metrics}>
         <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>멈춘 시간</Text>
+          <Text style={styles.metricLabel}>{t('summary.pausedTime')}</Text>
           <TimerDisplay
+            accessibilityLabelPrefix={t('summary.pausedTime')}
             durationMs={lastSummary.lookPausedDurationMs}
             size="medium"
           />
         </View>
         <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>멈춤 횟수</Text>
-          <Text style={styles.metricValue}>{lastSummary.lookPauseCount}회</Text>
+          <Text style={styles.metricLabel}>{t('summary.pauseCount')}</Text>
+          <Text style={styles.metricValue}>
+            {lastSummary.lookPauseCount}
+            {t('history.countUnit')}
+          </Text>
         </View>
       </View>
 
       <PrimaryButton
-        label="타이머로 돌아가기"
+        label={t('summary.returnTimer')}
         onPress={() => {
           setScreen('timer');
         }}

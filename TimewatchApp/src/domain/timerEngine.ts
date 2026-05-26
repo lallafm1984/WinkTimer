@@ -169,25 +169,48 @@ export function pauseTimer(state: TimerState, nowMs: number, sensitivity: Sensit
 }
 
 export function resumeTimer(state: TimerState, nowMs: number): TimerState {
-  if (state.phase !== 'manualPaused') {
-    return state;
+  if (
+    state.phase === 'active' &&
+    (state.isLookPaused || state.detectionStatus === 'looking')
+  ) {
+    const advanced = accumulate(state, nowMs);
+
+    return {
+      ...advanced,
+      phase: 'active',
+      lastUpdatedAtMs: nowMs,
+      detectionStatus: 'unknown',
+      eyeState: 'unknown',
+      winkSide: null,
+      smileDetected: null,
+      recentWinkSide: null,
+      recentWinkAtMs: null,
+      lookingStartedAtMs: null,
+      isLookPaused: false,
+      oneEyeClosedStartedAtMs: null,
+      oneEyeResetArmed: true,
+    };
   }
 
-  return {
-    ...state,
-    phase: 'active',
-    lastUpdatedAtMs: nowMs,
-    detectionStatus: 'unknown',
-    eyeState: 'unknown',
-    winkSide: null,
-    smileDetected: null,
-    recentWinkSide: null,
-    recentWinkAtMs: null,
-    lookingStartedAtMs: null,
-    isLookPaused: false,
-    oneEyeClosedStartedAtMs: null,
-    oneEyeResetArmed: true,
-  };
+  if (state.phase === 'manualPaused') {
+    return {
+      ...state,
+      phase: 'active',
+      lastUpdatedAtMs: nowMs,
+      detectionStatus: 'unknown',
+      eyeState: 'unknown',
+      winkSide: null,
+      smileDetected: null,
+      recentWinkSide: null,
+      recentWinkAtMs: null,
+      lookingStartedAtMs: null,
+      isLookPaused: false,
+      oneEyeClosedStartedAtMs: null,
+      oneEyeResetArmed: true,
+    };
+  }
+
+  return state;
 }
 
 export function resetTimer(state: TimerState, nowMs: number): TimerState {

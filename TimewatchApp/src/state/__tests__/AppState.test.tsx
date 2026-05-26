@@ -51,11 +51,20 @@ type NativeTimerAlertModuleForTest = {
 type MutableNativeModules = typeof NativeModules & {
   NativeGazeDetection?: NativeGazeDetectionModuleForTest;
   NativeTimerAlert?: NativeTimerAlertModuleForTest;
+  I18nManager?: {localeIdentifier?: string};
+  SettingsManager?: {
+    settings?: {
+      AppleLocale?: string;
+      AppleLanguages?: string[];
+    };
+  };
 };
 
 const nativeModules = NativeModules as MutableNativeModules;
 const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
 const originalNativeTimerAlert = nativeModules.NativeTimerAlert;
+const originalI18nManager = nativeModules.I18nManager;
+const originalSettingsManager = nativeModules.SettingsManager;
 const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
 
 function AppStateHarness() {
@@ -74,6 +83,7 @@ function AppStateHarness() {
       <Text>{`lookPaused:${app.timer.isLookPaused}`}</Text>
       <Text>{`sensitivity:${app.sensitivity}`}</Text>
       <Text>{`mode:${app.statusDisplayMode}`}</Text>
+      <Text>{`language:${app.locale}`}</Text>
       <Text>{`normalTimerMode:${app.normalTimerMode}`}</Text>
       <Text>{`timekeepingMode:${app.timekeepingMode}`}</Text>
       <Text>{`timerTarget:${app.timerTargetDurationMs}`}</Text>
@@ -135,6 +145,14 @@ function AppStateHarness() {
           app.setStatusDisplayMode('text');
         }}>
         text status
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="language-japanese"
+        onPress={() => {
+          app.setLocale('ja-JP');
+        }}>
+        japanese language
       </Text>
       <Text
         accessibilityRole="button"
@@ -488,6 +506,8 @@ describe('AppStateProvider app flow', () => {
         appStateListeners.push(listener);
         return {remove: jest.fn()};
       });
+    nativeModules.I18nManager = {localeIdentifier: 'en_US'};
+    delete nativeModules.SettingsManager;
     await AsyncStorage.clear();
   });
 
@@ -502,6 +522,18 @@ describe('AppStateProvider app flow', () => {
       nativeModules.NativeTimerAlert = originalNativeTimerAlert;
     } else {
       delete nativeModules.NativeTimerAlert;
+    }
+
+    if (originalI18nManager) {
+      nativeModules.I18nManager = originalI18nManager;
+    } else {
+      delete nativeModules.I18nManager;
+    }
+
+    if (originalSettingsManager) {
+      nativeModules.SettingsManager = originalSettingsManager;
+    } else {
+      delete nativeModules.SettingsManager;
     }
 
     jest.restoreAllMocks();
@@ -594,6 +626,7 @@ describe('AppStateProvider app flow', () => {
 
     expect(hasText(renderer, 'screen:timer')).toBe(true);
     expect(hasText(renderer, 'mode:minimal')).toBe(true);
+    expect(hasText(renderer, 'language:en-US')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
     expect(hasText(renderer, 'timerTarget:300000')).toBe(true);
     expect(hasText(renderer, 'recentTimerTargets:30000|60000|600000'))
@@ -607,6 +640,16 @@ describe('AppStateProvider app flow', () => {
       true,
     );
     expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('uses the device locale when no saved language setting exists', async () => {
+    nativeModules.I18nManager = {localeIdentifier: 'ja_JP'};
+
+    const renderer = await renderHarness();
+
+    expect(hasText(renderer, 'language:ja-JP')).toBe(true);
 
     await unmount(renderer);
   });
@@ -850,6 +893,7 @@ describe('AppStateProvider app flow', () => {
       JSON.stringify({
         sensitivity: 'strict',
         statusDisplayMode: 'text',
+        locale: 'de-DE',
         normalTimerMode: true,
         timekeepingMode: 'timer',
         timerTargetDurationMs: 60000,
@@ -909,6 +953,7 @@ describe('AppStateProvider app flow', () => {
 
     expect(hasText(renderer, 'sensitivity:strict')).toBe(true);
     expect(hasText(renderer, 'mode:text')).toBe(true);
+    expect(hasText(renderer, 'language:de-DE')).toBe(true);
     expect(hasText(renderer, 'normalTimerMode:true')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
     expect(hasText(renderer, 'timerTarget:60000')).toBe(true);
@@ -966,6 +1011,7 @@ describe('AppStateProvider app flow', () => {
 
     await press(renderer, 'sensitivity-strict');
     await press(renderer, 'status-text');
+    await press(renderer, 'language-japanese');
     await press(renderer, 'normal-mode');
     await press(renderer, 'timer-function');
     await press(renderer, 'target-one-minute');
@@ -993,6 +1039,7 @@ describe('AppStateProvider app flow', () => {
     expect(persistedSettings).toEqual({
       sensitivity: 'strict',
       statusDisplayMode: 'text',
+      locale: 'ja-JP',
       normalTimerMode: true,
       timekeepingMode: 'timer',
       timerTargetDurationMs: 60000,

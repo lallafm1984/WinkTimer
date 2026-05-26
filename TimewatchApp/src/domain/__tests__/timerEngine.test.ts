@@ -244,6 +244,25 @@ describe('timerEngine', () => {
     expect(state.lookPauseCount).toBe(0);
   });
 
+  it('resumes from active look pause with fresh unknown detection state', () => {
+    let state = createInitialTimerState(0);
+    state = startTimer(state, 0, undefined);
+    state = applyDetection(state, {
+      status: 'looking',
+      confidence: 0.95,
+      atMs: 0,
+    });
+    state = tickTimer(state, 4000);
+    state = resumeTimer(state, 5000);
+
+    expect(state.phase).toBe('active');
+    expect(state.detectionStatus).toBe('unknown');
+    expect(state.lookingStartedAtMs).toBeNull();
+    expect(state.isLookPaused).toBe(false);
+    expect(state.lookPausedDurationMs).toBe(5000);
+    expect(state.focusDurationMs).toBe(0);
+  });
+
   it('ignores detection before a timer starts', () => {
     const idle = createInitialTimerState(0);
 

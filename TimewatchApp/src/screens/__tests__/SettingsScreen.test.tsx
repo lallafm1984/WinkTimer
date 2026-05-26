@@ -1,5 +1,5 @@
 import React from 'react';
-import {NativeModules, StyleSheet, Text} from 'react-native';
+import {NativeModules, StyleSheet, Text, View} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import {TIMER_ALERT_PREVIEW_DURATION_MS} from '../../alerts/timerAlert';
 import {SettingsScreen} from '../SettingsScreen';
@@ -7,6 +7,7 @@ import {SettingsScreen} from '../SettingsScreen';
 const mockSetScreen = jest.fn();
 const mockSetSensitivity = jest.fn();
 const mockSetStatusDisplayMode = jest.fn();
+const mockSetLocale = jest.fn();
 const mockSetNormalTimerMode = jest.fn();
 const mockSetWinkLeftEyeClosedThreshold = jest.fn();
 const mockSetWinkRightEyeClosedThreshold = jest.fn();
@@ -140,6 +141,8 @@ const mockState = {
   setSensitivity: mockSetSensitivity,
   statusDisplayMode: 'minimal',
   setStatusDisplayMode: mockSetStatusDisplayMode,
+  locale: 'en-US',
+  setLocale: mockSetLocale,
   normalTimerMode: false,
   setNormalTimerMode: mockSetNormalTimerMode,
   winkLeftEyeClosedThreshold: 0.1,
@@ -350,6 +353,7 @@ describe('SettingsScreen', () => {
     mockState.timerAlertSoundId = 'alarm';
     mockState.timerAlertDurationId = 'seconds:4';
     mockState.timerAlertVibrationPatternId = 'double';
+    mockState.locale = 'en-US';
     (NativeModules as {NativeTimerAlert?: unknown}).NativeTimerAlert = {
       previewTimerAlertSound: jest.fn().mockResolvedValue(undefined),
       getTimerAlertSoundOptions: jest.fn().mockResolvedValue([
@@ -377,7 +381,6 @@ describe('SettingsScreen', () => {
     const text = getRenderedText(renderer);
 
     expect(getSettingsAccordionTitles(renderer)).toEqual([
-      'REMOVE ADS',
       'TIMER',
       'LOOK MODE',
       'WINK MODE',
@@ -385,6 +388,10 @@ describe('SettingsScreen', () => {
       'CAMERA',
       'LANGUAGE',
     ]);
+    expect(text).not.toContain('REMOVE ADS');
+    expect(renderer.root.findAllByProps({
+      testID: 'remove-ads-settings-accordion',
+    })).toHaveLength(0);
     expect(text).not.toContain('WINK TEST');
     expect(renderer.root.findAllByProps({testID: 'wink-test-accordion'}))
       .toHaveLength(0);
@@ -393,18 +400,58 @@ describe('SettingsScreen', () => {
     expect(text).not.toContain('LEFT EYE CLOSED');
   });
 
-  it('emphasizes only the remove ads settings item', () => {
+  it('does not emphasize any visible settings item while remove ads is hidden', () => {
     const renderer = renderSettingsScreen();
-    const removeAdsStyle = getNodeStyle(
-      renderer,
-      'remove-ads-settings-accordion',
-    );
     const timerStyle = getNodeStyle(renderer, 'timer-alert-settings-accordion');
     const lookStyle = getNodeStyle(renderer, 'look-settings-accordion');
 
-    expect(removeAdsStyle.backgroundColor).toBe('#FFF4D8');
+    expect(renderer.root.findAllByProps({
+      testID: 'remove-ads-settings-accordion',
+    })).toHaveLength(0);
     expect(timerStyle.backgroundColor).not.toBe('#FFF4D8');
     expect(lookStyle.backgroundColor).not.toBe('#FFF4D8');
+  });
+
+  it('shows a scrollable language selector and saves the selected language', () => {
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'language-settings-accordion');
+
+    const text = getRenderedText(renderer);
+
+    expect(text).toContain('APP LANGUAGE');
+    expect(text).toContain('English');
+    expect(text).toContain('한국어');
+    expect(text).toContain('اردو');
+    expect(text).not.toContain('미국');
+    expect(text).not.toContain('대한민국');
+    expect(text).not.toContain('파키스탄');
+    expect(
+      renderer.root.findByProps({testID: 'language-option-scroll'}).props
+        .showsVerticalScrollIndicator,
+    ).toBe(true);
+    expect(renderer.root.findByProps({testID: 'language-scrollbar-track'}))
+      .toBeTruthy();
+    expect(getNodeStyle(renderer, 'language-scrollbar-track')).toMatchObject({
+      position: 'absolute',
+      right: 6,
+      width: 4,
+    });
+    expect(renderer.root.findByProps({testID: 'language-scrollbar-thumb'}))
+      .toBeTruthy();
+    expect(
+      renderer.root.findAll(
+        node => node.type === View && node.props.testID === 'language-option-row',
+      ),
+    ).toHaveLength(19);
+    expect(
+      renderer.root.findByProps({testID: 'language-option-en-US'}).props
+        .accessibilityState,
+    ).toEqual({selected: true});
+
+    pressByTestID(renderer, 'language-option-ja-JP');
+
+    expect(mockSetLocale).toHaveBeenCalledWith('ja-JP');
   });
 
   it('makes settings category titles larger than expanded content text', async () => {
@@ -835,7 +882,7 @@ describe('SettingsScreen', () => {
     });
 
     expect(getRenderedText(renderer)).toContain(
-      '카메라를 정면으로 보고 시작을 누르세요',
+      'LOOK AT CAMERA AND PRESS START',
     );
     expect(getNodeStyle(renderer, 'calibration-camera-dot').backgroundColor)
       .toBe('#D93025');
@@ -859,7 +906,9 @@ describe('SettingsScreen', () => {
 
     await advanceCalibrationTimersByTime(3000);
 
-    expect(getRenderedText(renderer)).toContain('왼쪽 눈으로 3번 윙크하세요');
+    expect(getRenderedText(renderer)).toContain(
+      'WINK WITH left eye 3 TIMES',
+    );
     expect(getCalibrationCount(renderer)).toBe('3');
     expect(mockSetWinkLeftEyeClosedThreshold).not.toHaveBeenCalled();
 
@@ -1020,7 +1069,7 @@ describe('SettingsScreen', () => {
     await advanceCalibrationTimersByTime(100);
 
     expect(getCalibrationUnavailableMessage(renderer)).toBe(
-      '윙크 판정 불가능 상태.',
+      'WINK JUDGMENT UNAVAILABLE.',
     );
     expect(getCalibrationCount(renderer)).toBe('3');
 
@@ -1079,8 +1128,8 @@ describe('SettingsScreen', () => {
 
     const text = getRenderedText(renderer);
 
-    expect(text).toContain('측정 실패');
-    expect(text).toContain('선택한 눈이 충분히 감기지 않았습니다');
+    expect(text).toContain('CALIBRATION FAILED');
+    expect(text).toContain('selected eye did not close enough');
     expect(mockSetWinkLeftEyeClosedThreshold).not.toHaveBeenCalled();
     expect(mockSetWinkLeftEyeProbabilityGapThreshold).not.toHaveBeenCalled();
     expect(renderer.root.findAllByProps({
@@ -1134,8 +1183,8 @@ describe('SettingsScreen', () => {
 
     const text = getRenderedText(renderer);
 
-    expect(text).toContain('측정 실패');
-    expect(text).toContain('반대쪽 눈은 뜬 상태로 다시 측정하세요');
+    expect(text).toContain('CALIBRATION FAILED');
+    expect(text).toContain('Keep the other eye open and try again');
     expect(mockSetWinkLeftEyeClosedThreshold).not.toHaveBeenCalled();
   });
 });

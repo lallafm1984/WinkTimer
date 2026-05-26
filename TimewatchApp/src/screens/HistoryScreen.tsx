@@ -3,12 +3,17 @@ import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {PrimaryButton} from '../components/PrimaryButton';
 import {formatDuration} from '../components/TimerDisplay';
 import type {SessionSummary} from '../domain/session';
+import {
+  createTranslator,
+  getIntlLocale,
+  type AppLocale,
+} from '../i18n/localization';
 import {useAppState} from '../state/AppState';
 
-const HISTORY_ERROR_MESSAGE = '기록을 불러오지 못했습니다.';
+type Translator = ReturnType<typeof createTranslator>;
 
-function formatSessionDate(value: string) {
-  return new Date(value).toLocaleString('ko-KR', {
+function formatSessionDate(value: string, locale: AppLocale) {
+  return new Date(value).toLocaleString(getIntlLocale(locale), {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
@@ -16,31 +21,45 @@ function formatSessionDate(value: string) {
   });
 }
 
-function HistoryItem({session}: {session: SessionSummary}) {
+function HistoryItem({
+  session,
+  locale,
+  t,
+}: {
+  session: SessionSummary;
+  locale: AppLocale;
+  t: Translator;
+}) {
   return (
     <View style={styles.item}>
       <View>
         <Text style={styles.itemTitle}>
-          집중 {formatDuration(session.focusDurationMs)}
+          {t('history.focusLabel')} {formatDuration(session.focusDurationMs)}
         </Text>
-        <Text style={styles.itemMeta}>{formatSessionDate(session.startedAt)}</Text>
+        <Text style={styles.itemMeta}>
+          {formatSessionDate(session.startedAt, locale)}
+        </Text>
       </View>
       <View style={styles.itemStats}>
-        <Text style={styles.itemStatLabel}>멈춤</Text>
-        <Text style={styles.itemStatValue}>{session.lookPauseCount}회</Text>
+        <Text style={styles.itemStatLabel}>{t('history.pauseLabel')}</Text>
+        <Text style={styles.itemStatValue}>
+          {session.lookPauseCount}
+          {t('history.countUnit')}
+        </Text>
       </View>
     </View>
   );
 }
 
 export function HistoryScreen() {
-  const {repository, sessions, setScreen, setSessions} = useAppState();
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const {locale, repository, sessions, setScreen, setSessions} = useAppState();
+  const t = createTranslator(locale);
+  const [historyError, setHistoryError] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    setHistoryError(null);
+    setHistoryError(false);
     repository
       .list()
       .then(items => {
@@ -50,7 +69,7 @@ export function HistoryScreen() {
       })
       .catch(() => {
         if (isMounted) {
-          setHistoryError(HISTORY_ERROR_MESSAGE);
+          setHistoryError(true);
         }
       });
 
@@ -62,9 +81,9 @@ export function HistoryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>기록</Text>
+        <Text style={styles.title}>{t('history.title')}</Text>
         <PrimaryButton
-          label="돌아가기"
+          label={t('common.back')}
           onPress={() => {
             setScreen('timer');
           }}
@@ -75,22 +94,23 @@ export function HistoryScreen() {
 
       {historyError ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>{historyError}</Text>
-          <Text style={styles.emptyCopy}>
-            잠시 후 다시 돌아오면 저장된 기록을 다시 불러옵니다.
-          </Text>
+          <Text style={styles.emptyTitle}>{t('history.error')}</Text>
+          <Text style={styles.emptyCopy}>{t('history.errorCopy')}</Text>
         </View>
       ) : sessions.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>아직 저장된 세션이 없습니다.</Text>
-          <Text style={styles.emptyCopy}>
-            타이머를 완료하면 이곳에서 최근 기록부터 확인할 수 있습니다.
-          </Text>
+          <Text style={styles.emptyTitle}>{t('history.emptyTitle')}</Text>
+          <Text style={styles.emptyCopy}>{t('history.emptyCopy')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {sessions.map(session => (
-            <HistoryItem key={session.id} session={session} />
+            <HistoryItem
+              key={session.id}
+              locale={locale}
+              session={session}
+              t={t}
+            />
           ))}
         </ScrollView>
       )}

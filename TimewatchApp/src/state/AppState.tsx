@@ -120,6 +120,12 @@ import {
   type TimerModeId,
   type WinkGestureSide,
 } from '../domain/timerMode';
+import {
+  getDeviceAppLocale,
+  normalizeAppLocale,
+  type AppLocale,
+  type TranslationKey,
+} from '../i18n/localization';
 import type { SessionRepository } from '../storage/sessionRepository';
 import { createSessionRepository } from '../storage/sessionRepository';
 
@@ -127,7 +133,7 @@ const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
 const DEFAULT_TIMER_MODE_ID: TimerModeId = 'basicTimer';
 const MAX_RECENT_TIMER_TARGETS = 3;
 
-const FINISH_ERROR_MESSAGE = '?∏ÏÖò ?Ä?•Ïóê ?§Ìå®?àÏäµ?àÎã§. ?§Ïãú ?úÎèÑ??Ï£ºÏÑ∏??';
+const FINISH_ERROR_KEY: TranslationKey = 'timer.finishError';
 
 export type AppScreen =
   | 'timer'
@@ -147,6 +153,8 @@ type AppStateValue = {
   sessionHistory: SessionHistoryEvent[];
   sensitivity: Sensitivity;
   setSensitivity: React.Dispatch<React.SetStateAction<Sensitivity>>;
+  locale: AppLocale;
+  setLocale: React.Dispatch<React.SetStateAction<AppLocale>>;
   winkLeftEyeClosedThreshold: WinkEyeClosedThreshold;
   setWinkLeftEyeClosedThreshold: React.Dispatch<
     React.SetStateAction<WinkEyeClosedThreshold>
@@ -222,7 +230,7 @@ type AppStateValue = {
   stopTimerEndAlert(): void;
   gestureInputsBlocked: boolean;
   setGestureInputsBlocked: React.Dispatch<React.SetStateAction<boolean>>;
-  finishError: string | null;
+  finishError: TranslationKey | null;
   isFinishingSession: boolean;
   repository: SessionRepository;
   gazeDetector: MockGazeDetector;
@@ -247,6 +255,7 @@ type AppStateProviderProps = {
 
 type PersistedSettings = {
   sensitivity: Sensitivity;
+  locale: AppLocale;
   statusDisplayMode: StatusDisplayMode;
   normalTimerMode: boolean;
   timekeepingMode: TimekeepingMode;
@@ -341,6 +350,7 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
 
   return {
     sensitivity: 'strict',
+    locale: normalizeAppLocale(value.locale),
     statusDisplayMode: normalizeStoredStatusDisplayMode(
       value.statusDisplayMode,
     ),
@@ -840,6 +850,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     [],
   );
   const [sensitivity, setSensitivityState] = useState<Sensitivity>('strict');
+  const [locale, setLocale] = useState<AppLocale>(getDeviceAppLocale);
   const [winkLeftEyeClosedThreshold, setWinkLeftEyeClosedThreshold] =
     useState<WinkEyeClosedThreshold>(DEFAULT_WINK_EYE_CLOSED_THRESHOLD);
   const [winkRightEyeClosedThreshold, setWinkRightEyeClosedThreshold] =
@@ -906,7 +917,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     DEFAULT_TIMER_ALERT_VIBRATION_PATTERN_ID,
   );
   const [isTimerAlertActive, setIsTimerAlertActiveState] = useState(false);
-  const [finishError, setFinishError] = useState<string | null>(null);
+  const [finishError, setFinishError] = useState<TranslationKey | null>(null);
   const [isFinishingSession, setIsFinishingSession] = useState(false);
   const [isAppForeground, setIsAppForeground] = useState(true);
   const [gestureInputsBlocked, setGestureInputsBlocked] = useState(false);
@@ -1040,6 +1051,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         }
 
         setSensitivity(nextSettings.sensitivity);
+        setLocale(nextSettings.locale);
         setStatusDisplayMode(nextSettings.statusDisplayMode);
         setNormalTimerMode(nextSettings.normalTimerMode);
         setTimekeepingModeState(nextSettings.timekeepingMode);
@@ -1120,6 +1132,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
 
     const settings: PersistedSettings = {
       sensitivity,
+      locale,
       statusDisplayMode,
       normalTimerMode,
       timekeepingMode,
@@ -1153,6 +1166,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     detectionPerformanceMode,
     detectionResolutionLevel,
     faceHeightAngleLevel,
+    locale,
     lookAngleLevel,
     normalTimerMode,
     sensitivity,
@@ -2196,7 +2210,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         })
         .catch(() => undefined);
     } catch {
-      setFinishError(FINISH_ERROR_MESSAGE);
+      setFinishError(FINISH_ERROR_KEY);
     } finally {
       isFinishingRef.current = false;
       setIsFinishingSession(false);
@@ -2215,6 +2229,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setLastSummary,
       sessionHistory,
       sensitivity,
+      locale,
+      setLocale,
       winkLeftEyeClosedThreshold,
       setWinkLeftEyeClosedThreshold,
       winkRightEyeClosedThreshold,
@@ -2284,6 +2300,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       lastSummary,
       sessionHistory,
       sensitivity,
+      locale,
       winkLeftEyeClosedThreshold,
       winkRightEyeClosedThreshold,
       winkLeftEyeProbabilityGapThreshold,

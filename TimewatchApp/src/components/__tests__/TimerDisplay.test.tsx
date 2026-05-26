@@ -73,6 +73,23 @@ describe('TimerDisplay', () => {
     });
 
     expect(
+      renderer!.root.findByProps({accessibilityLabel: 'Timer 00:09.04'}),
+    ).toBeTruthy();
+  });
+
+  it('uses a localized accessible timer label prefix', async () => {
+    let renderer: ReactTestRenderer.ReactTestRenderer | undefined;
+
+    await ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <TimerDisplay
+          accessibilityLabelPrefix="타이머"
+          durationMs={9042}
+        />,
+      );
+    });
+
+    expect(
       renderer!.root.findByProps({accessibilityLabel: '타이머 00:09.04'}),
     ).toBeTruthy();
   });

@@ -8,6 +8,8 @@ import {SettingsScreen} from './screens/SettingsScreen';
 import {TimerScreen} from './screens/TimerScreen';
 import {MascotImageCache} from './components/MascotImageCache';
 import {preloadMascotImages} from './components/mascotImages';
+import {ensureAnonymousUser} from './auth/anonymousAuth';
+import {initializeMobileAds} from './ads/mobileAds';
 import {arcadeTheme} from './theme/arcadeTheme';
 
 type SetScreen = React.Dispatch<React.SetStateAction<AppScreen>>;
@@ -60,6 +62,14 @@ function CurrentScreen() {
 export default function App() {
   React.useEffect(() => {
     preloadMascotImages().catch(() => undefined);
+  }, []);
+
+  React.useEffect(() => {
+    ensureAnonymousUser().catch(() => undefined);
+  }, []);
+
+  React.useEffect(() => {
+    initializeMobileAds().catch(() => undefined);
   }, []);
 
   return (

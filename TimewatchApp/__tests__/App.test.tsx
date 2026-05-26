@@ -6,6 +6,7 @@ import React from 'react';
 import {Image} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import ReactTestRenderer from 'react-test-renderer';
+import {signInAnonymously} from '@react-native-firebase/auth';
 import App, {createHardwareBackPressHandler} from '../App';
 import {allMascotImages} from '../src/components/mascotImages';
 
@@ -32,6 +33,7 @@ jest.mock('react-native-safe-area-context', () => {
 
 beforeEach(() => {
   jest.useFakeTimers();
+  jest.mocked(signInAnonymously).mockClear();
 });
 
 afterEach(() => {
@@ -106,6 +108,20 @@ test('opens directly to the timer screen', async () => {
   });
 
   expect(renderer!.root.findByProps({testID: 'timer-header'})).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer!.unmount();
+  });
+});
+
+test('starts Firebase anonymous auth on launch', async () => {
+  let renderer: ReactTestRenderer.ReactTestRenderer | undefined;
+
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App />);
+  });
+
+  expect(signInAnonymously).toHaveBeenCalledTimes(1);
 
   await ReactTestRenderer.act(async () => {
     renderer!.unmount();
