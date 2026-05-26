@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Animated,
   Easing,
+  NativeModules,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import ClockIcon from 'react-native-heroicons/mini/ClockIcon';
 import {ArcadePanel} from '../components/ArcadePanel';
 import {
   GhostMascot,
@@ -30,6 +32,7 @@ import {
 import type {TimerState} from '../domain/timerEngine';
 import {
   createTimerTargetDurationMs,
+  DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS,
   getTimekeepingDisplayDurationMs,
   getTimerTargetParts,
   MAX_TIMER_TARGET_HOURS,
@@ -63,6 +66,10 @@ type SessionHistoryOverlayProps = {
   events: SessionHistoryEvent[];
   targetDurationMs: number;
   timekeepingMode: TimekeepingMode;
+};
+
+type TimelineClipboardModule = {
+  copyText(text: string): Promise<void>;
 };
 
 type TimerTargetWheelProps = {
@@ -134,7 +141,10 @@ function isSmileJudgmentUnavailable(
   );
 }
 
-function getGhostState(timer: TimerState): {
+function getGhostState(
+  timer: TimerState,
+  mode: TimerModePreset,
+): {
   expression: GhostExpression;
   winkSide: WinkSide;
 } {
@@ -146,12 +156,23 @@ function getGhostState(timer: TimerState): {
     return {expression: 'rightWink', winkSide: 'right'};
   }
 
-  if (timer.detectionStatus === 'looking') {
+  if (timer.phase === 'ended') {
+    return {expression: 'resetFlash', winkSide: 'any'};
+  }
+
+  if (
+    mode.id === 'lookPause' &&
+    timer.phase === 'active' &&
+    timer.detectionStatus === 'looking'
+  ) {
     return {expression: 'looking', winkSide: 'any'};
   }
 
-  if (timer.phase === 'ended') {
-    return {expression: 'resetFlash', winkSide: 'any'};
+  if (
+    (mode.id === 'basicTimer' || mode.id === 'flipTimer') &&
+    timer.phase === 'active'
+  ) {
+    return {expression: 'running', winkSide: 'any'};
   }
 
   return {expression: 'ready', winkSide: 'any'};
@@ -162,9 +183,22 @@ function getModeHint(mode: TimerModePreset, label: string) {
 }
 
 function getModeActionSummary(mode: TimerModePreset) {
-  return mode.actions
-    .map(action => `${action.label} ${action.value}`)
-    .join(' / ');
+  const actionGroups: Array<{labels: string[]; value: string}> = [];
+
+  mode.actions.forEach(action => {
+    const previousGroup = actionGroups[actionGroups.length - 1];
+
+    if (previousGroup?.value === action.value) {
+      previousGroup.labels.push(action.label);
+      return;
+    }
+
+    actionGroups.push({labels: [action.label], value: action.value});
+  });
+
+  return actionGroups
+    .map(group => `${group.labels.join('/')} ${group.value}`)
+    .join(' · ');
 }
 
 function formatHistoryDurationMs(durationMs: number) {
@@ -213,8 +247,76 @@ function getHistoryDeltaLabel(
   return `+${formatHistoryDurationMs(event.deltaMs)}`;
 }
 
+function getTimelineClipboardModule() {
+  return NativeModules.NativeTimelineClipboard as
+    | TimelineClipboardModule
+    | undefined;
+}
+
+function getTimelineClipboardText(
+  events: SessionHistoryEvent[],
+  targetDurationMs: number,
+  timekeepingMode: TimekeepingMode,
+) {
+  const orderedEvents = [...events].reverse();
+  const lines = ['TIMELINE', `${events.length} EVENTS`];
+
+  if (events.length === 0) {
+    lines.push('NO EVENTS YET');
+    return lines.join('\n');
+  }
+
+  orderedEvents.forEach((event, index) => {
+    const recordNumber = events.length - index;
+
+    lines.push(
+      [
+        String(recordNumber).padStart(2, '0'),
+        getHistoryTypeLabel(event, timekeepingMode),
+        getHistoryElapsedLabel(event, timekeepingMode),
+        getHistoryDeltaLabel(event, timekeepingMode, targetDurationMs),
+      ].join('  '),
+    );
+  });
+
+  return lines.join('\n');
+}
+
+async function copyTimelineToClipboard(
+  events: SessionHistoryEvent[],
+  targetDurationMs: number,
+  timekeepingMode: TimekeepingMode,
+) {
+  const clipboard = getTimelineClipboardModule();
+
+  if (!clipboard) {
+    return false;
+  }
+
+  try {
+    await clipboard.copyText(
+      getTimelineClipboardText(events, targetDurationMs, timekeepingMode),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function formatWheelValue(value: number) {
   return String(value).padStart(2, '0');
+}
+
+function formatRecentTimerTargetDurationMs(durationMs: number) {
+  const {hours, minutes, seconds} = getTimerTargetParts(durationMs);
+
+  if (hours > 0) {
+    return `${formatWheelValue(hours)}:${formatWheelValue(
+      minutes,
+    )}:${formatWheelValue(seconds)}`;
+  }
+
+  return `${formatWheelValue(minutes)}:${formatWheelValue(seconds)}`;
 }
 
 function getWheelDisplayValue(
@@ -275,18 +377,36 @@ function SessionHistoryOverlay({
   timekeepingMode,
 }: SessionHistoryOverlayProps) {
   const orderedEvents = [...events].reverse();
+  const handleCopyTimeline = () =>
+    copyTimelineToClipboard(events, targetDurationMs, timekeepingMode);
 
   return (
     <View style={styles.historyOverlay} testID="session-history-overlay">
       <View style={styles.historyHeader}>
-        <Text style={styles.historyTitle}>HISTORY</Text>
-        <Text style={styles.historyCount}>{events.length} RECORDS</Text>
+        <View style={styles.historyTitleGroup}>
+          <Text style={styles.historyTitle}>TIMELINE</Text>
+          <Pressable
+            accessibilityLabel="Copy timeline to clipboard"
+            accessibilityRole="button"
+            onPress={handleCopyTimeline}
+            style={({pressed}) => [
+              styles.timelineCopyButton,
+              pressed && styles.pressedControl,
+            ]}
+            testID="timeline-copy-button">
+            <View pointerEvents="none" style={styles.timelineCopyIcon}>
+              <View style={styles.timelineCopyIconBack} />
+              <View style={styles.timelineCopyIconFront} />
+            </View>
+          </Pressable>
+        </View>
+        <Text style={styles.historyCount}>{events.length} EVENTS</Text>
       </View>
       <ScrollView
         style={styles.historyScroll}
         contentContainerStyle={styles.historyList}>
         {events.length === 0 ? (
-          <Text style={styles.historyEmpty}>NO RECORDS YET</Text>
+          <Text style={styles.historyEmpty}>NO EVENTS YET</Text>
         ) : (
           orderedEvents.map((event, index) => {
             const recordNumber = events.length - index;
@@ -547,6 +667,7 @@ export function TimerScreen() {
     timekeepingMode,
     setTimekeepingMode,
     timerTargetDurationMs,
+    recentTimerTargetDurationsMs,
     setTimerTargetDurationMs,
     timerModeId,
     setTimerModeId,
@@ -565,11 +686,9 @@ export function TimerScreen() {
     timer.targetDurationMs ?? timerTargetDurationMs,
   );
   const openTimerTargetAfterModeSwitchRef = React.useRef(false);
-  const closeModeMenuAfterTimekeepingModeRef =
-    React.useRef<TimekeepingMode | null>(null);
 
-  const ghostState = getGhostState(timer);
   const selectedMode = getTimerModePreset(timerModeId);
+  const ghostState = getGhostState(timer, selectedMode);
   const modeMenuScrollMaxHeight = Math.max(
     MODE_MENU_MIN_HEIGHT,
     Math.min(
@@ -640,6 +759,10 @@ export function TimerScreen() {
   const effectiveTimerTargetDurationMs =
     timer.targetDurationMs ?? timerTargetDurationMs;
   const timerTargetDraftParts = getTimerTargetParts(timerTargetDraftDurationMs);
+  const visibleRecentTimerTargetDurationsMs =
+    recentTimerTargetDurationsMs.length > 0
+      ? recentTimerTargetDurationsMs.slice(0, 3)
+      : DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS;
   const showsTimerTargetControls = timekeepingMode === 'timer';
   const canAdjustTimerTarget =
     showsTimerTargetControls &&
@@ -686,8 +809,14 @@ export function TimerScreen() {
     effectiveTimerTargetDurationMs,
     setTimerTargetDurationMs,
   ]);
-  const appTitle =
-    timekeepingMode === 'timer' ? 'WINK TIMER' : 'WINK STOPWATCH';
+  const handleStartTimerSession = React.useCallback(() => {
+    if (isTimerAlertActive) {
+      stopTimerEndAlert();
+    }
+
+    startTimerSession();
+  }, [isTimerAlertActive, startTimerSession, stopTimerEndAlert]);
+  const appTitle = timekeepingMode === 'timer' ? 'TIMER' : 'STOPWATCH';
   const primaryAction =
     timer.phase === 'active'
       ? {
@@ -706,7 +835,7 @@ export function TimerScreen() {
         : {
             label: timer.phase === 'ended' ? 'RESTART' : 'START',
             gesture: startGesture,
-            onPress: startTimerSession,
+            onPress: handleStartTimerSession,
             disabled: isFinishingSession || startBlockedByModeMenu,
           };
 
@@ -757,24 +886,15 @@ export function TimerScreen() {
     }
   }, [canOpenTimerTargetPopup, openTimerTargetPopup, timerTargetPopupOpen]);
 
-  React.useEffect(() => {
-    if (closeModeMenuAfterTimekeepingModeRef.current !== timekeepingMode) {
-      return;
-    }
-
-    closeModeMenuAfterTimekeepingModeRef.current = null;
-    setModeMenuOpen(false);
-  }, [timekeepingMode]);
-
   const handleSelectTimekeepingMode = (mode: TimekeepingMode) => {
+    setModeMenuOpen(false);
+    setTimerTargetPopupOpen(false);
+
     if (mode === timekeepingMode) {
-      setModeMenuOpen(false);
       return;
     }
 
-    closeModeMenuAfterTimekeepingModeRef.current = mode;
     openTimerTargetAfterModeSwitchRef.current = mode === 'timer';
-    setTimerTargetPopupOpen(false);
     setTimekeepingMode(mode);
   };
 
@@ -787,8 +907,6 @@ export function TimerScreen() {
       resetTimerSession();
       setTimerModeId(modeId);
     }
-
-    setModeMenuOpen(false);
   };
 
   const setTimerTargetPartValue = (
@@ -918,6 +1036,29 @@ export function TimerScreen() {
 
         <View style={styles.timerContentArea}>
           <View style={styles.timerStage} testID="timer-history-stage">
+            {showsTimerTargetControls ? (
+              <Pressable
+                accessibilityLabel="Reset timer time"
+                accessibilityRole="button"
+                accessibilityState={{disabled: !canOpenTimerTargetPopup}}
+                disabled={!canOpenTimerTargetPopup}
+                onPress={
+                  canOpenTimerTargetPopup ? openTimerTargetPopup : undefined
+                }
+                style={({pressed}) => [
+                  styles.timerTargetResetButton,
+                  !canOpenTimerTargetPopup && styles.disabledAction,
+                  pressed && canOpenTimerTargetPopup && styles.pressedControl,
+                ]}
+                testID="timer-target-reset-button">
+                <ClockIcon
+                  fill={arcadeTheme.colors.softInk}
+                  pointerEvents="none"
+                  size={14}
+                />
+                <Text style={styles.timerTargetResetLabel}>TIME</Text>
+              </Pressable>
+            ) : null}
             <View style={styles.timerBlock} testID="timer-main-content">
               <GhostMascot
                 expression={ghostState.expression}
@@ -993,7 +1134,7 @@ export function TimerScreen() {
               variant="primary"
             />
             <TimerActionButton
-              label={isTimerAlertActive ? 'STOP ALERT' : 'HISTORY'}
+              label={isTimerAlertActive ? 'STOP ALERT' : 'TIMELINE'}
               gesture="Button"
               onPress={
                 isTimerAlertActive ? stopTimerEndAlert : handleToggleHistory
@@ -1069,6 +1210,42 @@ export function TimerScreen() {
                 }}
               />
               </View>
+              {visibleRecentTimerTargetDurationsMs.length > 0 ? (
+                <View
+                  style={styles.timerTargetRecentSection}
+                  testID="timer-target-recent-section">
+                  <Text style={styles.timerTargetRecentTitle}>RECENT</Text>
+                  <View style={styles.timerTargetRecentList}>
+                    {visibleRecentTimerTargetDurationsMs.map(durationMs => {
+                      const selected =
+                        durationMs === timerTargetDraftDurationMs;
+
+                      return (
+                        <Pressable
+                          accessibilityLabel={`Use recent timer target ${formatRecentTimerTargetDurationMs(
+                            durationMs,
+                          )}`}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}
+                          key={durationMs}
+                          onPress={() => {
+                            setTimerTargetDraftDurationMs(durationMs);
+                          }}
+                          style={({pressed}) => [
+                            styles.timerTargetRecentButton,
+                            selected && styles.timerTargetRecentButtonSelected,
+                            pressed && styles.pressedControl,
+                          ]}
+                          testID="timer-target-recent-button">
+                          <Text style={styles.timerTargetRecentButtonLabel}>
+                            {formatRecentTimerTargetDurationMs(durationMs)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
               <PrimaryButton
                 label="DONE"
                 onPress={applyTimerTargetPopup}
@@ -1113,20 +1290,22 @@ export function TimerScreen() {
                       ]}>
                       <View style={styles.modeMenuCopy}>
                         <Text style={styles.modeMenuTitle}>{mode.title}</Text>
-                        <Text style={styles.modeMenuDescription}>
-                          {mode.description}
-                        </Text>
-                        <Text style={styles.modeMenuActions}>
+                        <Text style={styles.modeMenuSummary}>
                           {getModeActionSummary(mode)}
                         </Text>
                       </View>
-                      <View style={styles.modeMenuBadges}>
-                        {active ? (
-                          <Text
-                            style={[styles.menuBadge, styles.activeMenuBadge]}>
-                            ACTIVE
-                          </Text>
-                        ) : null}
+                      <View style={styles.modeMenuState}>
+                        <View
+                          style={[
+                            styles.modeMenuDot,
+                            active && styles.activeModeMenuDot,
+                          ]}
+                          testID={
+                            active
+                              ? 'active-mode-indicator'
+                              : 'inactive-mode-indicator'
+                          }
+                        />
                       </View>
                     </Pressable>
                   );
@@ -1339,6 +1518,43 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
+  timerTargetRecentSection: {
+    gap: arcadeTheme.spacing.xs,
+    width: '100%',
+  },
+  timerTargetRecentTitle: {
+    ...arcadeTheme.typography.label,
+    color: arcadeTheme.colors.mutedInk,
+    fontWeight: '900',
+    lineHeight: 14,
+  },
+  timerTargetRecentList: {
+    flexDirection: 'row',
+    gap: arcadeTheme.spacing.sm,
+    width: '100%',
+  },
+  timerTargetRecentButton: {
+    alignItems: 'center',
+    backgroundColor: arcadeTheme.colors.panel,
+    borderColor: arcadeTheme.colors.line,
+    borderRadius: arcadeTheme.radii.chip,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+  },
+  timerTargetRecentButtonSelected: {
+    backgroundColor: arcadeTheme.colors.panelMuted,
+    borderColor: arcadeTheme.colors.accent,
+  },
+  timerTargetRecentButtonLabel: {
+    color: arcadeTheme.colors.ink,
+    fontSize: 14,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
   timerTargetDoneButton: {
     minHeight: 42,
   },
@@ -1353,6 +1569,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     position: 'relative',
+  },
+  timerTargetResetButton: {
+    alignItems: 'center',
+    backgroundColor: arcadeTheme.colors.panel,
+    borderColor: arcadeTheme.colors.line,
+    borderRadius: arcadeTheme.radii.chip,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: arcadeTheme.spacing.xs,
+    height: 32,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    top: 0,
+    width: 72,
+    zIndex: 6,
+  },
+  timerTargetResetLabel: {
+    color: arcadeTheme.colors.ink,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 14,
   },
   timerContentArea: {
     flex: 1,
@@ -1516,7 +1755,7 @@ const styles = StyleSheet.create({
     gap: arcadeTheme.spacing.sm,
   },
   modeMenuItem: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     borderColor: arcadeTheme.colors.line,
     borderRadius: arcadeTheme.radii.panel,
     borderWidth: 1,
@@ -1532,37 +1771,35 @@ const styles = StyleSheet.create({
   modeMenuCopy: {
     flex: 1,
     gap: arcadeTheme.spacing.xs,
+    minWidth: 0,
   },
   modeMenuTitle: {
     ...arcadeTheme.typography.body,
     color: arcadeTheme.colors.ink,
     fontWeight: '900',
   },
-  modeMenuDescription: {
-    ...arcadeTheme.typography.label,
-    color: arcadeTheme.colors.mutedInk,
-    fontWeight: '400',
-  },
-  modeMenuActions: {
+  modeMenuSummary: {
     ...arcadeTheme.typography.label,
     color: arcadeTheme.colors.softInk,
+    fontWeight: '700',
+    lineHeight: 18,
   },
-  modeMenuBadges: {
-    alignItems: 'flex-end',
-    gap: arcadeTheme.spacing.xs,
+  modeMenuState: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    width: 20,
   },
-  menuBadge: {
-    ...arcadeTheme.typography.label,
-    borderRadius: arcadeTheme.radii.chip,
+  modeMenuDot: {
+    borderColor: 'transparent',
+    borderRadius: 5,
     borderWidth: 1,
-    overflow: 'hidden',
-    paddingHorizontal: arcadeTheme.spacing.sm,
-    paddingVertical: arcadeTheme.spacing.xs,
+    height: 10,
+    width: 10,
   },
-  activeMenuBadge: {
+  activeModeMenuDot: {
     backgroundColor: arcadeTheme.colors.accent,
     borderColor: arcadeTheme.colors.accent,
-    color: arcadeTheme.colors.panel,
   },
   historyOverlay: {
     backgroundColor: arcadeTheme.colors.panel,
@@ -1621,12 +1858,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: arcadeTheme.spacing.sm,
   },
+  historyTitleGroup: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: arcadeTheme.spacing.xs,
+  },
   historyTitle: {
     color: arcadeTheme.colors.ink,
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
     lineHeight: 22,
+  },
+  timelineCopyButton: {
+    alignItems: 'center',
+    borderColor: arcadeTheme.colors.line,
+    borderRadius: arcadeTheme.radii.chip,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  timelineCopyIcon: {
+    height: 17,
+    position: 'relative',
+    width: 15,
+  },
+  timelineCopyIconBack: {
+    borderColor: arcadeTheme.colors.mutedInk,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    height: 12,
+    left: 0,
+    position: 'absolute',
+    top: 0,
+    width: 10,
+  },
+  timelineCopyIconFront: {
+    backgroundColor: arcadeTheme.colors.panel,
+    borderColor: arcadeTheme.colors.ink,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    bottom: 0,
+    height: 12,
+    position: 'absolute',
+    right: 0,
+    width: 10,
   },
   historyCount: {
     ...arcadeTheme.typography.label,

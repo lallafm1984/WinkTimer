@@ -1,13 +1,14 @@
-package com.timewatchapp.gaze
+package com.winktimer.app.alert
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
-class NativeGazeDetectionPackage : ReactPackage {
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+class NativeTimerAlertPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(NativeGazeDetectionModule(reactContext))
+    listOf(NativeTimerAlertModule(reactContext))
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
     emptyList()

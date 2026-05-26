@@ -1,4 +1,5 @@
 import {
+  modeUsesLookAwayStart,
   modeUsesSmileResume,
   modeUsesSmileStart,
   modeRunsWithoutGaze,
@@ -11,25 +12,28 @@ describe('timer mode presets', () => {
   it('removes Wink Start and exposes the new Basic and Flip modes', () => {
     expect(timerModePresets.map(mode => mode.id)).toEqual([
       'basicTimer',
+      'flipTimer',
       'lookPause',
       'winkControl',
       'smileMode',
-      'flipTimer',
     ]);
     expect(timerModePresets.some(mode => mode.beta)).toBe(false);
   });
 
-  it('keeps Look Pause limited to look actions and button reset', () => {
+  it('keeps Look Pause limited to look actions, button start fallback, and button reset', () => {
     const lookPause = timerModePresets.find(mode => mode.id === 'lookPause');
 
     expect(lookPause?.resetGesture).toBe('button');
+    expect(lookPause?.lookAwayStartEnabled).toBe(true);
     expect(lookPause?.lapGesture).toBeUndefined();
     expect(lookPause?.actions).toEqual([
-      {label: 'START', value: 'Button'},
+      {label: 'START', value: 'Look Away'},
       {label: 'PAUSE', value: 'Look'},
       {label: 'RESUME', value: 'Look Away'},
       {label: 'RESET', value: 'Button'},
     ]);
+    expect(modeUsesLookAwayStart('lookPause')).toBe(true);
+    expect(modeUsesLookAwayStart('basicTimer')).toBe(false);
   });
 
   it('marks Basic Timer as button-only timing', () => {

@@ -1,4 +1,4 @@
-package com.timewatchapp.alert
+package com.winktimer.app.alert
 
 import android.content.Context
 import android.media.AudioAttributes

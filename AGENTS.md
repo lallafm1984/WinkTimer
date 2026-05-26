@@ -11,7 +11,7 @@
   - **FLIP TIMER**: device posture can control timer actions.
 - Do not frame the whole product as a "focus timer" or "concentration timer." Focus, study, cooking, exercise, accessibility, and hands-free timing are use cases, not the product category.
 - Monetization discussions should treat BASIC TIMER as the free/default timer experience and LOOK/WINK/FLIP as premium or rewarded-ad-accessible add-on modes.
-- Internal project/package names may still say `TimewatchApp` or `com.timewatchapp`; those are implementation names unless explicitly renamed.
+- Runtime app identity should use `WinkTimer` / `com.winktimer.app`; the repository folder may still be `TimewatchApp`.
 
 ## Android Device Test Install
 
@@ -48,9 +48,9 @@ try {
 }
 
 & $adb -s $target install -r $apk
-& $adb -s $target shell pm grant com.timewatchapp android.permission.CAMERA
-& $adb -s $target shell am force-stop com.timewatchapp
-& $adb -s $target shell am start -n com.timewatchapp/.MainActivity
+& $adb -s $target shell pm grant com.winktimer.app android.permission.CAMERA
+& $adb -s $target shell am force-stop com.winktimer.app
+& $adb -s $target shell am start -n com.winktimer.app/.MainActivity
 ```
 
 - If `192.168.0.20:5555` is listed as `device` and a fresh APK already exists, install and run through that target:
@@ -59,17 +59,17 @@ try {
 $apk = "E:\LimProjects\Time\TimewatchApp\android\app\build\outputs\apk\debug\app-debug.apk"
 & $adb -s 192.168.0.20:5555 reverse tcp:8081 tcp:8081
 & $adb -s 192.168.0.20:5555 install -r $apk
-& $adb -s 192.168.0.20:5555 shell pm grant com.timewatchapp android.permission.CAMERA
-& $adb -s 192.168.0.20:5555 shell am force-stop com.timewatchapp
-& $adb -s 192.168.0.20:5555 shell am start -n com.timewatchapp/.MainActivity
+& $adb -s 192.168.0.20:5555 shell pm grant com.winktimer.app android.permission.CAMERA
+& $adb -s 192.168.0.20:5555 shell am force-stop com.winktimer.app
+& $adb -s 192.168.0.20:5555 shell am start -n com.winktimer.app/.MainActivity
 ```
 
 - `npm run mobile:android -- -DeviceId 192.168.0.20:5555` may fail even when Metro is running because the PowerShell `/status` response can be read as a byte array. If that happens, use the known-good manual flow above instead of falling back to USB.
 - To verify the app after install:
 
 ```powershell
-& $adb -s 192.168.0.20:5555 shell cmd package path com.timewatchapp
-& $adb -s 192.168.0.20:5555 shell pidof com.timewatchapp
+& $adb -s 192.168.0.20:5555 shell cmd package path com.winktimer.app
+& $adb -s 192.168.0.20:5555 shell pidof com.winktimer.app
 ```
 
 - Use USB install only as a fallback when wireless ADB is unavailable or the phone IP has changed.

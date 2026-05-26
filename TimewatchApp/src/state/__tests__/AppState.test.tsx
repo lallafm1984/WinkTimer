@@ -56,10 +56,15 @@ type MutableNativeModules = typeof NativeModules & {
 const nativeModules = NativeModules as MutableNativeModules;
 const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
 const originalNativeTimerAlert = nativeModules.NativeTimerAlert;
-const SETTINGS_STORAGE_KEY = '@timewatch:settings:v1';
+const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
 
 function AppStateHarness() {
   const app = useAppState();
+  const recentTimerTargetDurationsMs =
+    'recentTimerTargetDurationsMs' in app &&
+    Array.isArray(app.recentTimerTargetDurationsMs)
+      ? app.recentTimerTargetDurationsMs
+      : [];
 
   return (
     <View>
@@ -72,6 +77,7 @@ function AppStateHarness() {
       <Text>{`normalTimerMode:${app.normalTimerMode}`}</Text>
       <Text>{`timekeepingMode:${app.timekeepingMode}`}</Text>
       <Text>{`timerTarget:${app.timerTargetDurationMs}`}</Text>
+      <Text>{`recentTimerTargets:${recentTimerTargetDurationsMs.join('|')}`}</Text>
       <Text>{`activeTarget:${app.timer.targetDurationMs ?? 'none'}`}</Text>
       <Text>{`timerMode:${app.timerModeId}`}</Text>
       <Text>{`timerAlertVibration:${app.timerAlertVibrationEnabled}`}</Text>
@@ -161,6 +167,30 @@ function AppStateHarness() {
           app.setTimerTargetDurationMs(60 * 1000);
         }}>
         target one minute
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="target-ten-minutes"
+        onPress={() => {
+          app.setTimerTargetDurationMs(10 * 60 * 1000);
+        }}>
+        target ten minutes
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="target-ninety-seconds"
+        onPress={() => {
+          app.setTimerTargetDurationMs(90 * 1000);
+        }}>
+        target ninety seconds
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="target-two-minutes"
+        onPress={() => {
+          app.setTimerTargetDurationMs(2 * 60 * 1000);
+        }}>
+        target two minutes
       </Text>
       <Text
         accessibilityRole="button"
@@ -509,7 +539,7 @@ describe('AppStateProvider app flow', () => {
     },
   ) {
     nowMs = atMs;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       confidence: payload.status === 'unknown' ? 0 : 1,
       ...payload,
     });
@@ -520,7 +550,7 @@ describe('AppStateProvider app flow', () => {
     posture: 'faceDown' | 'faceUp' | 'unknown',
   ) {
     nowMs = atMs;
-    DeviceEventEmitter.emit('TimewatchDevicePostureReading', {
+    DeviceEventEmitter.emit('WinkTimerDevicePostureReading', {
       posture,
     });
   }
@@ -566,6 +596,8 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'mode:minimal')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
     expect(hasText(renderer, 'timerTarget:300000')).toBe(true);
+    expect(hasText(renderer, 'recentTimerTargets:30000|60000|600000'))
+      .toBe(true);
     expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
     expect(hasText(renderer, 'timerAlertVibration:true')).toBe(true);
     expect(hasText(renderer, 'timerAlertSound:true')).toBe(true);
@@ -788,6 +820,30 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('keeps the three most recent timer target durations with newest first', async () => {
+    const renderer = await renderHarness();
+
+    await press(renderer, 'target-one-minute');
+    expect(hasText(renderer, 'recentTimerTargets:60000|30000|600000'))
+      .toBe(true);
+
+    await press(renderer, 'target-ten-minutes');
+    await press(renderer, 'target-ninety-seconds');
+    await press(renderer, 'target-two-minutes');
+
+    expect(hasText(renderer, 'recentTimerTargets:120000|90000|600000'))
+      .toBe(true);
+    expect(hasText(renderer, 'recentTimerTargets:120000|90000|600000|60000'))
+      .toBe(false);
+
+    await press(renderer, 'target-ten-minutes');
+
+    expect(hasText(renderer, 'recentTimerTargets:600000|120000|90000'))
+      .toBe(true);
+
+    await unmount(renderer);
+  });
+
   it('loads persisted settings from local storage and pushes detector settings to native', async () => {
     await AsyncStorage.setItem(
       SETTINGS_STORAGE_KEY,
@@ -797,6 +853,14 @@ describe('AppStateProvider app flow', () => {
         normalTimerMode: true,
         timekeepingMode: 'timer',
         timerTargetDurationMs: 60000,
+        recentTimerTargetDurationsMs: [
+          60000,
+          null,
+          'bad',
+          90 * 1000,
+          5 * 60 * 1000,
+          10 * 60 * 1000,
+        ],
         timerModeId: 'winkControl',
         timerAlertVibrationEnabled: false,
         timerAlertSoundEnabled: true,
@@ -848,6 +912,8 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'normalTimerMode:true')).toBe(true);
     expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
     expect(hasText(renderer, 'timerTarget:60000')).toBe(true);
+    expect(hasText(renderer, 'recentTimerTargets:60000|90000|300000'))
+      .toBe(true);
     expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
     expect(hasText(renderer, 'timerAlertVibration:false')).toBe(true);
     expect(hasText(renderer, 'timerAlertSound:true')).toBe(true);
@@ -930,6 +996,7 @@ describe('AppStateProvider app flow', () => {
       normalTimerMode: true,
       timekeepingMode: 'timer',
       timerTargetDurationMs: 60000,
+      recentTimerTargetDurationsMs: [60000, 30000, 600000],
       timerModeId: 'winkControl',
       timerAlertVibrationEnabled: false,
       timerAlertSoundEnabled: false,
@@ -1498,6 +1565,35 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('starts Look Pause from not looking without pressing the start button', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'timerMode:lookPause')).toBe(true);
+    expect(hasText(renderer, 'phase:idle')).toBe(true);
+
+    emitGazeReading(1100, {
+      status: 'notLooking',
+      eyeState: 'unknown',
+    });
+
+    nowMs = 1150;
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+
+    await unmount(renderer);
+  });
+
   it('records manual laps while an active timer keeps running', async () => {
     const renderer = await renderHarness();
 
@@ -1961,7 +2057,7 @@ describe('AppStateProvider app flow', () => {
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -1976,7 +2072,7 @@ describe('AppStateProvider app flow', () => {
       jest.advanceTimersByTime(1600);
     });
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -1984,7 +2080,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 2900;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2419,7 +2515,7 @@ describe('AppStateProvider app flow', () => {
     await press(renderer, 'wink-control-mode');
     await ReactTestRenderer.act(async () => undefined);
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2481,7 +2577,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2495,7 +2591,7 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
 
     nowMs = 5600;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2519,7 +2615,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5000;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'notLooking',
       confidence: 1,
       eyeState: 'unknown',
@@ -2530,7 +2626,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 6500;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2600,7 +2696,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2608,7 +2704,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 5300;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2632,7 +2728,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2643,7 +2739,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 5600;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2655,7 +2751,7 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
 
     nowMs = 6100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2663,7 +2759,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 6400;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2688,7 +2784,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2696,7 +2792,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 5300;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2709,7 +2805,7 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'phase:manualPaused')).toBe(true);
 
     nowMs = 6100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2717,7 +2813,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 6400;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2742,7 +2838,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2750,7 +2846,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 5400;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -2783,7 +2879,7 @@ describe('AppStateProvider app flow', () => {
     await startWinkControlByRightWink(renderer);
 
     nowMs = 5100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -2791,7 +2887,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     nowMs = 5300;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',

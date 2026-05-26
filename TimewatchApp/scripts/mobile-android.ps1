@@ -8,12 +8,12 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $MetroPort = 8081
-$PackageName = "com.timewatchapp"
-$MainActivity = "com.timewatchapp/.MainActivity"
+$PackageName = "com.winktimer.app"
+$MainActivity = "com.winktimer.app/.MainActivity"
 
 function Write-Step {
   param([string]$Message)
-  Write-Host "[timewatch] $Message"
+  Write-Host "[winktimer] $Message"
 }
 
 function Initialize-AndroidSdkEnvironment {
@@ -189,19 +189,19 @@ try {
   }
 
   Write-Step "Granting camera permission"
-  & $adb @adbTarget shell pm grant com.timewatchapp android.permission.CAMERA
+  & $adb @adbTarget shell pm grant com.winktimer.app android.permission.CAMERA
   if ($LASTEXITCODE -ne 0) {
     Write-Warning "Camera permission grant failed. You can still grant it from Android Settings."
   }
 
-  Write-Step "Launching Timewatch"
+  Write-Step "Launching Wink Timer"
   & $adb @adbTarget shell am force-stop $PackageName | Out-Null
   Invoke-Checked "Starting MainActivity" {
-    & $adb @adbTarget shell am start -n com.timewatchapp/.MainActivity
+    & $adb @adbTarget shell am start -n com.winktimer.app/.MainActivity
   }
 
   Write-Step "Mobile Android verification environment is ready."
 } catch {
-  Write-Host "[timewatch:error] $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "[winktimer:error] $($_.Exception.Message)" -ForegroundColor Red
   exit 1
 }

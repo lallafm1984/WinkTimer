@@ -1,4 +1,4 @@
-package com.timewatchapp.gaze
+package com.winktimer.app.gaze
 
 import android.Manifest
 import android.content.Context
@@ -790,8 +790,8 @@ class NativeGazeDetectionModule(
 
   companion object {
     const val NAME = "NativeGazeDetection"
-    const val EVENT_NAME = "TimewatchGazeDetectionReading"
-    const val DEVICE_POSTURE_EVENT_NAME = "TimewatchDevicePostureReading"
+    const val EVENT_NAME = "WinkTimerGazeDetectionReading"
+    const val DEVICE_POSTURE_EVENT_NAME = "WinkTimerDevicePostureReading"
     private const val FACE_DOWN_Z_THRESHOLD = -9.2f
     private const val FACE_UP_Z_THRESHOLD = 9.2f
     private const val STRICT_LOOKING_YAW_DEGREES = 12.0

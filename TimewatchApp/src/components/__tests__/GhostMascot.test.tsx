@@ -21,6 +21,7 @@ describe('GhostMascot helpers', () => {
   });
 
   it('labels non-wink expression states', () => {
+    expect(getGhostExpressionLabel('running')).toBe('Ghost running');
     expect(getGhostExpressionLabel('looking')).toBe('Ghost looking shy');
     expect(getGhostExpressionLabel('resetFlash')).toBe('Ghost reset flash');
   });
@@ -43,6 +44,7 @@ describe('GhostMascot', () => {
     const image = renderer!.root.findByType(Image);
 
     expect(image.props.testID).toBe('ghost-mascot-image');
+    expect(image.props.fadeDuration).toBe(0);
     expect(mascotImagePools.look).toContain(image.props.source);
   });
 
@@ -86,6 +88,9 @@ describe('GhostMascot', () => {
   it('selects images from the expected expression pools', () => {
     expect(selectRandomMascotImage('ready', () => 0)).toBe(
       mascotImagePools.idle[0],
+    );
+    expect(selectRandomMascotImage('running', () => 0)).toBe(
+      mascotImagePools.look[0],
     );
     expect(selectRandomMascotImage('looking', () => 0.99)).toBe(
       mascotImagePools.look[mascotImagePools.look.length - 1],

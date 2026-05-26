@@ -1,4 +1,4 @@
-package com.timewatchapp.alert
+package com.winktimer.app.alert
 
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -9,10 +9,10 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.timewatchapp.MainActivity
+import com.winktimer.app.MainActivity
 
 object TimekeepingNotification {
-  private const val CHANNEL_ID = "timewatch_background_timekeeping"
+  private const val CHANNEL_ID = "winktimer_background_timekeeping"
   private const val NOTIFICATION_ID = 9301
 
   @SuppressLint("MissingPermission")

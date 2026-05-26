@@ -34,7 +34,7 @@ The command:
 - builds `app-debug.apk`
 - installs it on the connected phone
 - grants `android.permission.CAMERA`
-- launches `com.timewatchapp/.MainActivity`
+- launches `com.winktimer.app/.MainActivity`
 
 ## Standalone APK
 
@@ -47,7 +47,7 @@ npm run apk:android
 The standalone APK is copied here:
 
 ```text
-dist/android/timewatch-release.apk
+dist/android/winktimer-release.apk
 ```
 
 The debug APK at `android/app/build/outputs/apk/debug/app-debug.apk` is for React Native development and expects Metro or `adb reverse tcp:8081 tcp:8081`. If you install that file directly, Android can show `Unable to load script`.

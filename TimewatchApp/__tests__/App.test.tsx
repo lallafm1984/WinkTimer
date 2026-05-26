@@ -3,9 +3,11 @@
  */
 
 import React from 'react';
+import {Image} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import ReactTestRenderer from 'react-test-renderer';
 import App, {createHardwareBackPressHandler} from '../App';
+import {allMascotImages} from '../src/components/mascotImages';
 
 jest.mock('react-native-safe-area-context', () => {
   const ReactModule = require('react');
@@ -63,6 +65,33 @@ test('mounts safe area provider at the app root', async () => {
 
   expect(renderer).toBeDefined();
   expect(renderer!.root.findByType(SafeAreaProvider)).toBeTruthy();
+
+  await ReactTestRenderer.act(async () => {
+    renderer!.unmount();
+  });
+});
+
+test('keeps mascot images mounted at the app root to warm the native image cache', async () => {
+  let renderer: ReactTestRenderer.ReactTestRenderer | undefined;
+
+  await ReactTestRenderer.act(() => {
+    renderer = ReactTestRenderer.create(<App />);
+  });
+
+  const cache = renderer!.root.findByProps({testID: 'mascot-image-cache'});
+  const cachedImages = cache.findAllByType(Image);
+
+  expect(cache.props.accessibilityElementsHidden).toBe(true);
+  expect(cache.props.importantForAccessibility).toBe('no-hide-descendants');
+  expect(cachedImages).toHaveLength(allMascotImages.length);
+  expect(
+    cachedImages.every(
+      image => image.props.testID === 'mascot-image-cache-image',
+    ),
+  ).toBe(true);
+  expect(cachedImages.map(image => image.props.source)).toEqual(
+    allMascotImages,
+  );
 
   await ReactTestRenderer.act(async () => {
     renderer!.unmount();

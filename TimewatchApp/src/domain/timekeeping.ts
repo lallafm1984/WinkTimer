@@ -1,6 +1,11 @@
 export type TimekeepingMode = 'stopwatch' | 'timer';
 
 export const DEFAULT_TIMER_TARGET_DURATION_MS = 5 * 60 * 1000;
+export const DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS = [
+  30 * 1000,
+  60 * 1000,
+  10 * 60 * 1000,
+];
 export const MIN_TIMER_TARGET_DURATION_MS = 1000;
 export const MAX_TIMER_TARGET_HOURS = 99;
 export const MAX_TIMER_TARGET_UNIT_VALUE = 59;

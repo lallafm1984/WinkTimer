@@ -1,4 +1,4 @@
-package com.timewatchapp
+package com.winktimer.app
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -6,8 +6,9 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import com.timewatchapp.alert.NativeTimerAlertPackage
-import com.timewatchapp.gaze.NativeGazeDetectionPackage
+import com.winktimer.app.alert.NativeTimerAlertPackage
+import com.winktimer.app.clipboard.NativeTimelineClipboardPackage
+import com.winktimer.app.gaze.NativeGazeDetectionPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -20,6 +21,7 @@ class MainApplication : Application(), ReactApplication {
           // add(MyReactNativePackage())
           add(NativeGazeDetectionPackage())
           add(NativeTimerAlertPackage())
+          add(NativeTimelineClipboardPackage())
         },
     )
   }

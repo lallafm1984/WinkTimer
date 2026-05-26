@@ -22,7 +22,7 @@ describe('DevicePostureDetector', () => {
   });
 
   afterEach(() => {
-    DeviceEventEmitter.removeAllListeners('TimewatchDevicePostureReading');
+    DeviceEventEmitter.removeAllListeners('WinkTimerDevicePostureReading');
 
     if (originalNativeGazeDetection) {
       nativeModules.NativeGazeDetection = originalNativeGazeDetection;
@@ -55,7 +55,7 @@ describe('DevicePostureDetector', () => {
     expect(detector.getLatestPosture()).toBe('unknown');
 
     nowMs = 1000;
-    DeviceEventEmitter.emit('TimewatchDevicePostureReading', {
+    DeviceEventEmitter.emit('WinkTimerDevicePostureReading', {
       posture: 'faceDown',
     });
 
@@ -68,7 +68,7 @@ describe('DevicePostureDetector', () => {
     expect(detector.getLatestPosture()).toBe('faceDown');
 
     nowMs = 2000;
-    DeviceEventEmitter.emit('TimewatchDevicePostureReading', {
+    DeviceEventEmitter.emit('WinkTimerDevicePostureReading', {
       posture: 'faceUp',
     });
 

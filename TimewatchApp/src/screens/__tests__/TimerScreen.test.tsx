@@ -1,5 +1,5 @@
 import React from 'react';
-import {ScrollView, StyleSheet, Text} from 'react-native';
+import {NativeModules, ScrollView, StyleSheet, Text} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import type {TimerState} from '../../domain/timerEngine';
 import {TimerScreen} from '../TimerScreen';
@@ -17,6 +17,18 @@ const mockSetTimerModeId = jest.fn();
 const mockSetGestureInputsBlocked = jest.fn();
 const mockSetTimekeepingMode = jest.fn();
 const mockSetTimerTargetDurationMs = jest.fn();
+const mockCopyTimelineText = jest.fn<Promise<void>, [string]>();
+
+type NativeTimelineClipboardModuleForTest = {
+  copyText: jest.Mock<Promise<void>, [string]>;
+};
+
+type MutableNativeModules = typeof NativeModules & {
+  NativeTimelineClipboard?: NativeTimelineClipboardModuleForTest;
+};
+
+const nativeModules = NativeModules as MutableNativeModules;
+const originalNativeTimelineClipboard = nativeModules.NativeTimelineClipboard;
 
 const baseTimer: TimerState = {
   phase: 'active',
@@ -66,6 +78,7 @@ const baseState = {
   timekeepingMode: 'stopwatch',
   setTimekeepingMode: mockSetTimekeepingMode,
   timerTargetDurationMs: 5 * 60 * 1000,
+  recentTimerTargetDurationsMs: [] as number[],
   setTimerTargetDurationMs: mockSetTimerTargetDurationMs,
   timerModeId: 'lookPause',
   setTimerModeId: mockSetTimerModeId,
@@ -149,10 +162,15 @@ describe('TimerScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockState = baseState;
+    mockCopyTimelineText.mockResolvedValue(undefined);
+    nativeModules.NativeTimelineClipboard = {
+      copyText: mockCopyTimelineText,
+    };
   });
 
   afterEach(() => {
     jest.useRealTimers();
+    nativeModules.NativeTimelineClipboard = originalNativeTimelineClipboard;
   });
 
   it('renders the redesigned wink timer layout for an active timer', () => {
@@ -160,7 +178,11 @@ describe('TimerScreen', () => {
     const textContent = getRenderedText(renderer);
     const header = renderer.root.findByProps({testID: 'timer-header'});
 
-    expect(textContent).toContain('WINK STOPWATCH');
+    expect(textContent).toContain('STOPWATCH');
+    expect(
+      header.findByProps({testID: 'timer-title'}).props.children,
+    ).toBe('STOPWATCH');
+    expect(textContent).not.toContain('WINK STOPWATCH');
     expect(
       header.findByProps({testID: 'timer-title'}).props.style,
     ).toEqual(expect.objectContaining({flex: 1}));
@@ -219,7 +241,7 @@ describe('TimerScreen', () => {
 
     expect(
       stopwatchRenderer.root.findByProps({testID: 'timer-title'}).props.children,
-    ).toBe('WINK STOPWATCH');
+    ).toBe('STOPWATCH');
 
     mockState = {
       ...baseState,
@@ -229,7 +251,7 @@ describe('TimerScreen', () => {
 
     expect(
       timerRenderer.root.findByProps({testID: 'timer-title'}).props.children,
-    ).toBe('WINK TIMER');
+    ).toBe('TIMER');
   });
 
   it('expands the bottom mode button into 5-5 timekeeping controls and shows the mode popup', () => {
@@ -305,18 +327,18 @@ describe('TimerScreen', () => {
       modeMenuText.filter(text =>
         [
           'BASIC TIMER',
+          'FLIP TIMER',
           'LOOK PAUSE',
           'WINK CONTROL',
           'SMILE MODE',
-          'FLIP TIMER',
         ].includes(text),
       ),
     ).toEqual([
       'BASIC TIMER',
+      'FLIP TIMER',
       'LOOK PAUSE',
       'WINK CONTROL',
       'SMILE MODE',
-      'FLIP TIMER',
     ]);
     expect(modeMenuText).not.toContain('BETA');
   });
@@ -350,7 +372,7 @@ describe('TimerScreen', () => {
     expect(modeMenuScrollStyle.maxHeight).toBeLessThanOrEqual(440);
   });
 
-  it('selects Basic Timer from the restored mode popup while ready', () => {
+  it('selects Basic Timer from the restored mode popup while keeping it open', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -381,13 +403,12 @@ describe('TimerScreen', () => {
 
     expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
     expect(mockSetTimerModeId).toHaveBeenCalledWith('basicTimer');
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
+      .toBeTruthy();
   });
 
-  it('keeps the timer value when selecting the current preset mode', () => {
+  it('keeps the timer value and menu open when selecting the current preset mode', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -414,10 +435,9 @@ describe('TimerScreen', () => {
 
     expect(mockResetTimerSession).not.toHaveBeenCalled();
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
+      .toBeTruthy();
   });
 
   it('switches from stopwatch to timer from the bottom mode controls', () => {
@@ -434,9 +454,10 @@ describe('TimerScreen', () => {
     });
 
     expect(mockSetTimekeepingMode).toHaveBeenCalledWith('timer');
-    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
-      .toBeTruthy();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
 
     mockState = {
       ...baseState,
@@ -480,6 +501,10 @@ describe('TimerScreen', () => {
     });
 
     expect(mockSetTimekeepingMode).toHaveBeenCalledWith('stopwatch');
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
+      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
+      .toHaveLength(0);
   });
 
   it('shows remaining time while the timer function is selected', () => {
@@ -545,6 +570,101 @@ describe('TimerScreen', () => {
     expect(popupText).toContain('SEC');
   });
 
+  it('opens the timer target picker popup from the reset time icon', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 62 * 60 * 1000 + 3000,
+      timer: {
+        ...baseTimer,
+        phase: 'ended',
+        focusDurationMs: 62 * 60 * 1000 + 3000,
+        targetDurationMs: 62 * 60 * 1000 + 3000,
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const resetTimeButton = renderer.root.findByProps({
+      testID: 'timer-target-reset-button',
+    });
+    const resetTimeButtonStyle = StyleSheet.flatten(
+      resetTimeButton.props.style({pressed: false}),
+    );
+    const resetTimeText = resetTimeButton
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children));
+
+    expect(resetTimeButton.props.accessibilityLabel).toBe('Reset timer time');
+    expect(resetTimeButton.props.disabled).toBe(false);
+    expect(resetTimeText).toEqual(['TIME']);
+    expect(resetTimeButtonStyle).toEqual(
+      expect.objectContaining({
+        backgroundColor: '#FFFFFF',
+        borderColor: '#C9CBC5',
+        borderRadius: 6,
+        height: 32,
+        left: 0,
+        position: 'absolute',
+        top: 0,
+        width: 72,
+      }),
+    );
+    expect(renderer.root.findAllByProps({testID: 'timer-target-reset-row'}))
+      .toHaveLength(0);
+
+    ReactTestRenderer.act(() => {
+      resetTimeButton.props.onPress();
+    });
+
+    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
+      .toBeTruthy();
+  });
+
+  it('keeps the reset time icon on the same top line as the latest timer mark', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerModeId: 'basicTimer',
+      timerTargetDurationMs: 60 * 1000,
+      timer: {
+        ...baseTimer,
+        phase: 'ended',
+        focusDurationMs: 60 * 1000,
+        targetDurationMs: 60 * 1000,
+        isLookPaused: false,
+      },
+      sessionHistory: [
+        {
+          id: 'LAP-11000',
+          type: 'LAP',
+          atMs: 11000,
+          elapsedMs: 10000,
+          deltaMs: 10000,
+        },
+      ],
+    };
+    const renderer = renderTimerScreen();
+    const resetTimeButtonStyle = StyleSheet.flatten(
+      renderer.root
+        .findByProps({testID: 'timer-target-reset-button'})
+        .props.style({pressed: false}),
+    );
+    const latestMarkStyle = StyleSheet.flatten(
+      renderer.root.findByProps({testID: 'latest-history-record'}).props.style,
+    );
+
+    expect(getRenderedText(renderer)).toContain('LAST MARK');
+    expect(resetTimeButtonStyle).toEqual(
+      expect.objectContaining({
+        position: 'absolute',
+        top: latestMarkStyle.top,
+      }),
+    );
+    expect(latestMarkStyle).toEqual(
+      expect.objectContaining({position: 'absolute', top: 0}),
+    );
+  });
+
   it('opens the timer target picker popup while the timer is manually paused', () => {
     mockState = {
       ...baseState,
@@ -600,6 +720,98 @@ describe('TimerScreen', () => {
       .toBeTruthy();
     expect(renderer.root.findByProps({testID: 'timer-target-second-reel'}))
       .toBeTruthy();
+  });
+
+  it('shows the three most recent timer targets in the picker and applies a selected target', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 60 * 1000,
+      recentTimerTargetDurationsMs: [
+        5 * 60 * 1000,
+        10 * 60 * 1000,
+        90 * 1000,
+        30 * 1000,
+      ],
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 60 * 1000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    const recentButtons = renderer.root.findAll(
+      node =>
+        node.props.testID === 'timer-target-recent-button' &&
+        node.props.accessibilityRole === 'button' &&
+        typeof node.props.onPress === 'function',
+    );
+    const recentLabels = recentButtons.map(button =>
+      flattenText(button.findAllByType(Text)[0].props.children),
+    );
+
+    expect(renderer.root.findByProps({testID: 'timer-target-recent-section'}))
+      .toBeTruthy();
+    expect(recentLabels).toEqual(['05:00', '10:00', '01:30']);
+    expect(getRenderedText(renderer)).not.toContain('00:30');
+    expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
+
+    ReactTestRenderer.act(() => {
+      recentButtons[1].props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({testID: 'timer-target-done-button'}).props
+        .onPress();
+    });
+
+    expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(10 * 60 * 1000);
+    expect(mockSetTimerTargetDurationMs).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows default recent timer targets when no recent targets are stored', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetDurationMs: 60 * 1000,
+      recentTimerTargetDurationsMs: [],
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        targetDurationMs: 60 * 1000,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open timer target settings'})
+        .props.onPress();
+    });
+
+    const recentButtons = renderer.root.findAll(
+      node =>
+        node.props.testID === 'timer-target-recent-button' &&
+        node.props.accessibilityRole === 'button' &&
+        typeof node.props.onPress === 'function',
+    );
+
+    expect(renderer.root.findByProps({testID: 'timer-target-recent-section'}))
+      .toBeTruthy();
+    expect(recentButtons.map(button =>
+      flattenText(button.findAllByType(Text)[0].props.children),
+    )).toEqual(['00:30', '01:00', '10:00']);
   });
 
   it('drafts timer target wheel changes and applies them only after Done', () => {
@@ -930,7 +1142,7 @@ describe('TimerScreen', () => {
     expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
   });
 
-  it('shows reset, pause, and history action buttons with gestures', () => {
+  it('shows reset, pause, and timeline action buttons with gestures', () => {
     const renderer = renderTimerScreen();
     const textContent = getRenderedText(renderer);
 
@@ -938,7 +1150,7 @@ describe('TimerScreen', () => {
     expect(textContent).not.toContain('Left Wink');
     expect(textContent).toContain('PAUSE');
     expect(textContent).toContain('Look');
-    expect(textContent).toContain('HISTORY');
+    expect(textContent).toContain('TIMELINE');
     expect(textContent).toContain('Button');
   });
 
@@ -1156,7 +1368,7 @@ describe('TimerScreen', () => {
     expect(getHintStyle().color).toBe('#18794E');
   });
 
-  it('enables reset and history while look-pause is stopped by looking', () => {
+  it('enables reset and timeline while look-pause is stopped by looking', () => {
     const renderer = renderTimerScreen();
 
     expect(
@@ -1164,12 +1376,12 @@ describe('TimerScreen', () => {
         .disabled,
     ).toBe(false);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .disabled,
     ).toBe(false);
   });
 
-  it('enables reset and history as soon as look-pause visually enters stopped state', () => {
+  it('enables reset and timeline as soon as look-pause visually enters stopped state', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -1186,7 +1398,7 @@ describe('TimerScreen', () => {
         .disabled,
     ).toBe(false);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .disabled,
     ).toBe(false);
   });
@@ -1209,7 +1421,7 @@ describe('TimerScreen', () => {
     expect(renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}))
       .toHaveLength(0);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .disabled,
     ).toBe(false);
   });
@@ -1322,7 +1534,7 @@ describe('TimerScreen', () => {
     expect(latestLapText).toContain('00:08.50');
   });
 
-  it('enables reset and history while the timer is manually paused', () => {
+  it('enables reset and timeline while the timer is manually paused', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -1338,7 +1550,7 @@ describe('TimerScreen', () => {
         .disabled,
     ).toBe(false);
     expect(
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .disabled,
     ).toBe(false);
     expect(
@@ -1393,7 +1605,7 @@ describe('TimerScreen', () => {
     );
   });
 
-  it('connects the start button only when the assigned gesture is Button', () => {
+  it('shows Look Pause start as button and look-away while keeping the button fallback', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -1407,7 +1619,7 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
     const startButton = renderer.root.findByProps({
-      accessibilityLabel: 'START Button',
+      accessibilityLabel: 'START Look Away',
     });
 
     expect(startButton.props.disabled).toBe(false);
@@ -1440,7 +1652,7 @@ describe('TimerScreen', () => {
     });
 
     expect(renderer.root.findAllByProps({
-      accessibilityLabel: 'START Button',
+      accessibilityLabel: 'START Look Away',
     })).toHaveLength(0);
     expect(renderer.root.findAllByProps({testID: 'timer-main-content'}))
       .toHaveLength(0);
@@ -1479,20 +1691,20 @@ describe('TimerScreen', () => {
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
   });
 
-  it('keeps gesture inputs enabled while the history overlay is open', () => {
+  it('keeps gesture inputs enabled while the timeline overlay is open', () => {
     const renderer = renderTimerScreen();
 
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .onPress();
     });
 
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .onPress();
     });
 
@@ -1513,7 +1725,7 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
     const startButton = renderer.root.findByProps({
-      accessibilityLabel: 'START Button',
+      accessibilityLabel: 'START Look Away',
     });
 
     expect(getPressedStyleEntries(startButton)).toContainEqual(
@@ -1593,6 +1805,47 @@ describe('TimerScreen', () => {
       renderer.root.findByProps({
         accessibilityRole: 'image',
         accessibilityLabel: 'Ghost looking shy',
+      }),
+    ).toBeTruthy();
+  });
+
+  it('shows the running mascot while Basic Timer is active', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'unknown',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    expect(
+      renderer.root.findByProps({
+        accessibilityRole: 'image',
+        accessibilityLabel: 'Ghost running',
+      }),
+    ).toBeTruthy();
+  });
+
+  it('keeps Wink Control neutral between recognized wink gestures', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        detectionStatus: 'looking',
+        isLookPaused: false,
+        recentWinkSide: null,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+
+    expect(
+      renderer.root.findByProps({
+        accessibilityRole: 'image',
+        accessibilityLabel: 'Ghost ready',
       }),
     ).toBeTruthy();
   });
@@ -1766,6 +2019,116 @@ describe('TimerScreen', () => {
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
   });
 
+  it('renders compact preset mode summaries with a stable active dot', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+    });
+
+    const modeMenuText = renderer.root
+      .findByProps({testID: 'mode-menu'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(modeMenuText).toContain(
+      'START/PAUSE/RESUME Right Wink · RESET/LAP Left Wink',
+    );
+    expect(modeMenuText).toContain('START/PAUSE/RESUME/RESET/LAP Button');
+    expect(modeMenuText).not.toContain('Right wink toggles the timer');
+    expect(modeMenuText).not.toContain('Button-only timer without camera detection');
+    expect(modeMenuText).not.toContain('ACTIVE');
+    expect(
+      renderer.root.findAllByProps({testID: 'active-mode-indicator'}).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      renderer.root.findAllByProps({testID: 'inactive-mode-indicator'}).length,
+    ).toBeGreaterThanOrEqual(4);
+  });
+
+  it('does not show camera preparation text on the timer screen', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'looking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const basicRenderer = renderTimerScreen();
+
+    expect(basicRenderer.root.findAllByProps({
+      testID: 'timer-camera-preparing-label',
+    })).toHaveLength(0);
+
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'unknown',
+        isLookPaused: false,
+      },
+      timerModeId: 'lookPause',
+    };
+    const renderer = renderTimerScreen();
+
+    expect(renderer.root.findAllByProps({
+      testID: 'timer-camera-preparing-label',
+    })).toHaveLength(0);
+    expect(getRenderedText(renderer)).not.toContain('준비중 입니다.');
+  });
+
+  it('does not show camera preparation text in the mode menu', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'unknown',
+        isLookPaused: false,
+      },
+      timerModeId: 'winkControl',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+    });
+
+    const modeMenuText = renderer.root
+      .findByProps({testID: 'mode-menu'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(modeMenuText).not.toContain('준비중 입니다.');
+    expect(renderer.root.findAllByProps({
+      testID: 'timer-camera-preparing-label',
+    })).toHaveLength(0);
+  });
+
   it('keeps the timer value when selecting the current timekeeping mode', () => {
     mockState = {
       ...baseState,
@@ -1886,7 +2249,7 @@ describe('TimerScreen', () => {
     ).toContainEqual(expect.objectContaining({backgroundColor: '#FFFFFF'}));
   });
 
-  it('toggles the current mode history overlay from the bottom History button', () => {
+  it('toggles the current mode timeline overlay from the bottom Timeline button', () => {
     mockState = {
       ...baseState,
       timerModeId: 'basicTimer',
@@ -1921,12 +2284,12 @@ describe('TimerScreen', () => {
       .toHaveLength(0);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .onPress();
     });
 
     const historyButton = renderer.root.findByProps({
-      accessibilityLabel: 'HISTORY Button',
+      accessibilityLabel: 'TIMELINE Button',
     });
     const overlay = renderer.root.findByProps({
       testID: 'session-history-overlay',
@@ -1941,6 +2304,9 @@ describe('TimerScreen', () => {
 
     expect(historyButton.props.accessibilityState).toEqual({selected: true});
     expect(overlay).toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timeline-copy-button'}),
+    ).toBeTruthy();
     expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
     expect(historyRows.map(row => row.props.style)).toEqual(
       expect.arrayContaining([
@@ -1952,7 +2318,8 @@ describe('TimerScreen', () => {
         ]),
       ]),
     );
-    expect(overlayText).toContain('HISTORY');
+    expect(overlayText).toContain('TIMELINE');
+    expect(overlayText).toContain('2 EVENTS');
     expect(overlayText).toContain('LAP');
     expect(overlayText).toContain('+00:05.00');
     expect(overlayText).not.toContain('START');
@@ -1967,7 +2334,58 @@ describe('TimerScreen', () => {
       .toHaveLength(0);
   });
 
-  it('shows timer mark history with elapsed and left times', () => {
+  it('copies visible timeline events to the clipboard from the header icon', async () => {
+    mockState = {
+      ...baseState,
+      timerModeId: 'basicTimer',
+      sessionHistory: [
+        {id: 'START-1000', type: 'START', atMs: 1000, elapsedMs: 0, deltaMs: 0},
+        {
+          id: 'LAP-6000',
+          type: 'LAP',
+          atMs: 6000,
+          elapsedMs: 5000,
+          deltaMs: 5000,
+        },
+        {
+          id: 'LAP-8000',
+          type: 'LAP',
+          atMs: 8000,
+          elapsedMs: 7000,
+          deltaMs: 2000,
+        },
+        {
+          id: 'STOP-7000',
+          type: 'STOP',
+          atMs: 7000,
+          elapsedMs: 5000,
+          deltaMs: 0,
+        },
+      ],
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
+        .onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root.findByProps({testID: 'timeline-copy-button'}).props
+        .onPress();
+    });
+
+    expect(mockCopyTimelineText).toHaveBeenCalledWith(
+      [
+        'TIMELINE',
+        '2 EVENTS',
+        '02  LAP  00:07.00  +00:02.00',
+        '01  LAP  00:05.00  +00:05.00',
+      ].join('\n'),
+    );
+  });
+
+  it('shows timer mark timeline with elapsed and left times', () => {
     mockState = {
       ...baseState,
       timekeepingMode: 'timer',
@@ -1990,7 +2408,7 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .onPress();
     });
 
@@ -2134,7 +2552,7 @@ describe('TimerScreen', () => {
     );
   });
 
-  it('shows stop records instead of lap records for Look Pause history', () => {
+  it('shows stop events instead of lap events for Look Pause timeline', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -2164,7 +2582,7 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .onPress();
     });
 
@@ -2190,7 +2608,7 @@ describe('TimerScreen', () => {
       .toBeTruthy();
   });
 
-  it('replaces the history overlay with the restored mode menu', () => {
+  it('replaces the timeline overlay with the restored mode menu', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -2221,7 +2639,7 @@ describe('TimerScreen', () => {
     );
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'HISTORY Button'}).props
+      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .onPress();
     });
 
@@ -2314,6 +2732,7 @@ describe('TimerScreen', () => {
     mockState = {
       ...baseState,
       timekeepingMode: 'timer',
+      timerModeId: 'basicTimer',
       isTimerAlertActive: true,
       timer: {
         ...baseTimer,
@@ -2336,6 +2755,34 @@ describe('TimerScreen', () => {
     });
 
     expect(mockStopTimerEndAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the completed timer alert when restarting from the alert state', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerModeId: 'basicTimer',
+      isTimerAlertActive: true,
+      timer: {
+        ...baseTimer,
+        phase: 'ended',
+        focusDurationMs: 60 * 1000,
+        targetDurationMs: 60 * 1000,
+        detectionStatus: 'unknown',
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+    const restartButton = renderer.root.findByProps({
+      accessibilityLabel: 'RESTART Button',
+    });
+
+    ReactTestRenderer.act(() => {
+      restartButton.props.onPress();
+    });
+
+    expect(mockStopTimerEndAlert).toHaveBeenCalledTimes(1);
+    expect(mockStartTimerSession).toHaveBeenCalledTimes(1);
   });
 
   it('keeps mode selection locked while a completed timer alert is still active', () => {

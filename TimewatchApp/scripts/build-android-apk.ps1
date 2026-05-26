@@ -9,11 +9,11 @@ $AndroidRoot = Join-Path $ProjectRoot "android"
 $Gradle = Join-Path $AndroidRoot "gradlew.bat"
 $ReleaseApk = Join-Path $AndroidRoot "app\build\outputs\apk\release\app-release.apk"
 $DistDir = Join-Path $ProjectRoot "dist\android"
-$DistApk = Join-Path $DistDir "timewatch-release.apk"
+$DistApk = Join-Path $DistDir "winktimer-release.apk"
 
 function Write-Step {
   param([string]$Message)
-  Write-Host "[timewatch] $Message"
+  Write-Host "[winktimer] $Message"
 }
 
 function Initialize-AndroidSdkEnvironment {
@@ -76,6 +76,6 @@ try {
   Write-Step "Standalone APK ready: $($apkInfo.FullName)"
   Write-Step "Size: $([Math]::Round($apkInfo.Length / 1MB, 1)) MB"
 } catch {
-  Write-Host "[timewatch:error] $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "[winktimer:error] $($_.Exception.Message)" -ForegroundColor Red
   exit 1
 }

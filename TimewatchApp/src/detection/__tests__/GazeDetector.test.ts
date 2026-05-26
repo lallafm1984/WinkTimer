@@ -28,7 +28,7 @@ const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
 
 describe('GazeDetector', () => {
   afterEach(() => {
-    DeviceEventEmitter.removeAllListeners('TimewatchGazeDetectionReading');
+    DeviceEventEmitter.removeAllListeners('WinkTimerGazeDetectionReading');
 
     if (originalNativeGazeDetection) {
       nativeModules.NativeGazeDetection = originalNativeGazeDetection;
@@ -257,7 +257,7 @@ describe('GazeDetector', () => {
   it('uses native gaze detection events as the latest reading', () => {
     const detector = createMockGazeDetector('unknown');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 0.82,
       eyeState: 'oneEyeClosed',
@@ -274,7 +274,7 @@ describe('GazeDetector', () => {
   it('ignores wink classification details from native events when the face is not facing the screen', () => {
     const detector = createMockGazeDetector('unknown');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'notLooking',
       confidence: 0.6,
       eyeState: 'oneEyeClosed',
@@ -299,7 +299,7 @@ describe('GazeDetector', () => {
   it('ignores malformed native gaze detection events', () => {
     const detector = createMockGazeDetector('notLooking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'sideways',
       confidence: 0.9,
     });
@@ -315,7 +315,7 @@ describe('GazeDetector', () => {
   it('ignores malformed native eye state while accepting the status', () => {
     const detector = createMockGazeDetector('unknown');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 0.75,
       eyeState: 'leftish',
@@ -332,7 +332,7 @@ describe('GazeDetector', () => {
   it('preserves native wink debug values in the latest reading', () => {
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 0.82,
       eyeState: 'oneEyeClosed',
@@ -393,7 +393,7 @@ describe('GazeDetector', () => {
   it('preserves native smile values in the latest reading', () => {
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 0.88,
       eyeState: 'bothOpen',
@@ -425,21 +425,21 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
     });
 
     nowMs = 1300;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -460,14 +460,14 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -475,7 +475,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1300;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -496,7 +496,7 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'unknown',
@@ -505,7 +505,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1120;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -515,7 +515,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1340;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'unknown',
@@ -542,7 +542,7 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -552,7 +552,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1160;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'unknown',
@@ -564,7 +564,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1440;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -594,7 +594,7 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -604,7 +604,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1160;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -617,7 +617,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1440;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -635,7 +635,7 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -653,7 +653,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1160;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -671,7 +671,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1440;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -697,14 +697,14 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -712,7 +712,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1350;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -727,7 +727,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1500;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -735,7 +735,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1750;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -750,7 +750,7 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -759,7 +759,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1120;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -769,7 +769,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1340;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -783,7 +783,7 @@ describe('GazeDetector', () => {
   it('marks non-ready raw eye values as wink-unavailable unknown state', () => {
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -809,14 +809,14 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('notLooking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'notLooking',
       confidence: 1,
       eyeState: 'unknown',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -824,7 +824,7 @@ describe('GazeDetector', () => {
     });
 
     nowMs = 1400;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -839,21 +839,21 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
     });
 
     nowMs = 2600;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -868,21 +868,21 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
     });
 
     nowMs = 1900;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -902,14 +902,14 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -918,7 +918,7 @@ describe('GazeDetector', () => {
     expect(detector.getLatestReading(1800).eyeState).toBe('oneEyeClosed');
 
     nowMs = 1850;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -934,14 +934,14 @@ describe('GazeDetector', () => {
     jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
     const detector = createMockGazeDetector('looking');
 
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1100;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
@@ -950,7 +950,7 @@ describe('GazeDetector', () => {
     detector.suppressSingleWinkUntilOpen();
 
     nowMs = 1200;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
@@ -959,21 +959,21 @@ describe('GazeDetector', () => {
     expect(detector.consumeSingleWink(1300)).toBeNull();
 
     nowMs = 1500;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',
     });
 
     nowMs = 1600;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'oneEyeClosed',
     });
 
     nowMs = 1900;
-    DeviceEventEmitter.emit('TimewatchGazeDetectionReading', {
+    DeviceEventEmitter.emit('WinkTimerGazeDetectionReading', {
       status: 'looking',
       confidence: 1,
       eyeState: 'bothOpen',

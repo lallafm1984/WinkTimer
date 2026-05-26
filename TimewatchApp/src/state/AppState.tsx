@@ -97,6 +97,7 @@ import {
   type TimerState,
 } from '../domain/timerEngine';
 import {
+  DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS,
   DEFAULT_TIMER_TARGET_DURATION_MS,
   normalizeTimekeepingMode,
   normalizeTimerTargetDurationMs,
@@ -104,6 +105,7 @@ import {
 } from '../domain/timekeeping';
 import {
   modeUsesLookPause,
+  modeUsesLookAwayStart,
   modeHasLap,
   modeRunsWithoutGaze,
   modeUsesSmilePause,
@@ -121,10 +123,11 @@ import {
 import type { SessionRepository } from '../storage/sessionRepository';
 import { createSessionRepository } from '../storage/sessionRepository';
 
-const SETTINGS_STORAGE_KEY = '@timewatch:settings:v1';
+const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
 const DEFAULT_TIMER_MODE_ID: TimerModeId = 'basicTimer';
+const MAX_RECENT_TIMER_TARGETS = 3;
 
-const FINISH_ERROR_MESSAGE = '세션 저장에 실패했습니다. 다시 시도해 주세요.';
+const FINISH_ERROR_MESSAGE = '?�션 ?�?�에 ?�패?�습?�다. ?�시 ?�도??주세??';
 
 export type AppScreen =
   | 'timer'
@@ -193,6 +196,7 @@ type AppStateValue = {
   timekeepingMode: TimekeepingMode;
   setTimekeepingMode(mode: TimekeepingMode): void;
   timerTargetDurationMs: number;
+  recentTimerTargetDurationsMs: number[];
   setTimerTargetDurationMs(durationMs: number): void;
   timerModeId: TimerModeId;
   setTimerModeId: React.Dispatch<React.SetStateAction<TimerModeId>>;
@@ -247,6 +251,7 @@ type PersistedSettings = {
   normalTimerMode: boolean;
   timekeepingMode: TimekeepingMode;
   timerTargetDurationMs: number;
+  recentTimerTargetDurationsMs: number[];
   timerModeId: TimerModeId;
   timerAlertVibrationEnabled: boolean;
   timerAlertSoundEnabled: boolean;
@@ -287,6 +292,48 @@ function normalizeStoredTimerModeId(_value: unknown): TimerModeId {
   return DEFAULT_TIMER_MODE_ID;
 }
 
+function getDefaultRecentTimerTargetDurationsMs() {
+  return [...DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS];
+}
+
+function normalizeRecentTimerTargetDurationsMs(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return getDefaultRecentTimerTargetDurationsMs();
+  }
+
+  const durations: number[] = [];
+
+  value.forEach(item => {
+    if (typeof item !== 'number' || !Number.isFinite(item)) {
+      return;
+    }
+
+    const durationMs = normalizeTimerTargetDurationMs(item);
+
+    if (!durations.includes(durationMs)) {
+      durations.push(durationMs);
+    }
+  });
+
+  if (durations.length === 0) {
+    return getDefaultRecentTimerTargetDurationsMs();
+  }
+
+  return durations.slice(0, MAX_RECENT_TIMER_TARGETS);
+}
+
+function addRecentTimerTargetDurationMs(
+  currentDurationsMs: number[],
+  durationMs: number,
+) {
+  const nextDurationMs = normalizeTimerTargetDurationMs(durationMs);
+
+  return [
+    nextDurationMs,
+    ...currentDurationsMs.filter(item => item !== nextDurationMs),
+  ].slice(0, MAX_RECENT_TIMER_TARGETS);
+}
+
 function normalizeStoredSettings(value: unknown): PersistedSettings | null {
   if (!isRecord(value)) {
     return null;
@@ -301,6 +348,9 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
     timekeepingMode: normalizeTimekeepingMode(value.timekeepingMode),
     timerTargetDurationMs: normalizeTimerTargetDurationMs(
       value.timerTargetDurationMs,
+    ),
+    recentTimerTargetDurationsMs: normalizeRecentTimerTargetDurationsMs(
+      value.recentTimerTargetDurationsMs,
     ),
     timerModeId: normalizeStoredTimerModeId(value.timerModeId),
     timerAlertVibrationEnabled: normalizeStoredBoolean(
@@ -569,6 +619,31 @@ function canListenForWinkAction(
   );
 }
 
+function canStartFromLookAway(timer: TimerState, modeId: TimerModeId) {
+  return modeUsesLookAwayStart(modeId) && timer.phase === 'idle';
+}
+
+function applyLookAwayStartGesture(
+  state: TimerState,
+  reading: DetectionReading,
+): TimerState {
+  if (reading.atMs < state.lastUpdatedAtMs || reading.status !== 'notLooking') {
+    return state;
+  }
+
+  return {
+    ...startTimer(
+      createInitialTimerState(reading.atMs),
+      reading.atMs,
+      state.targetDurationMs ?? undefined,
+    ),
+    detectionStatus: reading.status,
+    eyeState: reading.eyeState ?? 'unknown',
+    winkSide: null,
+    smileDetected: null,
+  };
+}
+
 function canResetFromWink(
   timer: TimerState,
   modeId: TimerModeId,
@@ -809,6 +884,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     useState<TimekeepingMode>('stopwatch');
   const [timerTargetDurationMs, setTimerTargetDurationMsState] =
     useState(DEFAULT_TIMER_TARGET_DURATION_MS);
+  const [recentTimerTargetDurationsMs, setRecentTimerTargetDurationsMs] =
+    useState<number[]>(getDefaultRecentTimerTargetDurationsMs);
   const [timerModeId, setTimerModeIdState] =
     useState<TimerModeId>(DEFAULT_TIMER_MODE_ID);
   const [
@@ -969,6 +1046,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         timekeepingModeRef.current = nextSettings.timekeepingMode;
         setTimerTargetDurationMsState(nextSettings.timerTargetDurationMs);
         timerTargetDurationMsRef.current = nextSettings.timerTargetDurationMs;
+        setRecentTimerTargetDurationsMs(
+          nextSettings.recentTimerTargetDurationsMs,
+        );
         setTimer(current => {
           if (current.phase === 'active') {
             return current;
@@ -1044,6 +1124,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       normalTimerMode,
       timekeepingMode,
       timerTargetDurationMs,
+      recentTimerTargetDurationsMs,
       timerModeId,
       timerAlertVibrationEnabled,
       timerAlertSoundEnabled,
@@ -1085,6 +1166,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     timerAlertVibrationEnabled,
     timerAlertVibrationPatternId,
     timekeepingMode,
+    recentTimerTargetDurationsMs,
     timerTargetDurationMs,
     timerModeId,
     winkDistanceLevel,
@@ -1535,6 +1617,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
             currentForTick,
             activeTimerModeId,
           );
+          const listensForLookAwayStart = canStartFromLookAway(
+            currentForTick,
+            activeTimerModeId,
+          );
           const listensForAnyWink =
             listensForLeftWinkAction ||
             listensForRightWinkAction ||
@@ -1544,7 +1630,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           if (
             !listensForAnyWink &&
             !listensForSmileAction &&
-            !listensForSmileResume
+            !listensForSmileResume &&
+            !listensForLookAwayStart
           ) {
             return currentForTick;
           }
@@ -1566,6 +1653,16 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
               gazeDetector.suppressSingleWinkUntilOpen();
             }
           };
+
+          if (
+            listensForLookAwayStart &&
+            passiveGestureReading.status === 'notLooking'
+          ) {
+            return applyLookAwayStartGesture(
+              currentForTick,
+              passiveGestureReading,
+            );
+          }
 
           if (
             listensForSmileAction &&
@@ -1841,6 +1938,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       canResetFromWink(timer, timerModeId, 'right') ||
       canListenForSmileStart(timer, timerModeId) ||
       canResumeFromSmile(timer, timerModeId) ||
+      canStartFromLookAway(timer, timerModeId) ||
       canListenForWinkAction(timer, timerModeId, 'left') ||
       canListenForWinkAction(timer, timerModeId, 'right'));
 
@@ -1951,6 +2049,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setFinishError(null);
       timerTargetDurationMsRef.current = nextDurationMs;
       setTimerTargetDurationMsState(nextDurationMs);
+      setRecentTimerTargetDurationsMs(currentDurationsMs =>
+        addRecentTimerTargetDurationMs(currentDurationsMs, nextDurationMs),
+      );
       setTimer(current => {
         if (
           timekeepingModeRef.current !== 'timer' ||
@@ -2146,6 +2247,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timekeepingMode,
       setTimekeepingMode,
       timerTargetDurationMs,
+      recentTimerTargetDurationsMs,
       setTimerTargetDurationMs,
       timerModeId,
       setTimerModeId,
@@ -2198,6 +2300,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       normalTimerMode,
       timekeepingMode,
       timerTargetDurationMs,
+      recentTimerTargetDurationsMs,
       timerModeId,
       timerAlertVibrationEnabled,
       timerAlertSoundEnabled,

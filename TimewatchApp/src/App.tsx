@@ -6,6 +6,7 @@ import {HistoryScreen} from './screens/HistoryScreen';
 import {SessionSummaryScreen} from './screens/SessionSummaryScreen';
 import {SettingsScreen} from './screens/SettingsScreen';
 import {TimerScreen} from './screens/TimerScreen';
+import {MascotImageCache} from './components/MascotImageCache';
 import {preloadMascotImages} from './components/mascotImages';
 import {arcadeTheme} from './theme/arcadeTheme';
 
@@ -65,6 +66,7 @@ export default function App() {
     <SafeAreaProvider>
       <AppStateProvider>
         <SafeAreaView style={styles.container}>
+          <MascotImageCache />
           <StatusBar barStyle="dark-content" />
           <CurrentScreen />
         </SafeAreaView>

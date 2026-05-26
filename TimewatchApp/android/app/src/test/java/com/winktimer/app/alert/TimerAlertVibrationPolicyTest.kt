@@ -1,4 +1,4 @@
-package com.timewatchapp.alert
+package com.winktimer.app.alert
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

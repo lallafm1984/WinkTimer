@@ -25,7 +25,7 @@ describe('entry point', () => {
     });
 
     expect(registerComponent).toHaveBeenCalledWith(
-      'TimewatchApp',
+      'WinkTimer',
       expect.any(Function),
     );
     expect(registerComponent).toHaveBeenCalledTimes(1);

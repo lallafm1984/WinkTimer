@@ -122,7 +122,7 @@ function getNativeGazeDetection(): NativeGazeDetectionModule | undefined {
     | undefined;
 }
 
-const readingEventName = 'TimewatchGazeDetectionReading';
+const readingEventName = 'WinkTimerGazeDetectionReading';
 const SINGLE_WINK_MIN_MS = 100;
 const DEFAULT_SINGLE_WINK_MIN_DURATION_MS = 200;
 const DEFAULT_SINGLE_WINK_MAX_DURATION_MS = 1000;

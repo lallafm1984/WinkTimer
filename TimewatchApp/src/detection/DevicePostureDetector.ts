@@ -18,7 +18,7 @@ export type DevicePostureDetector = {
   setMockPosture(posture: DevicePosture): void;
 };
 
-const postureEventName = 'TimewatchDevicePostureReading';
+const postureEventName = 'WinkTimerDevicePostureReading';
 const POSTURE_CONFIRM_MS = 150;
 
 function getNativeDevicePosture(): NativeDevicePostureModule | undefined {

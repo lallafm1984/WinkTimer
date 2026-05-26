@@ -1,4 +1,4 @@
-package com.timewatchapp.alert
+package com.winktimer.app.alert
 
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext

@@ -1,4 +1,4 @@
-package com.timewatchapp.alert
+package com.winktimer.app.alert
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -7,7 +7,7 @@ import android.content.Intent
 import android.os.Build
 
 object TimerAlertScheduler {
-  const val ACTION_PLAY = "com.timewatchapp.alert.PLAY_TIMER_END_ALERT"
+  const val ACTION_PLAY = "com.winktimer.app.alert.PLAY_TIMER_END_ALERT"
   const val EXTRA_SOUND_ID = "soundId"
   const val EXTRA_VIBRATION_ENABLED = "vibrationEnabled"
   const val EXTRA_SOUND_ENABLED = "soundEnabled"

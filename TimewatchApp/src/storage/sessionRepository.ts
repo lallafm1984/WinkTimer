@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {SessionSummary} from '../domain/session';
 
-const SESSION_KEY = '@timewatch:sessions:v1';
+const SESSION_KEY = '@winktimer:sessions:v1';
 
 export type SessionRepository = {
   list(): Promise<SessionSummary[]>;

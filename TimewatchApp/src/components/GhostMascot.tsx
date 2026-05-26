@@ -23,6 +23,8 @@ export function getGhostExpressionLabel(
   switch (expression) {
     case 'ready':
       return 'Ghost ready';
+    case 'running':
+      return 'Ghost running';
     case 'looking':
       return 'Ghost looking shy';
     case 'leftWink':
@@ -63,6 +65,7 @@ export function GhostMascot({
       accessibilityLabel={getGhostExpressionLabel(expression, winkSide)}
       style={[styles.stage, {height: mascotSize, width: mascotSize}]}>
       <Image
+        fadeDuration={0}
         resizeMode="contain"
         source={imageSource}
         style={styles.image}

@@ -24,6 +24,7 @@ export type TimerModePreset = {
   pauseGesture: TimerModeGesture;
   resumeGesture: TimerModeGesture;
   resetGesture: TimerModeGesture;
+  lookAwayStartEnabled?: boolean;
   lapGesture?: TimerModeGesture;
   actions: Array<{label: string; value: string}>;
 };
@@ -47,15 +48,31 @@ export const timerModePresets: TimerModePreset[] = [
     ],
   },
   {
+    id: 'flipTimer',
+    title: 'FLIP TIMER',
+    description: 'Flip the device face down to run, face up to pause',
+    startGesture: 'deviceFaceDown',
+    pauseGesture: 'deviceFaceUp',
+    resumeGesture: 'deviceFaceDown',
+    resetGesture: 'button',
+    actions: [
+      {label: 'START', value: 'Flip Down'},
+      {label: 'PAUSE', value: 'Face Up'},
+      {label: 'RESUME', value: 'Flip Down'},
+      {label: 'RESET', value: 'Button'},
+    ],
+  },
+  {
     id: 'lookPause',
     title: 'LOOK PAUSE',
-    description: 'Button start, look pause, button reset',
+    description: 'Button or look-away start, look pause, button reset',
     startGesture: 'button',
     pauseGesture: 'look',
     resumeGesture: 'lookAway',
     resetGesture: 'button',
+    lookAwayStartEnabled: true,
     actions: [
-      {label: 'START', value: 'Button'},
+      {label: 'START', value: 'Look Away'},
       {label: 'PAUSE', value: 'Look'},
       {label: 'RESUME', value: 'Look Away'},
       {label: 'RESET', value: 'Button'},
@@ -93,21 +110,6 @@ export const timerModePresets: TimerModePreset[] = [
       {label: 'RESET', value: 'Button'},
     ],
   },
-  {
-    id: 'flipTimer',
-    title: 'FLIP TIMER',
-    description: 'Flip the device face down to run, face up to pause',
-    startGesture: 'deviceFaceDown',
-    pauseGesture: 'deviceFaceUp',
-    resumeGesture: 'deviceFaceDown',
-    resetGesture: 'button',
-    actions: [
-      {label: 'START', value: 'Flip Down'},
-      {label: 'PAUSE', value: 'Face Up'},
-      {label: 'RESUME', value: 'Flip Down'},
-      {label: 'RESET', value: 'Button'},
-    ],
-  },
 ];
 
 export function getTimerModePreset(modeId: TimerModeId): TimerModePreset {
@@ -118,6 +120,10 @@ export function getTimerModePreset(modeId: TimerModeId): TimerModePreset {
 
 export function modeUsesLookPause(modeId: TimerModeId): boolean {
   return getTimerModePreset(modeId).pauseGesture === 'look';
+}
+
+export function modeUsesLookAwayStart(modeId: TimerModeId): boolean {
+  return getTimerModePreset(modeId).lookAwayStartEnabled === true;
 }
 
 export function modeUsesLeftWinkStart(modeId: TimerModeId): boolean {

@@ -1,4 +1,4 @@
-package com.timewatchapp.alert
+package com.winktimer.app.alert
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -12,7 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import com.timewatchapp.MainActivity
+import com.winktimer.app.MainActivity
 
 class TimerAlertService : Service() {
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -107,7 +107,7 @@ class TimerAlertService : Service() {
 
     return builder
       .setContentTitle("Timer alert")
-      .setContentText("Timewatch timer finished")
+      .setContentText("Wink Timer finished")
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setCategory(Notification.CATEGORY_ALARM)
       .setOngoing(true)
@@ -139,9 +139,9 @@ class TimerAlertService : Service() {
   }
 
   companion object {
-    private const val ACTION_PLAY = "com.timewatchapp.alert.START_ALERT_SERVICE"
-    private const val ACTION_STOP = "com.timewatchapp.alert.STOP_ALERT_SERVICE"
-    private const val CHANNEL_ID = "timewatch_timer_alerts"
+    private const val ACTION_PLAY = "com.winktimer.app.alert.START_ALERT_SERVICE"
+    private const val ACTION_STOP = "com.winktimer.app.alert.STOP_ALERT_SERVICE"
+    private const val CHANNEL_ID = "winktimer_timer_alerts"
     private const val NOTIFICATION_ID = 9202
 
     fun createPlayIntent(

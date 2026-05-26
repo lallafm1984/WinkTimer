@@ -31,9 +31,9 @@ describe('mobile Android verification environment', () => {
     expect(script).toContain('adb reverse tcp:8081 tcp:8081');
     expect(script).toContain('app-debug.apk');
     expect(script).toContain(
-      'pm grant com.timewatchapp android.permission.CAMERA',
+      'pm grant com.winktimer.app android.permission.CAMERA',
     );
-    expect(script).toContain('am start -n com.timewatchapp/.MainActivity');
+    expect(script).toContain('am start -n com.winktimer.app/.MainActivity');
   });
 
   test('standalone APK script builds a release APK that contains the JS bundle', () => {
@@ -85,7 +85,8 @@ describe('mobile Android verification environment', () => {
         'main',
         'java',
         'com',
-        'timewatchapp',
+        'winktimer',
+        'app',
         'gaze',
         'NativeGazeDetectionModule.kt',
       ),
@@ -97,7 +98,7 @@ describe('mobile Android verification environment', () => {
     expect(nativeModule).toContain('ImageAnalysis');
     expect(nativeModule).toContain('InputImage.fromMediaImage');
     expect(nativeModule).toContain('FaceDetection.getClient');
-    expect(nativeModule).toContain('TimewatchGazeDetectionReading');
+    expect(nativeModule).toContain('WinkTimerGazeDetectionReading');
     expect(nativeModule).toContain('oneEyeClosed');
     expect(nativeModule).toContain('bothClosed');
     expect(nativeModule).toContain('leftEyeOpenProbability');
@@ -128,7 +129,8 @@ describe('mobile Android verification environment', () => {
         'main',
         'java',
         'com',
-        'timewatchapp',
+        'winktimer',
+        'app',
         'gaze',
         'NativeGazeDetectionModule.kt',
       ),
@@ -139,9 +141,50 @@ describe('mobile Android verification environment', () => {
     expect(nativeModule).toContain('TYPE_ACCELEROMETER');
     expect(nativeModule).toContain('startDevicePosture');
     expect(nativeModule).toContain('stopDevicePosture');
-    expect(nativeModule).toContain('TimewatchDevicePostureReading');
+    expect(nativeModule).toContain('WinkTimerDevicePostureReading');
     expect(nativeModule).toContain('faceDown');
     expect(nativeModule).toContain('faceUp');
+  });
+
+  test('native timeline clipboard module copies timeline text', () => {
+    const mainApplication = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'MainApplication.kt',
+      ),
+      'utf8',
+    );
+    const nativeModule = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'clipboard',
+        'NativeTimelineClipboardModule.kt',
+      ),
+      'utf8',
+    );
+
+    expect(mainApplication).toContain('NativeTimelineClipboardPackage');
+    expect(mainApplication).toContain('add(NativeTimelineClipboardPackage())');
+    expect(nativeModule).toContain('ClipboardManager');
+    expect(nativeModule).toContain('ClipData.newPlainText');
+    expect(nativeModule).toContain('NativeTimelineClipboard');
+    expect(nativeModule).toContain('copyText');
   });
 
   test('native gaze module makes far-distance wink classification configurable', () => {
@@ -154,7 +197,8 @@ describe('mobile Android verification environment', () => {
         'main',
         'java',
         'com',
-        'timewatchapp',
+        'winktimer',
+        'app',
         'gaze',
         'NativeGazeDetectionModule.kt',
       ),
@@ -216,7 +260,8 @@ describe('mobile Android verification environment', () => {
         'main',
         'java',
         'com',
-        'timewatchapp',
+        'winktimer',
+        'app',
         'gaze',
         'NativeGazeDetectionModule.kt',
       ),

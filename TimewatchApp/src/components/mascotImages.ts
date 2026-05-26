@@ -2,6 +2,7 @@ import {Image, type ImageSourcePropType} from 'react-native';
 
 export type GhostExpression =
   | 'ready'
+  | 'running'
   | 'looking'
   | 'leftWink'
   | 'rightWink'
@@ -62,6 +63,7 @@ export function getMascotImageGroupForExpression(
   expression: GhostExpression,
 ): MascotImageGroup {
   switch (expression) {
+    case 'running':
     case 'looking':
       return 'look';
     case 'leftWink':
