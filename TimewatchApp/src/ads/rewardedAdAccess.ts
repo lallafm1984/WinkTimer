@@ -4,9 +4,16 @@ import {
   RewardedAdEventType,
 } from 'react-native-google-mobile-ads';
 import {getRewardedAdUnitId} from './adMobConfig';
+import {recordAdDiagnosticLog} from './adDiagnosticLog';
 
 type RewardedAdAccessEventType = AdEventType | RewardedAdEventType;
 type RewardedAdAccessListener = (payload?: unknown) => void;
+export type RewardedAdAccessErrorReason =
+  | 'closed-without-reward'
+  | 'load-error'
+  | 'no-fill'
+  | 'show-error'
+  | 'timeout';
 
 export type RewardedAdForAccess = {
   addAdEventListener(
@@ -23,14 +30,62 @@ export type RewardedAdAccessOptions = {
 };
 
 export class RewardedAdAccessError extends Error {
-  constructor(message: string) {
+  readonly payload?: unknown;
+  readonly reason: RewardedAdAccessErrorReason;
+
+  constructor(
+    message: string,
+    reason: RewardedAdAccessErrorReason,
+    payload?: unknown,
+  ) {
     super(message);
     this.name = 'RewardedAdAccessError';
+    this.reason = reason;
+    this.payload = payload;
   }
 }
 
+function getObjectField(value: unknown, key: string) {
+  if (value === null || typeof value !== 'object') {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[key];
+}
+
+function getLowercaseText(value: unknown) {
+  return typeof value === 'string' ? value.toLowerCase() : '';
+}
+
+function includesNoFill(value: unknown) {
+  const text = getLowercaseText(value);
+  return text.includes('no-fill') || text.includes('no fill');
+}
+
+function isNoFillAdErrorPayload(payload: unknown) {
+  const userInfo = getObjectField(payload, 'userInfo');
+
+  return [
+    getObjectField(payload, 'code'),
+    getObjectField(payload, 'message'),
+    getObjectField(userInfo, 'code'),
+    getObjectField(userInfo, 'message'),
+  ].some(includesNoFill);
+}
+
+export function isRewardedAdNoFillError(error: unknown) {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    (error as {reason?: unknown}).reason === 'no-fill'
+  );
+}
+
 function createRewardedAdForAccess() {
-  return RewardedAd.createForAdRequest(getRewardedAdUnitId(), {
+  const adUnitId = getRewardedAdUnitId();
+  recordAdDiagnosticLog('rewarded.create_request', {adUnitId});
+
+  return RewardedAd.createForAdRequest(adUnitId, {
     requestNonPersonalizedAdsOnly: true,
   });
 }
@@ -47,7 +102,10 @@ export function showRewardedAdForAccess({
     const unsubscribeCallbacks: Array<() => void> = [];
 
     const timeoutId = setTimeout(() => {
-      rejectWithError('광고를 불러오지 못했습니다. 다시 시도해 주세요.');
+      rejectWithError(
+        '광고를 불러오지 못했습니다. 다시 시도해 주세요.',
+        'timeout',
+      );
     }, timeoutMs);
 
     const cleanup = () => {
@@ -67,20 +125,30 @@ export function showRewardedAdForAccess({
       resolve();
     };
 
-    const rejectWithError = (message: string) => {
+    const rejectWithError = (
+      message: string,
+      reason: RewardedAdAccessErrorReason,
+      payload?: unknown,
+    ) => {
       if (settled) {
         return;
       }
 
       settled = true;
       cleanup();
-      reject(new RewardedAdAccessError(message));
+      reject(new RewardedAdAccessError(message, reason, payload));
     };
 
     unsubscribeCallbacks.push(
       rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        rewardedAd.show().catch(() => {
-          rejectWithError('광고를 표시하지 못했습니다. 다시 시도해 주세요.');
+        recordAdDiagnosticLog('rewarded.loaded');
+        rewardedAd.show().catch(error => {
+          recordAdDiagnosticLog('rewarded.show_error', error);
+          rejectWithError(
+            '광고를 표시하지 못했습니다. 다시 시도해 주세요.',
+            'show-error',
+            error,
+          );
         });
       }),
       rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
@@ -92,13 +160,22 @@ export function showRewardedAdForAccess({
           return;
         }
 
-        rejectWithError('광고 시청이 완료되지 않았습니다.');
+        rejectWithError(
+          '광고 시청이 완료되지 않았습니다.',
+          'closed-without-reward',
+        );
       }),
-      rewardedAd.addAdEventListener(AdEventType.ERROR, () => {
-        rejectWithError('광고를 불러오지 못했습니다. 다시 시도해 주세요.');
+      rewardedAd.addAdEventListener(AdEventType.ERROR, error => {
+        recordAdDiagnosticLog('rewarded.load_error', error);
+        rejectWithError(
+          '광고를 불러오지 못했습니다. 다시 시도해 주세요.',
+          isNoFillAdErrorPayload(error) ? 'no-fill' : 'load-error',
+          error,
+        );
       }),
     );
 
+    recordAdDiagnosticLog('rewarded.load_request');
     rewardedAd.load();
   });
 }

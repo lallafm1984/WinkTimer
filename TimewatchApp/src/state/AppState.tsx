@@ -39,10 +39,7 @@ import type {
 } from '../detection/DevicePostureDetector';
 import { createDevicePostureDetector } from '../detection/DevicePostureDetector';
 import type { MockGazeDetector } from '../detection/GazeDetector';
-import {
-  createMockGazeDetector,
-  ensureCameraPermission,
-} from '../detection/GazeDetector';
+import { createMockGazeDetector } from '../detection/GazeDetector';
 import type {
   DetectionReading,
   DetectionFrameIntervalLevel,
@@ -938,9 +935,12 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const timerModeIdRef = useRef(timerModeId);
   const lastTimerAlertKeyRef = useRef<string | null>(null);
   const scheduledTimerAlertKeyRef = useRef<string | null>(null);
+  const scheduledTimerAlertTriggerAtMsRef = useRef<number | null>(null);
+  const scheduledTimerAlertMayFireInBackgroundRef = useRef(false);
   const backgroundTimekeepingNotificationKeyRef = useRef<string | null>(null);
   const startupPermissionsRequestedRef = useRef(false);
   const isTimerAlertActiveRef = useRef(false);
+  const isAppForegroundRef = useRef(true);
   const timerAlertAutoClearTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -988,6 +988,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     }
 
     scheduledTimerAlertKeyRef.current = null;
+    scheduledTimerAlertTriggerAtMsRef.current = null;
+    scheduledTimerAlertMayFireInBackgroundRef.current = false;
     cancelScheduledTimerEndAlert().catch(() => undefined);
   }, []);
 
@@ -1006,7 +1008,6 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     }
 
     startupPermissionsRequestedRef.current = true;
-    ensureCameraPermission().catch(() => undefined);
     ensureBackgroundTimekeepingNotificationPermission().catch(() => undefined);
   }, []);
 
@@ -1035,6 +1036,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timerAlertAutoClearTimeoutRef.current = setTimeout(() => {
         timerAlertAutoClearTimeoutRef.current = null;
         setTimerAlertActive(false);
+        stopNativeTimerEndAlert().catch(() => undefined);
       }, durationMs);
     },
     [clearTimerAlertAutoClearTimeout, setTimerAlertActive],
@@ -1279,6 +1281,16 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       targetDurationMs !== null;
 
     if (!canScheduleAlert) {
+      const shouldPreserveDueBackgroundAlert =
+        timer.phase === 'ended' &&
+        scheduledTimerAlertMayFireInBackgroundRef.current &&
+        scheduledTimerAlertTriggerAtMsRef.current !== null &&
+        Date.now() >= scheduledTimerAlertTriggerAtMsRef.current;
+
+      if (shouldPreserveDueBackgroundAlert) {
+        return;
+      }
+
       cancelScheduledTimerEndAlertIfNeeded();
       return;
     }
@@ -1295,6 +1307,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     const timerAlertNotificationChannelName = t(
       'notification.timerAlertsChannel',
     );
+    const timekeepingFinishedTitle = t('notification.timerTitle');
+    const timekeepingFinishedText = t('notification.timerAlertText');
+    const timekeepingChannelName = t('notification.backgroundChannel');
     const scheduleKey = [
       timer.startedAtMs ?? 'none',
       triggerAtMs,
@@ -1306,6 +1321,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timerAlertNotificationTitle,
       timerAlertNotificationText,
       timerAlertNotificationChannelName,
+      timekeepingFinishedTitle,
+      timekeepingFinishedText,
+      timekeepingChannelName,
     ].join(':');
 
     if (scheduledTimerAlertKeyRef.current === scheduleKey) {
@@ -1313,6 +1331,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     }
 
     scheduledTimerAlertKeyRef.current = scheduleKey;
+    scheduledTimerAlertTriggerAtMsRef.current = triggerAtMs;
+    scheduledTimerAlertMayFireInBackgroundRef.current =
+      !isAppForegroundRef.current;
     scheduleTimerEndAlert({
       triggerAtMs,
       vibrationEnabled: timerAlertVibrationEnabled,
@@ -1323,9 +1344,14 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       notificationTitle: timerAlertNotificationTitle,
       notificationText: timerAlertNotificationText,
       notificationChannelName: timerAlertNotificationChannelName,
+      timekeepingFinishedTitle,
+      timekeepingFinishedText,
+      timekeepingChannelName,
     }).catch(() => {
       if (scheduledTimerAlertKeyRef.current === scheduleKey) {
         scheduledTimerAlertKeyRef.current = null;
+        scheduledTimerAlertTriggerAtMsRef.current = null;
+        scheduledTimerAlertMayFireInBackgroundRef.current = false;
       }
     });
   }, [
@@ -1482,6 +1508,19 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       return;
     }
 
+    const scheduledTriggerAtMs = scheduledTimerAlertTriggerAtMsRef.current;
+    const scheduledBackgroundAlertAlreadyDue =
+      scheduledTimerAlertMayFireInBackgroundRef.current &&
+      scheduledTriggerAtMs !== null &&
+      Date.now() >= scheduledTriggerAtMs;
+
+    if (scheduledBackgroundAlertAlreadyDue) {
+      cancelScheduledTimerEndAlertIfNeeded();
+      clearTimerAlertAutoClearTimeout();
+      setTimerAlertActive(false);
+      return;
+    }
+
     setTimerAlertActive(true);
     scheduleTimerAlertAutoClear(timerAlertDurationId);
 
@@ -1500,6 +1539,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     }).catch(() => undefined);
   }, [
     cancelScheduledTimerEndAlertIfNeeded,
+    clearTimerAlertAutoClearTimeout,
     isAppForeground,
     scheduleTimerAlertAutoClear,
     setTimerAlertActive,
@@ -2060,7 +2100,25 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     const subscription = NativeAppState.addEventListener(
       'change',
       nextState => {
-        setIsAppForeground(nextState === 'active');
+        const nextIsForeground = nextState === 'active';
+        isAppForegroundRef.current = nextIsForeground;
+
+        if (
+          !nextIsForeground &&
+          scheduledTimerAlertKeyRef.current !== null
+        ) {
+          scheduledTimerAlertMayFireInBackgroundRef.current = true;
+        }
+
+        if (
+          nextIsForeground &&
+          scheduledTimerAlertTriggerAtMsRef.current !== null &&
+          Date.now() < scheduledTimerAlertTriggerAtMsRef.current
+        ) {
+          scheduledTimerAlertMayFireInBackgroundRef.current = false;
+        }
+
+        setIsAppForeground(nextIsForeground);
       },
     );
 

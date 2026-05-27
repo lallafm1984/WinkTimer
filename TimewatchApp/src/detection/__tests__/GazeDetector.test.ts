@@ -1,5 +1,14 @@
-import { DeviceEventEmitter, NativeModules } from 'react-native';
-import { createMockGazeDetector } from '../GazeDetector';
+import {
+  DeviceEventEmitter,
+  Linking,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
+import {
+  createMockGazeDetector,
+  ensureCameraPermission,
+} from '../GazeDetector';
 import type { GazeDetector, MockGazeDetector } from '../GazeDetector';
 
 type NativeGazeDetectionModuleForTest = {
@@ -25,6 +34,23 @@ type MutableNativeModules = typeof NativeModules & {
 
 const nativeModules = NativeModules as MutableNativeModules;
 const originalNativeGazeDetection = nativeModules.NativeGazeDetection;
+const originalPlatformOSDescriptor = Object.getOwnPropertyDescriptor(
+  Platform,
+  'OS',
+);
+
+function setAndroidPlatform() {
+  Object.defineProperty(Platform, 'OS', {
+    configurable: true,
+    value: 'android',
+  });
+}
+
+function restorePlatform() {
+  if (originalPlatformOSDescriptor) {
+    Object.defineProperty(Platform, 'OS', originalPlatformOSDescriptor);
+  }
+}
 
 describe('GazeDetector', () => {
   afterEach(() => {
@@ -36,6 +62,7 @@ describe('GazeDetector', () => {
       delete nativeModules.NativeGazeDetection;
     }
 
+    restorePlatform();
     jest.restoreAllMocks();
     jest.useRealTimers();
   });
@@ -58,6 +85,26 @@ describe('GazeDetector', () => {
     detector.setMockStatus('looking');
 
     expect(detector.getLatestReading(2000).status).toBe('looking');
+  });
+
+  it('opens app settings when the camera permission prompt is blocked', async () => {
+    setAndroidPlatform();
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+    const openSettings = jest
+      .spyOn(Linking, 'openSettings')
+      .mockResolvedValue(undefined);
+
+    await expect(
+      ensureCameraPermission({openSettingsIfBlocked: true}),
+    ).resolves.toBe(false);
+
+    expect(PermissionsAndroid.request).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(openSettings).toHaveBeenCalledTimes(1);
   });
 
   it.each([

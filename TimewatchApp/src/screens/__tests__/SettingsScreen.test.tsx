@@ -1,5 +1,13 @@
 import React from 'react';
-import {NativeModules, StyleSheet, Text, View} from 'react-native';
+import {
+  NativeModules,
+  Linking,
+  PermissionsAndroid,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import {TIMER_ALERT_PREVIEW_DURATION_MS} from '../../alerts/timerAlert';
 import {SettingsScreen} from '../SettingsScreen';
@@ -26,6 +34,14 @@ const mockSetTimerAlertSoundEnabled = jest.fn();
 const mockSetTimerAlertSoundId = jest.fn();
 const mockSetTimerAlertDurationId = jest.fn();
 const mockSetTimerAlertVibrationPatternId = jest.fn();
+const originalPlatformOSDescriptor = Object.getOwnPropertyDescriptor(
+  Platform,
+  'OS',
+);
+const originalPlatformVersionDescriptor = Object.getOwnPropertyDescriptor(
+  Platform,
+  'Version',
+);
 
 function createWinkReading({
   status = 'looking',
@@ -263,6 +279,30 @@ function getNodeStyle(
   return StyleSheet.flatten(renderer.root.findByProps({testID}).props.style);
 }
 
+function setAndroidPlatformVersion(version: number) {
+  Object.defineProperty(Platform, 'OS', {
+    configurable: true,
+    value: 'android',
+  });
+  Object.defineProperty(Platform, 'Version', {
+    configurable: true,
+    value: version,
+  });
+}
+
+function restorePlatform() {
+  if (originalPlatformOSDescriptor) {
+    Object.defineProperty(Platform, 'OS', originalPlatformOSDescriptor);
+  }
+  if (originalPlatformVersionDescriptor) {
+    Object.defineProperty(
+      Platform,
+      'Version',
+      originalPlatformVersionDescriptor,
+    );
+  }
+}
+
 function getTextStyle(
   renderer: ReactTestRenderer.ReactTestRenderer,
   text: string,
@@ -376,12 +416,18 @@ describe('SettingsScreen', () => {
     mockGazeDetector.consumeSingleWink.mockReturnValue(null);
   });
 
+  afterEach(() => {
+    restorePlatform();
+    jest.restoreAllMocks();
+  });
+
   it('renders the settings menu in the requested order without wink test', () => {
     const renderer = renderSettingsScreen();
     const text = getRenderedText(renderer);
 
     expect(getSettingsAccordionTitles(renderer)).toEqual([
       'TIMER',
+      'PERMISSIONS',
       'LOOK MODE',
       'WINK MODE',
       'SMILE MODE',
@@ -398,6 +444,140 @@ describe('SettingsScreen', () => {
     expect(text).not.toContain('SENSITIVITY');
     expect(text).not.toContain('FACE DIRECTION');
     expect(text).not.toContain('LEFT EYE CLOSED');
+  });
+
+  it('shows permission statuses and requests missing camera permission', async () => {
+    setAndroidPlatformVersion(36);
+    const checkPermission = jest
+      .spyOn(PermissionsAndroid, 'check')
+      .mockImplementation(async permission => {
+        return permission === PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+      });
+    const requestPermission = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'permissions-settings-accordion');
+
+    expect(checkPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(checkPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'permission-camera-status'}).props
+          .children,
+      ),
+    ).toBe('NEEDS PERMISSION');
+    expect(
+      flattenText(
+        renderer.root.findByProps({
+          testID: 'permission-notifications-status',
+        }).props.children,
+      ),
+    ).toBe('ALLOWED');
+
+    await pressByTestIDAndFlush(renderer, 'permission-camera-request');
+
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'permission-camera-status'}).props
+          .children,
+      ),
+    ).toBe('ALLOWED');
+  });
+
+  it('opens app settings when the camera permission prompt is blocked', async () => {
+    setAndroidPlatformVersion(36);
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    const requestPermission = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+    const openSettings = jest
+      .spyOn(Linking, 'openSettings')
+      .mockResolvedValue(undefined);
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'permissions-settings-accordion');
+    await pressByTestIDAndFlush(renderer, 'permission-camera-request');
+
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'permission-camera-status'}).props
+          .children,
+      ),
+    ).toBe('NEEDS PERMISSION');
+  });
+
+  it('requests missing notification permission from settings', async () => {
+    setAndroidPlatformVersion(36);
+    jest.spyOn(PermissionsAndroid, 'check').mockImplementation(async permission => {
+      return permission === PermissionsAndroid.PERMISSIONS.CAMERA;
+    });
+    const requestPermission = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'permissions-settings-accordion');
+
+    expect(
+      flattenText(
+        renderer.root.findByProps({
+          testID: 'permission-notifications-status',
+        }).props.children,
+      ),
+    ).toBe('NEEDS PERMISSION');
+
+    await pressByTestIDAndFlush(renderer, 'permission-notifications-request');
+
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    expect(
+      flattenText(
+        renderer.root.findByProps({
+          testID: 'permission-notifications-status',
+        }).props.children,
+      ),
+    ).toBe('ALLOWED');
+  });
+
+  it('opens app settings when the notification permission prompt is blocked', async () => {
+    setAndroidPlatformVersion(36);
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    const requestPermission = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+    const openSettings = jest
+      .spyOn(Linking, 'openSettings')
+      .mockResolvedValue(undefined);
+    const renderer = renderSettingsScreen();
+
+    await pressByTestIDAndFlush(renderer, 'permissions-settings-accordion');
+    await pressByTestIDAndFlush(renderer, 'permission-notifications-request');
+
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(
+      flattenText(
+        renderer.root.findByProps({
+          testID: 'permission-notifications-status',
+        }).props.children,
+      ),
+    ).toBe('NEEDS PERMISSION');
   });
 
   it('does not emphasize any visible settings item while remove ads is hidden', () => {

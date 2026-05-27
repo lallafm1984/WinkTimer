@@ -19,6 +19,7 @@ object TimerAlertPlayback {
   private val mainHandler = Handler(Looper.getMainLooper())
   private var activePlayer: MediaPlayer? = null
   private var activeRingtone: Ringtone? = null
+  private var activeCleanupContext: Context? = null
   private var previousAlarmVolume: Int? = null
   private val stopAlertRunnable = Runnable {
     stop(null)
@@ -34,6 +35,7 @@ object TimerAlertPlayback {
   ) {
     val durationMs = getAlertDurationMs(durationId)
     stop(context)
+    activeCleanupContext = context.applicationContext
 
     if (vibrationEnabled) {
       vibrate(context, vibrationPatternId, durationMs)
@@ -51,6 +53,7 @@ object TimerAlertPlayback {
 
   fun preview(context: Context, soundId: String, durationMs: Long) {
     stop(context)
+    activeCleanupContext = context.applicationContext
     boostAlarmVolume(context)
     playPreviewSound(context, soundId)
     mainHandler.postDelayed(
@@ -60,10 +63,12 @@ object TimerAlertPlayback {
   }
 
   fun stop(context: Context?) {
+    val cleanupContext = context ?: activeCleanupContext
     mainHandler.removeCallbacks(stopAlertRunnable)
     stopActiveSound()
-    context?.let(::restoreAlarmVolume)
-    context?.let(::cancelVibration)
+    cleanupContext?.let(::restoreAlarmVolume)
+    cleanupContext?.let(::cancelVibration)
+    activeCleanupContext = null
   }
 
   fun getAlertDurationMs(durationId: String): Long? =

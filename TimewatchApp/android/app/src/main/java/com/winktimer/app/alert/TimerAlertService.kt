@@ -49,7 +49,7 @@ class TimerAlertService : Service() {
         ?: "Timer alert"
     val notificationText =
       intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT)
-        ?: "Wink Timer finished"
+        ?: "Timer finished"
     val notificationChannelName =
       intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME)
         ?: "Timer alerts"
@@ -127,7 +127,7 @@ class TimerAlertService : Service() {
 
     return builder
       .setContentTitle(notificationTitle.trim().ifEmpty { "Timer alert" })
-      .setContentText(notificationText.trim().ifEmpty { "Wink Timer finished" })
+      .setContentText(notificationText.trim().ifEmpty { "Timer finished" })
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setCategory(Notification.CATEGORY_ALARM)
       .setOngoing(true)

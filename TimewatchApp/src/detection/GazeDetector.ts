@@ -1,5 +1,6 @@
 import {
   DeviceEventEmitter,
+  Linking,
   NativeModules,
   PermissionsAndroid,
   Platform,
@@ -53,6 +54,10 @@ type NativeGazeDetectionModule = {
   setAnalysisResolution?(width: number, height: number): Promise<void>;
   setFrameIntervalMs?(intervalMs: number): Promise<void>;
   setPerformanceMode?(mode: DetectionPerformanceMode): Promise<void>;
+};
+
+type EnsureCameraPermissionOptions = {
+  openSettingsIfBlocked?: boolean;
 };
 
 type NativeGazeDetectionReadingEvent = {
@@ -420,20 +425,50 @@ function getFixedWinkEyeClassification(
   return {eyeState: 'unknown', winkSide: null};
 }
 
-export async function ensureCameraPermission() {
+async function openAppPermissionSettings() {
+  try {
+    await Linking.openSettings();
+  } catch {
+    // The permission result still stays denied; callers handle that state.
+  }
+}
+
+export async function ensureCameraPermission({
+  openSettingsIfBlocked = false,
+}: EnsureCameraPermissionOptions = {}) {
   if (Platform.OS !== 'android') {
     return true;
   }
 
   const permission = PermissionsAndroid.PERMISSIONS.CAMERA;
-  const alreadyGranted = await PermissionsAndroid.check(permission);
+  const alreadyGranted = await hasCameraPermission();
 
   if (alreadyGranted) {
     return true;
   }
 
   const result = await PermissionsAndroid.request(permission);
-  return result === PermissionsAndroid.RESULTS.GRANTED;
+
+  if (result === PermissionsAndroid.RESULTS.GRANTED) {
+    return true;
+  }
+
+  if (
+    openSettingsIfBlocked &&
+    result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+  ) {
+    await openAppPermissionSettings();
+  }
+
+  return false;
+}
+
+export async function hasCameraPermission() {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+
+  return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
 }
 
 export function createMockGazeDetector(

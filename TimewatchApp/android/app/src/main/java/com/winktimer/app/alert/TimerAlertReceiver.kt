@@ -11,6 +11,8 @@ class TimerAlertReceiver : BroadcastReceiver() {
       return
     }
 
+    showTimerFinishedNotification(context, intent)
+
     val serviceIntent =
       TimerAlertService.createPlayIntent(
         context,
@@ -27,7 +29,7 @@ class TimerAlertReceiver : BroadcastReceiver() {
         intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TITLE)
           ?: "Timer alert",
         intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT)
-          ?: "Wink Timer finished",
+          ?: "Timer finished",
         intent.getStringExtra(
           TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME,
         ) ?: "Timer alerts",
@@ -44,6 +46,30 @@ class TimerAlertReceiver : BroadcastReceiver() {
     } catch (_: SecurityException) {
       playWithoutService(context, intent)
     }
+  }
+
+  private fun showTimerFinishedNotification(context: Context, intent: Intent) {
+    val notificationText =
+      intent.getStringExtra(TimerAlertScheduler.EXTRA_TIMEKEEPING_FINISHED_TEXT)
+        ?: intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT)
+        ?: "Timer finished"
+
+    TimekeepingNotification.show(
+      context.applicationContext,
+      "timer",
+      System.currentTimeMillis(),
+      countDown = false,
+      isRunning = false,
+      displayText = notificationText,
+      title =
+        intent.getStringExtra(
+          TimerAlertScheduler.EXTRA_TIMEKEEPING_FINISHED_TITLE,
+        ) ?: "Timer",
+      text = notificationText,
+      channelName =
+        intent.getStringExtra(TimerAlertScheduler.EXTRA_TIMEKEEPING_CHANNEL_NAME)
+          ?: "Background time",
+    )
   }
 
   private fun playWithoutService(context: Context, intent: Intent) {

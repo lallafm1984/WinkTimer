@@ -104,6 +104,17 @@ describe('mobile Android verification environment', () => {
     expect(buildGradle).toContain('com.google.mlkit:face-detection');
   });
 
+  test('Android main activity is locked to portrait orientation', () => {
+    const manifest = fs.readFileSync(
+      path.join(projectRoot, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
+      'utf8',
+    );
+
+    expect(manifest).toMatch(
+      /<activity[^>]*android:name="\.MainActivity"[^>]*android:screenOrientation="portrait"/s,
+    );
+  });
+
   test('native gaze module analyzes front-camera frames and emits readings', () => {
     const nativeModule = fs.readFileSync(
       path.join(

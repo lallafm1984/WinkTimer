@@ -7,9 +7,11 @@ import com.facebook.react.bridge.ReactMethod
 
 object TimerAlertVibrationPolicy {
   private const val REPEAT_FROM_START = 0
+  private const val NO_REPEAT = -1
 
   @Suppress("UNUSED_PARAMETER")
-  fun getRepeatIndex(durationMs: Long?): Int = REPEAT_FROM_START
+  fun getRepeatIndex(durationMs: Long?): Int =
+    if (durationMs == null) REPEAT_FROM_START else NO_REPEAT
 }
 
 class NativeTimerAlertModule(
@@ -53,6 +55,9 @@ class NativeTimerAlertModule(
     notificationTitle: String,
     notificationText: String,
     notificationChannelName: String,
+    timekeepingFinishedTitle: String,
+    timekeepingFinishedText: String,
+    timekeepingChannelName: String,
     promise: Promise,
   ) {
     try {
@@ -67,6 +72,9 @@ class NativeTimerAlertModule(
         notificationTitle,
         notificationText,
         notificationChannelName,
+        timekeepingFinishedTitle,
+        timekeepingFinishedText,
+        timekeepingChannelName,
       )
       promise.resolve(null)
     } catch (error: Exception) {

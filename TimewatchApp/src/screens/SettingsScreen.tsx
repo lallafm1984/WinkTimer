@@ -27,6 +27,10 @@ import {
   type TimerAlertSoundId,
   type TimerAlertVibrationPatternId,
 } from '../alerts/timerAlert';
+import {
+  ensureCameraPermission,
+  hasCameraPermission,
+} from '../detection/GazeDetector';
 import type {
   DetectionReading,
   DetectionFrameIntervalLevel,
@@ -58,6 +62,10 @@ import {
   type AppLocale,
   type TranslationKey,
 } from '../i18n/localization';
+import {
+  ensureBackgroundTimekeepingNotificationPermission,
+  hasBackgroundTimekeepingNotificationPermission,
+} from '../notifications/timekeepingNotification';
 
 type Translator = ReturnType<typeof createTranslator>;
 
@@ -146,6 +154,13 @@ type SmileCalibrationResult =
       messageKey: TranslationKey;
     };
 
+type PermissionStatus = 'checking' | 'granted' | 'denied';
+
+type PermissionStatuses = {
+  camera: PermissionStatus;
+  notifications: PermissionStatus;
+};
+
 type AccordionGroupProps = {
   title: string;
   summary: string;
@@ -171,6 +186,14 @@ type BooleanButtonControlProps = {
   testID: string;
   t: Translator;
   onChange(value: boolean): void;
+};
+
+type PermissionRowProps = {
+  title: string;
+  status: PermissionStatus;
+  testID: string;
+  t: Translator;
+  onRequest(): void;
 };
 
 type SoundOptionControlProps = {
@@ -679,6 +702,52 @@ function getFrameIntervalLabel(level: number, t: Translator): string {
   return interval === 0 ? t('option.realtime') : `${interval} MS`;
 }
 
+function getPermissionStatusLabel(
+  status: PermissionStatus,
+  t: Translator,
+): string {
+  if (status === 'granted') {
+    return t('settings.permission.allowed');
+  }
+
+  if (status === 'checking') {
+    return t('settings.permission.checking');
+  }
+
+  return t('settings.permission.missing');
+}
+
+function getPermissionActionLabel(
+  status: PermissionStatus,
+  t: Translator,
+): string {
+  if (status === 'granted') {
+    return t('settings.permission.allowed');
+  }
+
+  if (status === 'checking') {
+    return t('settings.permission.checking');
+  }
+
+  return t('settings.permission.allow');
+}
+
+function permissionStatusFromGranted(granted: boolean): PermissionStatus {
+  return granted ? 'granted' : 'denied';
+}
+
+async function getPermissionStatuses(): Promise<PermissionStatuses> {
+  const [cameraGranted, notificationsGranted] = await Promise.all([
+    hasCameraPermission(),
+    hasBackgroundTimekeepingNotificationPermission(),
+  ]);
+
+  return {
+    camera: permissionStatusFromGranted(cameraGranted),
+    notifications: permissionStatusFromGranted(notificationsGranted),
+  };
+}
+
 function OptionButtonControl({
   title,
   value,
@@ -705,6 +774,44 @@ function OptionButtonControl({
           />
         ))}
       </View>
+    </View>
+  );
+}
+
+function PermissionRow({
+  title,
+  status,
+  testID,
+  t,
+  onRequest,
+}: PermissionRowProps) {
+  const canRequest = status === 'denied';
+
+  return (
+    <View style={styles.permissionRow} testID={`${testID}-row`}>
+      <View style={styles.permissionCopy}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text
+          style={[
+            styles.permissionStatus,
+            status === 'granted'
+              ? styles.permissionStatusGranted
+              : status === 'denied'
+                ? styles.permissionStatusMissing
+                : null,
+          ]}
+          testID={`${testID}-status`}>
+          {getPermissionStatusLabel(status, t)}
+        </Text>
+      </View>
+      <PrimaryButton
+        disabled={!canRequest}
+        label={getPermissionActionLabel(status, t)}
+        onPress={onRequest}
+        testID={`${testID}-request`}
+        variant={canRequest ? 'primary' : 'secondary'}
+        style={styles.permissionButton}
+      />
     </View>
   );
 }
@@ -1240,6 +1347,11 @@ export function SettingsScreen() {
   const [expandedSettingsGroup, setExpandedSettingsGroup] = useState<
     string | null
   >(null);
+  const [permissionStatuses, setPermissionStatuses] =
+    useState<PermissionStatuses>({
+      camera: 'checking',
+      notifications: 'checking',
+    });
   const [
     winkCalibrationJudgmentUnavailable,
     setWinkCalibrationJudgmentUnavailable,
@@ -1261,6 +1373,63 @@ export function SettingsScreen() {
   const toggleSettingsGroup = (groupId: string) => {
     setExpandedSettingsGroup(current => (current === groupId ? null : groupId));
   };
+
+  const refreshPermissionStatuses = React.useCallback(() => {
+    setPermissionStatuses({
+      camera: 'checking',
+      notifications: 'checking',
+    });
+    getPermissionStatuses()
+      .then(setPermissionStatuses)
+      .catch(() => {
+        setPermissionStatuses({
+          camera: 'denied',
+          notifications: 'denied',
+        });
+      });
+  }, []);
+
+  const requestCameraPermissionFromSettings = React.useCallback(() => {
+    setPermissionStatuses(current => ({
+      ...current,
+      camera: 'checking',
+    }));
+    ensureCameraPermission({openSettingsIfBlocked: true})
+      .then(granted => {
+        setPermissionStatuses(current => ({
+          ...current,
+          camera: permissionStatusFromGranted(granted),
+        }));
+      })
+      .catch(() => {
+        setPermissionStatuses(current => ({
+          ...current,
+          camera: 'denied',
+        }));
+      });
+  }, []);
+
+  const requestNotificationPermissionFromSettings = React.useCallback(() => {
+    setPermissionStatuses(current => ({
+      ...current,
+      notifications: 'checking',
+    }));
+    ensureBackgroundTimekeepingNotificationPermission({
+      openSettingsIfBlocked: true,
+    })
+      .then(granted => {
+        setPermissionStatuses(current => ({
+          ...current,
+          notifications: permissionStatusFromGranted(granted),
+        }));
+      })
+      .catch(() => {
+        setPermissionStatuses(current => ({
+          ...current,
+          notifications: 'denied',
+        }));
+      });
+  }, []);
 
   const isWinkCalibrating = winkCalibrationSide !== null;
   const isSmileCalibrating = smileCalibrationOpen;
@@ -1835,6 +2004,33 @@ export function SettingsScreen() {
       </AccordionGroup>
 
       <AccordionGroup
+        title={t('settings.permissions.title')}
+        summary={t('settings.permissions.summary')}
+        expanded={expandedSettingsGroup === 'permissions-settings'}
+        onToggle={() => {
+          toggleSettingsGroup('permissions-settings');
+          refreshPermissionStatuses();
+        }}
+        testID="permissions-settings">
+        <View style={styles.section}>
+          <PermissionRow
+            title={t('settings.permission.camera')}
+            status={permissionStatuses.camera}
+            testID="permission-camera"
+            t={t}
+            onRequest={requestCameraPermissionFromSettings}
+          />
+          <PermissionRow
+            title={t('settings.permission.notifications')}
+            status={permissionStatuses.notifications}
+            testID="permission-notifications"
+            t={t}
+            onRequest={requestNotificationPermissionFromSettings}
+          />
+        </View>
+      </AccordionGroup>
+
+      <AccordionGroup
         title={t('settings.look.title')}
         summary={t('settings.look.summary')}
         expanded={expandedSettingsGroup === 'look-settings'}
@@ -2250,6 +2446,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     textTransform: 'uppercase',
+  },
+  permissionRow: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE2DE',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  permissionCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  permissionStatus: {
+    color: '#5D6A62',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  permissionStatusGranted: {
+    color: '#1D4D3A',
+  },
+  permissionStatusMissing: {
+    color: '#B42318',
+  },
+  permissionButton: {
+    minHeight: 40,
+    minWidth: 96,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   toggleGrid: {
     flexDirection: 'row',

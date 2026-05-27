@@ -88,6 +88,9 @@ type NativeTimerAlertModule = {
     notificationTitle: string,
     notificationText: string,
     notificationChannelName: string,
+    timekeepingFinishedTitle: string,
+    timekeepingFinishedText: string,
+    timekeepingChannelName: string,
   ): Promise<void>;
   cancelScheduledTimerEndAlert?(): Promise<void>;
   previewTimerAlertSound?(soundId: string, durationMs: number): Promise<void>;
@@ -108,6 +111,9 @@ type ScheduledTimerAlertSettings = TimerAlertSettings & {
   notificationTitle: string;
   notificationText: string;
   notificationChannelName: string;
+  timekeepingFinishedTitle: string;
+  timekeepingFinishedText: string;
+  timekeepingChannelName: string;
 };
 
 const fallbackVibrationPatterns: Record<
@@ -312,6 +318,9 @@ export function scheduleTimerEndAlert({
   notificationTitle,
   notificationText,
   notificationChannelName,
+  timekeepingFinishedTitle,
+  timekeepingFinishedText,
+  timekeepingChannelName,
 }: ScheduledTimerAlertSettings): Promise<void> {
   if (!vibrationEnabled && !soundEnabled) {
     return cancelScheduledTimerEndAlert();
@@ -328,6 +337,9 @@ export function scheduleTimerEndAlert({
       notificationTitle,
       notificationText,
       notificationChannelName,
+      timekeepingFinishedTitle,
+      timekeepingFinishedText,
+      timekeepingChannelName,
     ) ?? Promise.resolve()
   );
 }

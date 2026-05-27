@@ -16,6 +16,9 @@ object TimerAlertScheduler {
   const val EXTRA_NOTIFICATION_TITLE = "notificationTitle"
   const val EXTRA_NOTIFICATION_TEXT = "notificationText"
   const val EXTRA_NOTIFICATION_CHANNEL_NAME = "notificationChannelName"
+  const val EXTRA_TIMEKEEPING_FINISHED_TITLE = "timekeepingFinishedTitle"
+  const val EXTRA_TIMEKEEPING_FINISHED_TEXT = "timekeepingFinishedText"
+  const val EXTRA_TIMEKEEPING_CHANNEL_NAME = "timekeepingChannelName"
 
   private const val REQUEST_CODE = 9201
 
@@ -30,6 +33,9 @@ object TimerAlertScheduler {
     notificationTitle: String,
     notificationText: String,
     notificationChannelName: String,
+    timekeepingFinishedTitle: String,
+    timekeepingFinishedText: String,
+    timekeepingChannelName: String,
   ) {
     val alarmManager =
       context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
@@ -45,6 +51,9 @@ object TimerAlertScheduler {
         notificationTitle,
         notificationText,
         notificationChannelName,
+        timekeepingFinishedTitle,
+        timekeepingFinishedText,
+        timekeepingChannelName,
         PendingIntent.FLAG_UPDATE_CURRENT,
       ) ?: return
     val safeTriggerAtMs = triggerAtMs.coerceAtLeast(System.currentTimeMillis())
@@ -80,8 +89,11 @@ object TimerAlertScheduler {
         durationId = "seconds:4",
         vibrationPatternId = "double",
         notificationTitle = "Timer alert",
-        notificationText = "Wink Timer finished",
+        notificationText = "Timer finished",
         notificationChannelName = "Timer alerts",
+        timekeepingFinishedTitle = "Timer",
+        timekeepingFinishedText = "Timer finished",
+        timekeepingChannelName = "Background time",
         PendingIntent.FLAG_NO_CREATE,
       ) ?: return
 
@@ -99,6 +111,9 @@ object TimerAlertScheduler {
     notificationTitle: String,
     notificationText: String,
     notificationChannelName: String,
+    timekeepingFinishedTitle: String,
+    timekeepingFinishedText: String,
+    timekeepingChannelName: String,
     baseFlag: Int,
   ): PendingIntent? {
     val flags = baseFlag or PendingIntent.FLAG_IMMUTABLE
@@ -113,6 +128,9 @@ object TimerAlertScheduler {
         putExtra(EXTRA_NOTIFICATION_TITLE, notificationTitle)
         putExtra(EXTRA_NOTIFICATION_TEXT, notificationText)
         putExtra(EXTRA_NOTIFICATION_CHANNEL_NAME, notificationChannelName)
+        putExtra(EXTRA_TIMEKEEPING_FINISHED_TITLE, timekeepingFinishedTitle)
+        putExtra(EXTRA_TIMEKEEPING_FINISHED_TEXT, timekeepingFinishedText)
+        putExtra(EXTRA_TIMEKEEPING_CHANNEL_NAME, timekeepingChannelName)
       }
 
     return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)

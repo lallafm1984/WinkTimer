@@ -23,7 +23,10 @@ import {
 import {PrimaryButton} from '../components/PrimaryButton';
 import {formatDuration, TimerDisplay} from '../components/TimerDisplay';
 import {AdMobBanner} from '../ads/AdMobBanner';
-import {showRewardedAdForAccess} from '../ads/rewardedAdAccess';
+import {
+  isRewardedAdNoFillError,
+  showRewardedAdForAccess,
+} from '../ads/rewardedAdAccess';
 import {
   createRewardedModeAccessRepository,
   modeRequiresRewardedAd,
@@ -31,11 +34,13 @@ import {
 import type {SessionHistoryEvent} from '../domain/sessionHistory';
 import {
   getTimerModePreset,
+  modeRunsWithoutGaze,
   timerModePresets,
   type TimerModeId,
   type TimerModePreset,
 } from '../domain/timerMode';
 import type {TimerState} from '../domain/timerEngine';
+import {ensureCameraPermission} from '../detection/GazeDetector';
 import {
   createTimerTargetDurationMs,
   DEFAULT_RECENT_TIMER_TARGET_DURATIONS_MS,
@@ -71,6 +76,10 @@ type Translator = ReturnType<typeof createTranslator>;
 
 type RewardedAdAccessState = 'idle' | 'loading' | 'error';
 type RewardedModeAccessStatus = 'active' | 'inactive';
+
+function modeUsesCamera(modeId: TimerModeId) {
+  return !modeRunsWithoutGaze(modeId);
+}
 
 function getScaledValue(value: number, scale: number) {
   return Math.round(value * scale);
@@ -260,6 +269,10 @@ function getGhostState(
     timer.phase === 'active' &&
     timer.detectionStatus === 'looking'
   ) {
+    return {expression: 'looking', winkSide: 'any'};
+  }
+
+  if (mode.id === 'smileMode' && timer.phase === 'manualPaused') {
     return {expression: 'looking', winkSide: 'any'};
   }
 
@@ -1004,7 +1017,13 @@ export function TimerScreen() {
       setRewardedModeAccessStatus('active');
       setRewardedAdAccessState('idle');
       return true;
-    } catch {
+    } catch (error) {
+      if (isRewardedAdNoFillError(error)) {
+        setRewardedModeAccessStatus('inactive');
+        setRewardedAdAccessState('idle');
+        return true;
+      }
+
       setRewardedModeAccessStatus('inactive');
       setRewardedAdAccessState('error');
       return false;
@@ -1014,6 +1033,16 @@ export function TimerScreen() {
     setRewardedModeAccessStatus,
     timerModeId,
   ]);
+  const ensureModeCameraPermission = React.useCallback(
+    async (modeId: TimerModeId) => {
+      if (!modeUsesCamera(modeId)) {
+        return true;
+      }
+
+      return ensureCameraPermission({openSettingsIfBlocked: true});
+    },
+    [],
+  );
   const completeTimekeepingModeSelection = React.useCallback(
     (mode: TimekeepingMode) => {
       if (mode !== timekeepingMode) {
@@ -1195,14 +1224,26 @@ export function TimerScreen() {
       setTimerModeId(modeId);
     };
 
-    if (!modeRequiresRewardedAd(modeId)) {
-      completeModeSelection();
-      return;
+    const continueModeSelection = () => {
+      if (!modeRequiresRewardedAd(modeId)) {
+        completeModeSelection();
+        return;
+      }
+
+      return ensureRewardedModeAccess(modeId).then(hasRewardedModeAccess => {
+        if (hasRewardedModeAccess) {
+          completeModeSelection();
+        }
+      });
+    };
+
+    if (!modeUsesCamera(modeId)) {
+      return continueModeSelection();
     }
 
-    return ensureRewardedModeAccess(modeId).then(hasRewardedModeAccess => {
-      if (hasRewardedModeAccess) {
-        completeModeSelection();
+    return ensureModeCameraPermission(modeId).then(hasCameraPermission => {
+      if (hasCameraPermission) {
+        return continueModeSelection();
       }
     });
   };

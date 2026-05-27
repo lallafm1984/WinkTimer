@@ -5,9 +5,9 @@ import org.junit.Test
 
 class TimerAlertVibrationPolicyTest {
   @Test
-  fun finiteAlertDurationsRepeatVibrationUntilTheAlertStops() {
+  fun finiteAlertDurationsDoNotUsePlatformInfiniteRepeat() {
     assertEquals(
-      0,
+      -1,
       TimerAlertVibrationPolicy.getRepeatIndex(4000L),
     )
   }

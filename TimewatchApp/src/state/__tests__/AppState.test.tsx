@@ -39,7 +39,20 @@ type NativeTimerAlertModuleForTest = {
   >;
   scheduleTimerEndAlert?: jest.Mock<
     Promise<void>,
-    [number, string, boolean, boolean, string, string, string, string, string]
+    [
+      number,
+      string,
+      boolean,
+      boolean,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ]
   >;
   cancelScheduledTimerEndAlert?: jest.Mock<Promise<void>, []>;
   showTimekeepingNotification?: jest.Mock<
@@ -691,7 +704,8 @@ describe('AppStateProvider app flow', () => {
 
   it('starts countdown timers with the configured target duration', async () => {
     const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
-    nativeModules.NativeTimerAlert = {playTimerEndAlert};
+    const stopTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {playTimerEndAlert, stopTimerEndAlert};
     const renderer = await renderHarness();
 
     nowMs = 1000;
@@ -731,6 +745,7 @@ describe('AppStateProvider app flow', () => {
     });
 
     expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+    expect(stopTimerEndAlert).toHaveBeenCalledTimes(1);
 
     await unmount(renderer);
   });
@@ -1127,7 +1142,7 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('requests Android camera and notification permissions when the app starts', async () => {
+  it('requests Android notification permission when the app starts without asking for camera', async () => {
     setAndroidPlatformVersion(36);
     const checkPermission = jest
       .spyOn(PermissionsAndroid, 'check')
@@ -1140,15 +1155,18 @@ describe('AppStateProvider app flow', () => {
     await ReactTestRenderer.act(async () => undefined);
 
     expect(checkPermission).toHaveBeenCalledWith(
-      PermissionsAndroid.PERMISSIONS.CAMERA,
-    );
-    expect(requestPermission).toHaveBeenCalledWith(
-      PermissionsAndroid.PERMISSIONS.CAMERA,
-    );
-    expect(checkPermission).toHaveBeenCalledWith(
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
     );
     expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    expect(checkPermission).not.toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(requestPermission).not.toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(requestPermission.mock.calls[0]?.[0]).toBe(
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
     );
 
@@ -1191,7 +1209,7 @@ describe('AppStateProvider app flow', () => {
       true,
       '',
       'Stopwatch',
-      'Elapsed time is shown in the status area',
+      'Time is still being recorded',
       'Background time',
     );
 
@@ -1264,7 +1282,7 @@ describe('AppStateProvider app flow', () => {
       true,
       '',
       'Timer',
-      'Remaining time is shown in the status area',
+      'Timer is still running',
       'Background time',
     );
 
@@ -1419,8 +1437,11 @@ describe('AppStateProvider app flow', () => {
       'seconds:4',
       'double',
       'Timer alert',
-      'Wink Timer finished',
+      'Timer finished',
       'Timer alerts',
+      'Timer',
+      'Timer finished',
+      'Background time',
     );
 
     nowMs = 2000;
@@ -1437,6 +1458,41 @@ describe('AppStateProvider app flow', () => {
 
     expect(hasText(renderer, 'phase:ended')).toBe(true);
     expect(hasText(renderer, 'focus:60000')).toBe(true);
+    expect(playTimerEndAlert).not.toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('does not replay a native background alert after the app resumes past the scheduled trigger', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const scheduleTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const cancelScheduledTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      scheduleTimerEndAlert,
+      cancelScheduledTimerEndAlert,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+
+    nowMs = 2000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    nowMs = 65000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('active'));
+      jest.advanceTimersByTime(50);
+    });
+
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(hasText(renderer, 'focus:60000')).toBe(true);
+    expect(cancelScheduledTimerEndAlert).toHaveBeenCalled();
     expect(playTimerEndAlert).not.toHaveBeenCalled();
 
     await unmount(renderer);

@@ -1,6 +1,10 @@
 import React from 'react';
 import {NativeModules, ScrollView, StyleSheet, Text} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
+import {
+  recordAdDiagnosticLog,
+  resetAdDiagnosticLogsForTests,
+} from '../../ads/adDiagnosticLog';
 import type {TimerState} from '../../domain/timerEngine';
 import {
   TimerScreen,
@@ -27,6 +31,8 @@ const mockCopyTimelineText = jest.fn<Promise<void>, [string]>();
 const mockHasActiveRewardedModeAccess = jest.fn<Promise<boolean>, [unknown?]>();
 const mockGrantRewardedModeAccess = jest.fn<Promise<void>, [unknown?, unknown?]>();
 const mockShowRewardedAdForAccess = jest.fn<Promise<void>, []>();
+const mockIsRewardedAdNoFillError = jest.fn<boolean, [unknown]>();
+const mockEnsureCameraPermission = jest.fn<Promise<boolean>, [unknown?]>();
 
 type NativeTimelineClipboardModuleForTest = {
   copyText: jest.Mock<Promise<void>, [string]>;
@@ -142,7 +148,14 @@ jest.mock('../../ads/rewardedModeAccess', () => {
 
 jest.mock('../../ads/rewardedAdAccess', () => ({
   RewardedAdAccessError: class RewardedAdAccessError extends Error {},
+  isRewardedAdNoFillError: (error: unknown) =>
+    mockIsRewardedAdNoFillError(error),
   showRewardedAdForAccess: () => mockShowRewardedAdForAccess(),
+}));
+
+jest.mock('../../detection/GazeDetector', () => ({
+  ensureCameraPermission: (options?: unknown) =>
+    mockEnsureCameraPermission(options),
 }));
 
 function flattenText(value: unknown): string {
@@ -215,6 +228,9 @@ describe('TimerScreen', () => {
     mockHasActiveRewardedModeAccess.mockResolvedValue(true);
     mockGrantRewardedModeAccess.mockResolvedValue(undefined);
     mockShowRewardedAdForAccess.mockResolvedValue(undefined);
+    mockIsRewardedAdNoFillError.mockReturnValue(false);
+    mockEnsureCameraPermission.mockResolvedValue(true);
+    resetAdDiagnosticLogsForTests();
     nativeModules.NativeTimelineClipboard = {
       copyText: mockCopyTimelineText,
     };
@@ -227,6 +243,7 @@ describe('TimerScreen', () => {
       }
     });
     jest.useRealTimers();
+    resetAdDiagnosticLogsForTests();
     nativeModules.NativeTimelineClipboard = originalNativeTimelineClipboard;
   });
 
@@ -596,6 +613,70 @@ describe('TimerScreen', () => {
     ).toHaveLength(0);
   });
 
+  it('requests camera permission before entering a camera-assisted rewarded mode', async () => {
+    mockHasActiveRewardedModeAccess.mockResolvedValue(true);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .props.onPress();
+    });
+
+    expect(mockEnsureCameraPermission).toHaveBeenCalledWith({
+      openSettingsIfBlocked: true,
+    });
+    expect(mockHasActiveRewardedModeAccess).toHaveBeenCalledWith('lookPause');
+    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+  });
+
+  it('does not show an ad or enter a camera-assisted mode when camera permission is denied', async () => {
+    mockEnsureCameraPermission.mockResolvedValue(false);
+    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .props.onPress();
+    });
+
+    expect(mockEnsureCameraPermission).toHaveBeenCalledWith({
+      openSettingsIfBlocked: true,
+    });
+    expect(mockShowRewardedAdForAccess).not.toHaveBeenCalled();
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+  });
+
   it('does not enter a locked rewarded mode before rewarded ad access is granted', async () => {
     let resolveRewardedAd: (() => void) | undefined;
     mockHasActiveRewardedModeAccess.mockResolvedValue(false);
@@ -719,6 +800,42 @@ describe('TimerScreen', () => {
     expect(mockGrantRewardedModeAccess).toHaveBeenCalledWith(
       expect.any(Number),
     );
+    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+  });
+
+  it('enters a rewarded mode on no-fill without recording rewarded access', async () => {
+    const noFillError = new Error('No fill');
+    mockHasActiveRewardedModeAccess
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    mockShowRewardedAdForAccess.mockRejectedValue(noFillError);
+    mockIsRewardedAdNoFillError.mockReturnValue(true);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .props.onPress();
+    });
+
+    expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(1);
+    expect(mockIsRewardedAdNoFillError).toHaveBeenCalledWith(noFillError);
+    expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
+    expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
     expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
   });
 
@@ -2788,6 +2905,27 @@ describe('TimerScreen', () => {
     );
   });
 
+  it('does not render ad diagnostic logs in the release timer UI', () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordAdDiagnosticLog(
+      'rewarded.load_error',
+      {
+        code: 'googleMobileAds/no-fill',
+        message: '[googleMobileAds/no-fill] No fill',
+        userInfo: {code: 'no-fill', message: 'No fill'},
+      },
+      1_700_000_000_000,
+    );
+    const renderer = renderTimerScreen();
+
+    expect(
+      renderer.root.findAllByProps({testID: 'ad-diagnostic-log-panel'}),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'ad-diagnostic-copy-button'}),
+    ).toHaveLength(0);
+  });
+
   it('shows timer mark timeline with elapsed and left times', () => {
     mockState = {
       ...baseState,
@@ -2928,6 +3066,30 @@ describe('TimerScreen', () => {
         .onPress();
     });
     expect(mockResumeTimerSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the stopped ghost while Smile Mode is paused', () => {
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'manualPaused',
+        startedAtMs: 1000,
+        focusDurationMs: 3000,
+        detectionStatus: 'looking',
+        smileDetected: false,
+        isLookPaused: false,
+      },
+      timerModeId: 'smileMode',
+    };
+    const renderer = renderTimerScreen();
+
+    expect(
+      renderer.root.findByProps({
+        accessibilityRole: 'image',
+        accessibilityLabel: 'Ghost looking shy',
+      }),
+    ).toBeTruthy();
   });
 
   it('shows smile unavailable when Smile Mode cannot judge a face smile', () => {

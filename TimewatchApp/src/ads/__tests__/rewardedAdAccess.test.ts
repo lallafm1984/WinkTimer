@@ -1,6 +1,12 @@
 import {AdEventType, RewardedAdEventType} from 'react-native-google-mobile-ads';
 import {
+  getAdDiagnosticLogText,
+  getAdDiagnosticLogEntries,
+  resetAdDiagnosticLogsForTests,
+} from '../adDiagnosticLog';
+import {
   RewardedAdAccessError,
+  isRewardedAdNoFillError,
   showRewardedAdForAccess,
   type RewardedAdForAccess,
 } from '../rewardedAdAccess';
@@ -31,6 +37,16 @@ function createFakeRewardedAd(): FakeRewardedAd {
 }
 
 describe('rewardedAdAccess', () => {
+  beforeEach(() => {
+    resetAdDiagnosticLogsForTests();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    resetAdDiagnosticLogsForTests();
+    jest.restoreAllMocks();
+  });
+
   it('loads and shows a rewarded ad before resolving after the reward is earned and closed', async () => {
     const rewardedAd = createFakeRewardedAd();
     const promise = showRewardedAdForAccess({
@@ -75,8 +91,40 @@ describe('rewardedAdAccess', () => {
       timeoutMs: 1000,
     });
 
-    rewardedAd.emit(AdEventType.ERROR, new Error('No fill'));
+    rewardedAd.emit(AdEventType.ERROR, {
+      code: 'googleMobileAds/no-fill',
+      message: '[googleMobileAds/no-fill] No fill',
+      userInfo: {code: 'no-fill', message: 'No fill'},
+    });
 
     await expect(promise).rejects.toBeInstanceOf(RewardedAdAccessError);
+    expect(getAdDiagnosticLogText(getAdDiagnosticLogEntries())).toContain(
+      'rewarded.load_error code=googleMobileAds/no-fill',
+    );
+  });
+
+  it('marks no-fill load errors so callers can allow temporary use without granting access', async () => {
+    const rewardedAd = createFakeRewardedAd();
+    const promise = showRewardedAdForAccess({
+      createRewardedAd: () => rewardedAd,
+      timeoutMs: 1000,
+    });
+
+    rewardedAd.emit(AdEventType.ERROR, {
+      code: 'googleMobileAds/no-fill',
+      message: '[googleMobileAds/no-fill] No fill',
+      userInfo: {code: 'no-fill', message: 'No fill'},
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      reason: 'no-fill',
+      payload: expect.objectContaining({
+        code: 'googleMobileAds/no-fill',
+      }),
+    });
+
+    await promise.catch(error => {
+      expect(isRewardedAdNoFillError(error)).toBe(true);
+    });
   });
 });
