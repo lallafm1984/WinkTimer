@@ -39,12 +39,12 @@ type NativeTimerAlertModuleForTest = {
   >;
   scheduleTimerEndAlert?: jest.Mock<
     Promise<void>,
-    [number, string, boolean, boolean, string, string]
+    [number, string, boolean, boolean, string, string, string, string, string]
   >;
   cancelScheduledTimerEndAlert?: jest.Mock<Promise<void>, []>;
   showTimekeepingNotification?: jest.Mock<
     Promise<void>,
-    [string, number, boolean, boolean, string]
+    [string, number, boolean, boolean, string, string, string, string]
   >;
   hideTimekeepingNotification?: jest.Mock<Promise<void>, []>;
   stopTimerEndAlert?: jest.Mock<Promise<void>, []>;
@@ -1127,26 +1127,38 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
-  it('requests Android notification permission when timekeeping starts so the background icon can show', async () => {
+  it('requests Android camera and notification permissions when the app starts', async () => {
     setAndroidPlatformVersion(36);
-    const checkNotificationPermission = jest
+    const checkPermission = jest
       .spyOn(PermissionsAndroid, 'check')
       .mockResolvedValue(false);
-    const requestNotificationPermission = jest
+    const requestPermission = jest
       .spyOn(PermissionsAndroid, 'request')
       .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
     const renderer = await renderHarness();
+
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(checkPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
+    expect(checkPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    expect(requestPermission).toHaveBeenCalledWith(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+
+    const requestCountAtStartup = requestPermission.mock.calls.length;
 
     nowMs = 1000;
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(checkNotificationPermission).toHaveBeenCalledWith(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-    );
-    expect(requestNotificationPermission).toHaveBeenCalledWith(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-    );
+    expect(requestPermission).toHaveBeenCalledTimes(requestCountAtStartup);
 
     await unmount(renderer);
   });
@@ -1178,6 +1190,9 @@ describe('AppStateProvider app flow', () => {
       false,
       true,
       '',
+      'Stopwatch',
+      'Elapsed time is shown in the status area',
+      'Background time',
     );
 
     nowMs = 3000;
@@ -1186,6 +1201,39 @@ describe('AppStateProvider app flow', () => {
     });
 
     expect(hideTimekeepingNotification).toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('uses the selected app language for background notification labels', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      showTimekeepingNotification,
+    };
+    const renderer = await renderHarness();
+
+    await press(renderer, 'language-japanese');
+
+    nowMs = 1000;
+    await press(renderer, 'start');
+
+    nowMs = 2000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    expect(showTimekeepingNotification).toHaveBeenLastCalledWith(
+      'stopwatch',
+      1000,
+      false,
+      true,
+      '',
+      'ストップウォッチ',
+      '経過時間はステータス領域に表示されます',
+      'バックグラウンド時間',
+    );
 
     await unmount(renderer);
   });
@@ -1215,6 +1263,9 @@ describe('AppStateProvider app flow', () => {
       true,
       true,
       '',
+      'Timer',
+      'Remaining time is shown in the status area',
+      'Background time',
     );
 
     await unmount(renderer);
@@ -1249,6 +1300,9 @@ describe('AppStateProvider app flow', () => {
       false,
       false,
       '00:10',
+      'Stopwatch',
+      'Paused at 00:10',
+      'Background time',
     );
 
     await unmount(renderer);
@@ -1285,6 +1339,9 @@ describe('AppStateProvider app flow', () => {
       true,
       false,
       '00:50',
+      'Timer',
+      'Paused at 00:50',
+      'Background time',
     );
 
     await unmount(renderer);
@@ -1332,6 +1389,9 @@ describe('AppStateProvider app flow', () => {
       true,
       false,
       '00:50',
+      'Timer',
+      'Paused at 00:50',
+      'Background time',
     );
 
     await unmount(renderer);
@@ -1358,6 +1418,9 @@ describe('AppStateProvider app flow', () => {
       true,
       'seconds:4',
       'double',
+      'Timer alert',
+      'Wink Timer finished',
+      'Timer alerts',
     );
 
     nowMs = 2000;

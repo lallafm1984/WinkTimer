@@ -60,6 +60,16 @@ react {
  */
 def enableProguardInReleaseBuilds = false
 
+def releaseStoreFile = findProperty("WINKTIMER_UPLOAD_STORE_FILE")
+def releaseKeyAlias = findProperty("WINKTIMER_UPLOAD_KEY_ALIAS")
+def releaseStorePassword = findProperty("WINKTIMER_UPLOAD_STORE_PASSWORD")
+def releaseKeyPassword = findProperty("WINKTIMER_UPLOAD_KEY_PASSWORD")
+def hasReleaseSigningConfig =
+        releaseStoreFile &&
+        releaseKeyAlias &&
+        releaseStorePassword &&
+        releaseKeyPassword
+
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
@@ -83,7 +93,7 @@ android {
         applicationId "com.winktimer.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode 3
         versionName "1.0"
     }
     signingConfigs {
@@ -93,18 +103,42 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseSigningConfig) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def releaseTasks = [
+        ":app:bundleRelease",
+        ":app:assembleRelease",
+        ":app:installRelease",
+        ":app:packageRelease"
+    ]
+
+    if (releaseTasks.any { taskGraph.hasTask(it) } && !hasReleaseSigningConfig) {
+        throw new GradleException(
+                "Missing Wink Timer release signing properties. " +
+                "Set WINKTIMER_UPLOAD_STORE_FILE, WINKTIMER_UPLOAD_KEY_ALIAS, " +
+                "WINKTIMER_UPLOAD_STORE_PASSWORD, and WINKTIMER_UPLOAD_KEY_PASSWORD " +
+                "in ~/.gradle/gradle.properties or pass them with -P."
+        )
     }
 }
 

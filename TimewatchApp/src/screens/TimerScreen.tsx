@@ -984,12 +984,12 @@ export function TimerScreen() {
 
     startTimerSession();
   }, [isTimerAlertActive, startTimerSession, stopTimerEndAlert]);
-  const ensureRewardedModeAccess = React.useCallback(async () => {
-    if (!modeRequiresRewardedAd(timerModeId)) {
+  const ensureRewardedModeAccess = React.useCallback(async (modeId = timerModeId) => {
+    if (!modeRequiresRewardedAd(modeId)) {
       return true;
     }
 
-    if (await rewardedModeAccessRepository.hasActiveAccess(timerModeId)) {
+    if (await rewardedModeAccessRepository.hasActiveAccess(modeId)) {
       setRewardedModeAccessStatus('active');
       setRewardedAdAccessState('idle');
       return true;
@@ -1181,15 +1181,30 @@ export function TimerScreen() {
   };
 
   const handleSelectMode = (modeId: TimerModeId) => {
-    if (!canChangeMode) {
+    if (!canChangeMode || rewardedAdAccessPending) {
       return;
     }
 
-    if (modeId !== timerModeId) {
+    if (modeId === timerModeId) {
+      return;
+    }
+
+    const completeModeSelection = () => {
       setRewardedAdAccessState('idle');
       resetTimerSession();
       setTimerModeId(modeId);
+    };
+
+    if (!modeRequiresRewardedAd(modeId)) {
+      completeModeSelection();
+      return;
     }
+
+    return ensureRewardedModeAccess(modeId).then(hasRewardedModeAccess => {
+      if (hasRewardedModeAccess) {
+        completeModeSelection();
+      }
+    });
   };
 
   const setTimerTargetPartValue = (

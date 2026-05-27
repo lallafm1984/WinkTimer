@@ -13,6 +13,9 @@ object TimerAlertScheduler {
   const val EXTRA_SOUND_ENABLED = "soundEnabled"
   const val EXTRA_DURATION_ID = "durationId"
   const val EXTRA_VIBRATION_PATTERN_ID = "vibrationPatternId"
+  const val EXTRA_NOTIFICATION_TITLE = "notificationTitle"
+  const val EXTRA_NOTIFICATION_TEXT = "notificationText"
+  const val EXTRA_NOTIFICATION_CHANNEL_NAME = "notificationChannelName"
 
   private const val REQUEST_CODE = 9201
 
@@ -24,6 +27,9 @@ object TimerAlertScheduler {
     soundEnabled: Boolean,
     durationId: String,
     vibrationPatternId: String,
+    notificationTitle: String,
+    notificationText: String,
+    notificationChannelName: String,
   ) {
     val alarmManager =
       context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
@@ -36,6 +42,9 @@ object TimerAlertScheduler {
         soundEnabled,
         durationId,
         vibrationPatternId,
+        notificationTitle,
+        notificationText,
+        notificationChannelName,
         PendingIntent.FLAG_UPDATE_CURRENT,
       ) ?: return
     val safeTriggerAtMs = triggerAtMs.coerceAtLeast(System.currentTimeMillis())
@@ -70,6 +79,9 @@ object TimerAlertScheduler {
         soundEnabled = true,
         durationId = "seconds:4",
         vibrationPatternId = "double",
+        notificationTitle = "Timer alert",
+        notificationText = "Wink Timer finished",
+        notificationChannelName = "Timer alerts",
         PendingIntent.FLAG_NO_CREATE,
       ) ?: return
 
@@ -84,6 +96,9 @@ object TimerAlertScheduler {
     soundEnabled: Boolean,
     durationId: String,
     vibrationPatternId: String,
+    notificationTitle: String,
+    notificationText: String,
+    notificationChannelName: String,
     baseFlag: Int,
   ): PendingIntent? {
     val flags = baseFlag or PendingIntent.FLAG_IMMUTABLE
@@ -95,6 +110,9 @@ object TimerAlertScheduler {
         putExtra(EXTRA_SOUND_ENABLED, soundEnabled)
         putExtra(EXTRA_DURATION_ID, durationId)
         putExtra(EXTRA_VIBRATION_PATTERN_ID, vibrationPatternId)
+        putExtra(EXTRA_NOTIFICATION_TITLE, notificationTitle)
+        putExtra(EXTRA_NOTIFICATION_TEXT, notificationText)
+        putExtra(EXTRA_NOTIFICATION_CHANNEL_NAME, notificationChannelName)
       }
 
     return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)

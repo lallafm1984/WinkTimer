@@ -23,14 +23,19 @@ object TimekeepingNotification {
     countDown: Boolean,
     isRunning: Boolean,
     displayText: String,
+    title: String,
+    text: String,
+    channelName: String,
   ) {
-    createNotificationChannel(context)
+    createNotificationChannel(context, channelName)
 
     val safeDisplayText = displayText.trim()
+    val safeTitle = title.trim().ifEmpty { getTitle(mode) }
+    val safeText = text.trim().ifEmpty { getText(mode, isRunning, safeDisplayText) }
     val builder =
       NotificationCompat.Builder(context, CHANNEL_ID)
-        .setContentTitle(getTitle(mode))
-        .setContentText(getText(mode, isRunning, safeDisplayText))
+        .setContentTitle(safeTitle)
+        .setContentText(safeText)
         .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -81,7 +86,7 @@ object TimekeepingNotification {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-  private fun createNotificationChannel(context: Context) {
+  private fun createNotificationChannel(context: Context, channelName: String) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       return
     }
@@ -97,7 +102,7 @@ object TimekeepingNotification {
     val channel =
       NotificationChannel(
         CHANNEL_ID,
-        "Background time",
+        channelName.trim().ifEmpty { "Background time" },
         NotificationManager.IMPORTANCE_LOW,
       ).apply {
         setSound(null, null)

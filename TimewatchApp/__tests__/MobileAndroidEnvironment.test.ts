@@ -16,6 +16,12 @@ describe('mobile Android verification environment', () => {
     expect(packageJson.scripts['apk:android']).toBe(
       'powershell -ExecutionPolicy Bypass -File ./scripts/build-android-apk.ps1',
     );
+    expect(packageJson.scripts['aab:android']).toBe(
+      'powershell -ExecutionPolicy Bypass -File ./scripts/build-android-aab.ps1',
+    );
+    expect(packageJson.scripts['aab:android:testads']).toBe(
+      'powershell -ExecutionPolicy Bypass -File ./scripts/build-android-aab.ps1 -UseTestAds',
+    );
     expect(packageJson.dependencies.expo).toBeUndefined();
     expect(packageJson.devDependencies['babel-preset-expo']).toBeUndefined();
     expect(packageJson.dependencies['react-native']).toBe('0.85.3');
@@ -52,8 +58,28 @@ describe('mobile Android verification environment', () => {
     expect(script).not.toContain('app-debug.apk');
   });
 
+  test('release AAB script builds a signed bundle for Play Console upload', () => {
+    const script = fs.readFileSync(
+      path.join(projectRoot, 'scripts', 'build-android-aab.ps1'),
+      'utf8',
+    );
+
+    expect(script).toContain(':app:bundleRelease');
+    expect(script).toContain('app-release.aab');
+    expect(script).toContain('winktimer-internal-test-ads.aab');
+    expect(script).toContain('outputs\\bundle\\release');
+    expect(script).toContain('$UseTestAds');
+    expect(script).toContain('FORCE_TEST_ADS');
+    expect(script).not.toContain('adb reverse');
+    expect(script).not.toContain('app-debug.apk');
+  });
+
   test('Android helper scripts configure the SDK environment for npm runs', () => {
-    const scriptNames = ['mobile-android.ps1', 'build-android-apk.ps1'];
+    const scriptNames = [
+      'mobile-android.ps1',
+      'build-android-apk.ps1',
+      'build-android-aab.ps1',
+    ];
 
     for (const scriptName of scriptNames) {
       const script = fs.readFileSync(

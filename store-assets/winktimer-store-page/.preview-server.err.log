@@ -1,0 +1,13 @@
+127.0.0.1 - - [26/May/2026 21:51:05] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:20] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /slides.js HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /assets/screenshots/modes.png HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /assets/screenshots/wink.png HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /assets/screenshots/smile.png HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /assets/screenshots/language.png HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /assets/screenshots/settings.png HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /assets/screenshots/look.png HTTP/1.1" 200 -
+127.0.0.1 - - [26/May/2026 21:51:21] code 404, message File not found
+127.0.0.1 - - [26/May/2026 21:51:21] "GET /favicon.ico HTTP/1.1" 404 -

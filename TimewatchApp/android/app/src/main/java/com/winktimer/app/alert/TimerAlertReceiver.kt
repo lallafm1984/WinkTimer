@@ -24,6 +24,13 @@ class TimerAlertReceiver : BroadcastReceiver() {
           ?: "seconds:4",
         intent.getStringExtra(TimerAlertScheduler.EXTRA_VIBRATION_PATTERN_ID)
           ?: "double",
+        intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TITLE)
+          ?: "Timer alert",
+        intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT)
+          ?: "Wink Timer finished",
+        intent.getStringExtra(
+          TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME,
+        ) ?: "Timer alerts",
       )
 
     try {

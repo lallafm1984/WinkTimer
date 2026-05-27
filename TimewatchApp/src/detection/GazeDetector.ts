@@ -420,7 +420,7 @@ function getFixedWinkEyeClassification(
   return {eyeState: 'unknown', winkSide: null};
 }
 
-async function ensureCameraPermission() {
+export async function ensureCameraPermission() {
   if (Platform.OS !== 'android') {
     return true;
   }

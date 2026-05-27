@@ -19,4 +19,10 @@ describe('adMobConfig', () => {
     expect(getBannerAdUnitId(false)).toBe(PRODUCTION_BANNER_AD_UNIT_ID);
     expect(getRewardedAdUnitId(false)).toBe(PRODUCTION_REWARDED_AD_UNIT_ID);
   });
+
+  it('keeps checked-in ad environment configured for production by default', () => {
+    const environment = require('../adMobEnvironment');
+
+    expect(environment.FORCE_TEST_ADS).toBe(false);
+  });
 });

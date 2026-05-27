@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "android": "react-native run-android",
+    "aab:android": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-aab.ps1",
+    "aab:android:testads": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-aab.ps1 -UseTestAds",
     "apk:android": "powershell -ExecutionPolicy Bypass -File ./scripts/build-android-apk.ps1",
     "ios": "react-native run-ios",
     "lint": "eslint .",

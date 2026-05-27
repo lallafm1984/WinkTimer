@@ -39,7 +39,10 @@ import type {
 } from '../detection/DevicePostureDetector';
 import { createDevicePostureDetector } from '../detection/DevicePostureDetector';
 import type { MockGazeDetector } from '../detection/GazeDetector';
-import { createMockGazeDetector } from '../detection/GazeDetector';
+import {
+  createMockGazeDetector,
+  ensureCameraPermission,
+} from '../detection/GazeDetector';
 import type {
   DetectionReading,
   DetectionFrameIntervalLevel,
@@ -122,6 +125,7 @@ import {
   type WinkGestureSide,
 } from '../domain/timerMode';
 import {
+  createTranslator,
   getDeviceAppLocale,
   normalizeAppLocale,
   type AppLocale,
@@ -852,6 +856,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   );
   const [sensitivity, setSensitivityState] = useState<Sensitivity>('strict');
   const [locale, setLocale] = useState<AppLocale>(getDeviceAppLocale);
+  const t = useMemo(() => createTranslator(locale), [locale]);
   const [winkLeftEyeClosedThreshold, setWinkLeftEyeClosedThreshold] =
     useState<WinkEyeClosedThreshold>(DEFAULT_WINK_EYE_CLOSED_THRESHOLD);
   const [winkRightEyeClosedThreshold, setWinkRightEyeClosedThreshold] =
@@ -934,7 +939,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const lastTimerAlertKeyRef = useRef<string | null>(null);
   const scheduledTimerAlertKeyRef = useRef<string | null>(null);
   const backgroundTimekeepingNotificationKeyRef = useRef<string | null>(null);
-  const notificationPermissionRequestedRef = useRef(false);
+  const startupPermissionsRequestedRef = useRef(false);
   const isTimerAlertActiveRef = useRef(false);
   const timerAlertAutoClearTimeoutRef = useRef<ReturnType<
     typeof setTimeout
@@ -995,12 +1000,13 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     hideBackgroundTimekeepingNotification().catch(() => undefined);
   }, []);
 
-  const requestBackgroundNotificationPermissionIfNeeded = useCallback(() => {
-    if (notificationPermissionRequestedRef.current) {
+  const requestStartupPermissionsIfNeeded = useCallback(() => {
+    if (startupPermissionsRequestedRef.current) {
       return;
     }
 
-    notificationPermissionRequestedRef.current = true;
+    startupPermissionsRequestedRef.current = true;
+    ensureCameraPermission().catch(() => undefined);
     ensureBackgroundTimekeepingNotificationPermission().catch(() => undefined);
   }, []);
 
@@ -1046,6 +1052,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     clearTimerAlertAutoClearTimeout,
     hideBackgroundTimekeepingNotificationIfNeeded,
   ]);
+
+  useEffect(() => {
+    requestStartupPermissionsIfNeeded();
+  }, [requestStartupPermissionsIfNeeded]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1280,6 +1290,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     }
 
     const triggerAtMs = Math.round(timer.lastUpdatedAtMs + remainingMs);
+    const timerAlertNotificationTitle = t('notification.timerAlertTitle');
+    const timerAlertNotificationText = t('notification.timerAlertText');
+    const timerAlertNotificationChannelName = t(
+      'notification.timerAlertsChannel',
+    );
     const scheduleKey = [
       timer.startedAtMs ?? 'none',
       triggerAtMs,
@@ -1288,6 +1303,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timerAlertSoundId,
       timerAlertDurationId,
       timerAlertVibrationPatternId,
+      timerAlertNotificationTitle,
+      timerAlertNotificationText,
+      timerAlertNotificationChannelName,
     ].join(':');
 
     if (scheduledTimerAlertKeyRef.current === scheduleKey) {
@@ -1302,6 +1320,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       soundId: timerAlertSoundId,
       durationId: timerAlertDurationId,
       vibrationPatternId: timerAlertVibrationPatternId,
+      notificationTitle: timerAlertNotificationTitle,
+      notificationText: timerAlertNotificationText,
+      notificationChannelName: timerAlertNotificationChannelName,
     }).catch(() => {
       if (scheduledTimerAlertKeyRef.current === scheduleKey) {
         scheduledTimerAlertKeyRef.current = null;
@@ -1321,13 +1342,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     timerAlertSoundId,
     timerAlertVibrationEnabled,
     timerAlertVibrationPatternId,
+    t,
   ]);
-
-  useEffect(() => {
-    if (timer.phase === 'active' || timer.phase === 'manualPaused') {
-      requestBackgroundNotificationPermissionIfNeeded();
-    }
-  }, [requestBackgroundNotificationPermissionIfNeeded, timer.phase]);
 
   useEffect(() => {
     const canShowBackgroundTime =
@@ -1373,6 +1389,19 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       notificationWhenMs = Date.now();
     }
 
+    const notificationTitle =
+      notificationMode === 'timer'
+        ? t('notification.timerTitle')
+        : t('notification.stopwatchTitle');
+    const notificationText = isRunningNotification
+      ? notificationMode === 'timer'
+        ? t('notification.remainingInStatus')
+        : t('notification.elapsedInStatus')
+      : notificationDisplayText.trim().length > 0
+        ? t('notification.pausedAt', {time: notificationDisplayText})
+        : t('notification.paused');
+    const notificationChannelName = t('notification.backgroundChannel');
+
     const notificationKey = [
       timer.startedAtMs ?? 'none',
       notificationMode,
@@ -1380,6 +1409,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       notificationCountsDown,
       isRunningNotification,
       notificationDisplayText,
+      notificationTitle,
+      notificationText,
+      notificationChannelName,
     ].join(':');
 
     if (backgroundTimekeepingNotificationKeyRef.current === notificationKey) {
@@ -1393,6 +1425,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       notificationCountsDown,
       isRunningNotification,
       notificationDisplayText,
+      notificationTitle,
+      notificationText,
+      notificationChannelName,
     ).catch(() => {
       if (
         backgroundTimekeepingNotificationKeyRef.current === notificationKey
@@ -1410,6 +1445,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     timer.phase,
     timer.startedAtMs,
     timer.targetDurationMs,
+    t,
   ]);
 
   useEffect(() => {

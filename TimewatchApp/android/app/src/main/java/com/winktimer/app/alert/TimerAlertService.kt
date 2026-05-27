@@ -33,8 +33,6 @@ class TimerAlertService : Service() {
       return START_NOT_STICKY
     }
 
-    startAlertForeground()
-
     val soundId = intent.getStringExtra(TimerAlertScheduler.EXTRA_SOUND_ID) ?: "alarm"
     val vibrationEnabled =
       intent.getBooleanExtra(TimerAlertScheduler.EXTRA_VIBRATION_ENABLED, true)
@@ -46,6 +44,21 @@ class TimerAlertService : Service() {
     val vibrationPatternId =
       intent.getStringExtra(TimerAlertScheduler.EXTRA_VIBRATION_PATTERN_ID)
         ?: "double"
+    val notificationTitle =
+      intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TITLE)
+        ?: "Timer alert"
+    val notificationText =
+      intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT)
+        ?: "Wink Timer finished"
+    val notificationChannelName =
+      intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME)
+        ?: "Timer alerts"
+
+    startAlertForeground(
+      notificationTitle,
+      notificationText,
+      notificationChannelName,
+    )
 
     TimerAlertPlayback.play(
       applicationContext,
@@ -69,9 +82,13 @@ class TimerAlertService : Service() {
     super.onDestroy()
   }
 
-  private fun startAlertForeground() {
-    createNotificationChannel()
-    val notification = createNotification()
+  private fun startAlertForeground(
+    notificationTitle: String,
+    notificationText: String,
+    notificationChannelName: String,
+  ) {
+    createNotificationChannel(notificationChannelName)
+    val notification = createNotification(notificationTitle, notificationText)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       startForeground(
@@ -84,7 +101,10 @@ class TimerAlertService : Service() {
     }
   }
 
-  private fun createNotification(): Notification {
+  private fun createNotification(
+    notificationTitle: String,
+    notificationText: String,
+  ): Notification {
     val openIntent =
       Intent(this, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -106,8 +126,8 @@ class TimerAlertService : Service() {
       }
 
     return builder
-      .setContentTitle("Timer alert")
-      .setContentText("Wink Timer finished")
+      .setContentTitle(notificationTitle.trim().ifEmpty { "Timer alert" })
+      .setContentText(notificationText.trim().ifEmpty { "Wink Timer finished" })
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setCategory(Notification.CATEGORY_ALARM)
       .setOngoing(true)
@@ -115,7 +135,7 @@ class TimerAlertService : Service() {
       .build()
   }
 
-  private fun createNotificationChannel() {
+  private fun createNotificationChannel(notificationChannelName: String) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       return
     }
@@ -131,7 +151,7 @@ class TimerAlertService : Service() {
     val channel =
       NotificationChannel(
         CHANNEL_ID,
-        "Timer alerts",
+        notificationChannelName.trim().ifEmpty { "Timer alerts" },
         NotificationManager.IMPORTANCE_LOW,
       )
 
@@ -151,6 +171,9 @@ class TimerAlertService : Service() {
       soundEnabled: Boolean,
       durationId: String,
       vibrationPatternId: String,
+      notificationTitle: String,
+      notificationText: String,
+      notificationChannelName: String,
     ): Intent =
       Intent(context, TimerAlertService::class.java).apply {
         action = ACTION_PLAY
@@ -161,6 +184,12 @@ class TimerAlertService : Service() {
         putExtra(
           TimerAlertScheduler.EXTRA_VIBRATION_PATTERN_ID,
           vibrationPatternId,
+        )
+        putExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TITLE, notificationTitle)
+        putExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT, notificationText)
+        putExtra(
+          TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME,
+          notificationChannelName,
         )
       }
 

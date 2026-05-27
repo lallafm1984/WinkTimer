@@ -1217,6 +1217,7 @@ export function SettingsScreen() {
     setScreen,
   } = useAppState();
   const t = createTranslator(locale);
+  const translatorRef = useRef<Translator>(t);
   const [winkCalibrationSide, setWinkCalibrationSide] =
     useState<WinkCalibrationSide | null>(null);
   const [winkCalibrationPhase, setWinkCalibrationPhase] =
@@ -1264,6 +1265,10 @@ export function SettingsScreen() {
   const isWinkCalibrating = winkCalibrationSide !== null;
   const isSmileCalibrating = smileCalibrationOpen;
   const isAnyCalibrating = isWinkCalibrating || isSmileCalibrating;
+
+  useEffect(() => {
+    translatorRef.current = t;
+  }, [t]);
 
   const openWinkCalibration = (side: WinkCalibrationSide) => {
     setActiveWinkCalibrationRunId(null);
@@ -1408,7 +1413,7 @@ export function SettingsScreen() {
       );
 
       if (!result.ok) {
-        failCalibration(t(result.messageKey));
+        failCalibration(translatorRef.current(result.messageKey));
         return;
       }
 
@@ -1542,7 +1547,7 @@ export function SettingsScreen() {
     };
 
     gazeDetector.start().catch(() => {
-      failCalibration(t('calibration.failed.cameraStart'));
+      failCalibration(translatorRef.current('calibration.failed.cameraStart'));
     });
     startCountdown();
 
@@ -1619,7 +1624,7 @@ export function SettingsScreen() {
       );
 
       if (!result.ok) {
-        failCalibration(t(result.messageKey));
+        failCalibration(translatorRef.current(result.messageKey));
         return;
       }
 
@@ -1739,7 +1744,7 @@ export function SettingsScreen() {
     };
 
     gazeDetector.start().catch(() => {
-      failCalibration(t('calibration.failed.cameraStart'));
+      failCalibration(translatorRef.current('calibration.failed.cameraStart'));
     });
     startCountdown();
 

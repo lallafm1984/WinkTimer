@@ -50,6 +50,9 @@ class NativeTimerAlertModule(
     soundEnabled: Boolean,
     durationId: String,
     vibrationPatternId: String,
+    notificationTitle: String,
+    notificationText: String,
+    notificationChannelName: String,
     promise: Promise,
   ) {
     try {
@@ -61,6 +64,9 @@ class NativeTimerAlertModule(
         soundEnabled,
         durationId,
         vibrationPatternId,
+        notificationTitle,
+        notificationText,
+        notificationChannelName,
       )
       promise.resolve(null)
     } catch (error: Exception) {
@@ -81,6 +87,9 @@ class NativeTimerAlertModule(
     countDown: Boolean,
     isRunning: Boolean,
     displayText: String,
+    title: String,
+    text: String,
+    channelName: String,
     promise: Promise,
   ) {
     try {
@@ -91,6 +100,9 @@ class NativeTimerAlertModule(
         countDown,
         isRunning,
         displayText,
+        title,
+        text,
+        channelName,
       )
       promise.resolve(null)
     } catch (error: Exception) {

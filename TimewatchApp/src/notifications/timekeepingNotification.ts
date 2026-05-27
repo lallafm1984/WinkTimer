@@ -9,6 +9,9 @@ type NativeTimekeepingNotificationModule = {
     countDown: boolean,
     isRunning: boolean,
     displayText: string,
+    title: string,
+    text: string,
+    channelName: string,
   ): Promise<void>;
   hideTimekeepingNotification?(): Promise<void>;
 };
@@ -50,6 +53,9 @@ export function showBackgroundTimekeepingNotification(
   countDown: boolean,
   isRunning: boolean,
   displayText: string,
+  title: string,
+  text: string,
+  channelName: string,
 ): Promise<void> {
   return (
     getNativeTimekeepingNotification()?.showTimekeepingNotification?.(
@@ -58,6 +64,9 @@ export function showBackgroundTimekeepingNotification(
       countDown,
       isRunning,
       displayText,
+      title,
+      text,
+      channelName,
     ) ?? Promise.resolve()
   );
 }

@@ -1,0 +1,390 @@
+:root {
+  color-scheme: light;
+  --page-bg: #f4f6f1;
+  --ink: #07130f;
+  --muted: #65736c;
+  --line: #d5ded8;
+  --surface: #ffffff;
+  --green-soft: #e9f2ed;
+  --blue-soft: #edf5ff;
+  --red-soft: #fff0ed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  color: var(--ink);
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+}
+
+.page-shell {
+  width: min(100%, 6200px);
+  margin: 0 auto;
+  padding: 48px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  margin: 0 0 40px;
+}
+
+.toolbar h1,
+.toolbar p {
+  margin: 0;
+}
+
+.toolbar h1 {
+  font-size: 42px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.toolbar__eyebrow {
+  color: #18563f;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toolbar__hint {
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.toolbar code {
+  color: var(--ink);
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+.deck {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+  overflow-x: auto;
+}
+
+.poster {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: var(--page-bg);
+  color: var(--ink);
+  isolation: isolate;
+}
+
+.poster__border {
+  position: absolute;
+  inset: 58px;
+  z-index: -1;
+  border: 5px solid var(--accent);
+  border-radius: 64px;
+}
+
+.poster__wash {
+  position: absolute;
+  z-index: -2;
+  opacity: 0.92;
+}
+
+.poster--green .poster__wash {
+  inset: 0 0 0 auto;
+  width: 390px;
+  background: var(--green-soft);
+  clip-path: polygon(32% 0, 100% 0, 100% 100%, 62% 100%, 0 38%);
+}
+
+.poster--blue .poster__wash {
+  inset: 0 auto 0 0;
+  width: 360px;
+  background: var(--blue-soft);
+  clip-path: polygon(0 0, 72% 0, 100% 100%, 0 100%);
+}
+
+.poster--red .poster__wash {
+  inset: 0 0 0 auto;
+  width: 370px;
+  background: var(--red-soft);
+  clip-path: polygon(28% 0, 100% 0, 100% 100%, 70% 100%, 0 35%);
+}
+
+.poster__header {
+  position: absolute;
+  top: 86px;
+  left: 82px;
+  right: 82px;
+}
+
+.badge {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 7px 22px 8px;
+  border: 2px solid #d7dfda;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.eyebrow {
+  margin: 58px 0 16px;
+  color: var(--accent);
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.poster h2 {
+  max-width: 900px;
+  margin: 0;
+  font-size: 82px;
+  font-weight: 900;
+  line-height: 1.22;
+  letter-spacing: 0;
+}
+
+.lead {
+  max-width: 900px;
+  margin: 28px 0 0;
+  color: var(--muted);
+  font-size: 33px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.device-stage {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+}
+
+.device-stage--single {
+  top: 560px;
+  height: 890px;
+}
+
+.device-stage--modes {
+  top: 560px;
+  height: 895px;
+}
+
+.device-stage--dual {
+  top: 610px;
+  height: 835px;
+}
+
+.phone-frame {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border: 16px solid #101816;
+  border-radius: 48px;
+  background: #ffffff;
+  box-shadow: 0 24px 42px rgba(7, 19, 15, 0.17);
+}
+
+.phone-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.phone-frame--single {
+  width: 660px;
+}
+
+.phone-frame--modes {
+  width: 660px;
+}
+
+.phone-frame--dual {
+  position: absolute;
+  width: 520px;
+}
+
+.phone-frame--dual-1 {
+  left: 116px;
+  top: 58px;
+  transform: rotate(-3deg);
+}
+
+.phone-frame--dual-2 {
+  right: 96px;
+  top: 14px;
+  width: 492px;
+  transform: rotate(4deg);
+}
+
+.mode-chips {
+  position: absolute;
+  left: 116px;
+  right: 116px;
+  bottom: 352px;
+  display: flex;
+  gap: 18px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.mode-chips li {
+  min-width: 122px;
+  padding: 12px 22px 13px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
+
+.caption-card {
+  position: absolute;
+  left: 86px;
+  right: 86px;
+  bottom: 114px;
+  min-height: 170px;
+  padding: 38px 46px;
+  border: 2px solid var(--line);
+  border-radius: 34px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 40px rgba(7, 19, 15, 0.08);
+}
+
+.caption-card strong,
+.caption-card span {
+  display: block;
+}
+
+.caption-card strong {
+  color: var(--accent);
+  font-size: 37px;
+  font-weight: 900;
+  line-height: 1.18;
+}
+
+.caption-card span {
+  margin-top: 15px;
+  color: var(--muted);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.poster--timer .device-stage {
+  top: 585px;
+}
+
+.poster--timer .poster__header {
+  top: 86px;
+}
+
+.poster--timer .eyebrow {
+  margin-top: 54px;
+}
+
+.poster--timer h2 {
+  font-size: 78px;
+}
+
+.poster--timer .lead {
+  max-width: 930px;
+  font-size: 32px;
+}
+
+.poster--look .device-stage,
+.poster--wink .device-stage,
+.poster--smile .device-stage {
+  top: 570px;
+}
+
+.poster--settings .poster__wash {
+  inset: 0;
+  width: auto;
+  height: 330px;
+  background: var(--green-soft);
+  clip-path: none;
+}
+
+.poster--settings .device-stage {
+  top: 635px;
+}
+
+.poster--settings h2 {
+  font-size: 78px;
+}
+
+.empty-state {
+  color: #ac2b24;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.is-export {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: var(--page-bg);
+}
+
+.is-export .page-shell {
+  width: 1080px;
+  height: 1920px;
+  padding: 0;
+}
+
+.is-export .toolbar {
+  display: none;
+}
+
+.is-export .deck {
+  display: block;
+}
+
+@media (max-width: 1180px) {
+  .page-shell {
+    padding: 24px;
+  }
+
+  .toolbar {
+    display: block;
+  }
+
+  .toolbar__hint {
+    margin-top: 12px;
+    text-align: left;
+  }
+
+  .deck {
+    flex-wrap: nowrap;
+  }
+}
