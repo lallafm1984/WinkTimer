@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import androidx.core.app.NotificationManagerCompat
 import com.winktimer.app.MainActivity
 
 class TimerAlertService : Service() {
@@ -125,6 +126,10 @@ class TimerAlertService : Service() {
         Notification.Builder(this)
       }
 
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      builder.setBadgeIconType(Notification.BADGE_ICON_NONE)
+    }
+
     return builder
       .setContentTitle(notificationTitle.trim().ifEmpty { "Timer alert" })
       .setContentText(notificationText.trim().ifEmpty { "Timer finished" })
@@ -144,7 +149,9 @@ class TimerAlertService : Service() {
       getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         ?: return
 
-    if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) {
+    notificationManager.getNotificationChannel(CHANNEL_ID)?.let { channel ->
+      channel.setShowBadge(false)
+      notificationManager.createNotificationChannel(channel)
       return
     }
 
@@ -153,7 +160,9 @@ class TimerAlertService : Service() {
         CHANNEL_ID,
         notificationChannelName.trim().ifEmpty { "Timer alerts" },
         NotificationManager.IMPORTANCE_LOW,
-      )
+      ).apply {
+        setShowBadge(false)
+      }
 
     notificationManager.createNotificationChannel(channel)
   }
@@ -205,6 +214,11 @@ class TimerAlertService : Service() {
       } catch (_: SecurityException) {
         TimerAlertPlayback.stop(context)
       }
+      clearNotification(context)
+    }
+
+    fun clearNotification(context: Context) {
+      NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
   }
 }

@@ -142,6 +142,7 @@ class NativeTimerAlertModule(
   fun stopTimerEndAlert(promise: Promise) {
     TimerAlertScheduler.cancel(reactContext)
     TimerAlertService.stop(reactContext)
+    TimekeepingNotification.hide(reactContext)
     TimerAlertPlayback.stop(reactContext)
     promise.resolve(null)
   }

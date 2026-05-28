@@ -89,6 +89,8 @@ const originalPlatformVersionDescriptor = Object.getOwnPropertyDescriptor(
   'Version',
 );
 const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
+const ACTIVE_TIMEKEEPING_STORAGE_KEY = '@winktimer:active_timekeeping:v1';
+const SESSION_STORAGE_KEY = '@winktimer:sessions:v1';
 
 function AppStateHarness() {
   const app = useAppState();
@@ -1289,6 +1291,135 @@ describe('AppStateProvider app flow', () => {
     await unmount(renderer);
   });
 
+  it('persists a running countdown when the app moves to background', async () => {
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'start');
+
+    nowMs = 2000;
+    await ReactTestRenderer.act(async () => {
+      appStateListeners.forEach(listener => listener('background'));
+    });
+
+    const storedActive = await AsyncStorage.getItem(
+      ACTIVE_TIMEKEEPING_STORAGE_KEY,
+    );
+    expect(storedActive).not.toBeNull();
+
+    await unmount(renderer);
+  });
+
+  it('restores a backgrounded countdown when the app is reopened from the status notification', async () => {
+    await AsyncStorage.setItem(
+      ACTIVE_TIMEKEEPING_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        savedAtMs: 2000,
+        timekeepingMode: 'timer',
+        timerTargetDurationMs: 60000,
+        timerModeId: 'basicTimer',
+        normalTimerMode: false,
+        timer: {
+          phase: 'active',
+          startedAtMs: 1000,
+          lastUpdatedAtMs: 2000,
+          focusDurationMs: 1000,
+          lookPausedDurationMs: 0,
+          lookPauseCount: 0,
+          targetDurationMs: 60000,
+          detectionStatus: 'notLooking',
+          eyeState: 'unknown',
+          winkSide: null,
+          smileDetected: null,
+          recentWinkSide: null,
+          recentWinkAtMs: null,
+          lookingStartedAtMs: null,
+          isLookPaused: false,
+          oneEyeClosedStartedAtMs: null,
+          oneEyeResetArmed: true,
+        },
+      }),
+    );
+
+    nowMs = 11000;
+    const renderer = await renderHarness();
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(1);
+      for (let i = 0; i < 8; i += 1) {
+        await Promise.resolve();
+      }
+    });
+
+    expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
+    expect(hasText(renderer, 'activeTarget:60000')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(hasText(renderer, 'focus:10000')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('clears the native alert notification when reopening after a persisted countdown finished', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const stopTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const hideTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      stopTimerEndAlert,
+      hideTimekeepingNotification,
+    };
+    await AsyncStorage.setItem(
+      ACTIVE_TIMEKEEPING_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        savedAtMs: 2000,
+        timekeepingMode: 'timer',
+        timerTargetDurationMs: 60000,
+        timerModeId: 'basicTimer',
+        normalTimerMode: false,
+        timer: {
+          phase: 'active',
+          startedAtMs: 1000,
+          lastUpdatedAtMs: 2000,
+          focusDurationMs: 1000,
+          lookPausedDurationMs: 0,
+          lookPauseCount: 0,
+          targetDurationMs: 60000,
+          detectionStatus: 'notLooking',
+          eyeState: 'unknown',
+          winkSide: null,
+          smileDetected: null,
+          recentWinkSide: null,
+          recentWinkAtMs: null,
+          lookingStartedAtMs: null,
+          isLookPaused: false,
+          oneEyeClosedStartedAtMs: null,
+          oneEyeResetArmed: true,
+        },
+      }),
+    );
+
+    nowMs = 65000;
+    const renderer = await renderHarness();
+    await ReactTestRenderer.act(async () => {
+      jest.advanceTimersByTime(1);
+      for (let i = 0; i < 8; i += 1) {
+        await Promise.resolve();
+      }
+    });
+
+    expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
+    expect(hasText(renderer, 'phase:ended')).toBe(true);
+    expect(hasText(renderer, 'focus:60000')).toBe(true);
+    expect(playTimerEndAlert).not.toHaveBeenCalled();
+    expect(stopTimerEndAlert).toHaveBeenCalled();
+    expect(hideTimekeepingNotification).toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
   it('keeps paused stopwatch time in a static background notification', async () => {
     const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
     const showTimekeepingNotification = jest.fn().mockResolvedValue(undefined);
@@ -1467,10 +1598,12 @@ describe('AppStateProvider app flow', () => {
     const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
     const scheduleTimerEndAlert = jest.fn().mockResolvedValue(undefined);
     const cancelScheduledTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const stopTimerEndAlert = jest.fn().mockResolvedValue(undefined);
     nativeModules.NativeTimerAlert = {
       playTimerEndAlert,
       scheduleTimerEndAlert,
       cancelScheduledTimerEndAlert,
+      stopTimerEndAlert,
     };
     const renderer = await renderHarness();
 
@@ -1493,6 +1626,7 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'phase:ended')).toBe(true);
     expect(hasText(renderer, 'focus:60000')).toBe(true);
     expect(cancelScheduledTimerEndAlert).toHaveBeenCalled();
+    expect(stopTimerEndAlert).toHaveBeenCalled();
     expect(playTimerEndAlert).not.toHaveBeenCalled();
 
     await unmount(renderer);
@@ -1681,9 +1815,16 @@ describe('AppStateProvider app flow', () => {
   });
 
   it('keeps the timer retryable and shows an error when saving a summary fails', async () => {
+    const originalSetItem = AsyncStorage.setItem.bind(AsyncStorage);
     jest
       .spyOn(AsyncStorage, 'setItem')
-      .mockRejectedValueOnce(new Error('storage unavailable'));
+      .mockImplementation((key, value) => {
+        if (key === SESSION_STORAGE_KEY) {
+          return Promise.reject(new Error('storage unavailable'));
+        }
+
+        return originalSetItem(key, value);
+      });
     const renderer = await renderHarness();
 
     nowMs = 1000;

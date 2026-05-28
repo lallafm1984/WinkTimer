@@ -105,6 +105,7 @@ import {
   type TimekeepingMode,
 } from '../domain/timekeeping';
 import {
+  timerModePresets,
   modeUsesLookPause,
   modeUsesLookAwayStart,
   modeHasLap,
@@ -132,6 +133,8 @@ import type { SessionRepository } from '../storage/sessionRepository';
 import { createSessionRepository } from '../storage/sessionRepository';
 
 const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
+const ACTIVE_TIMEKEEPING_STORAGE_KEY = '@winktimer:active_timekeeping:v1';
+const ACTIVE_TIMEKEEPING_RECORD_VERSION = 1;
 const DEFAULT_TIMER_MODE_ID: TimerModeId = 'basicTimer';
 const MAX_RECENT_TIMER_TARGETS = 3;
 
@@ -281,6 +284,14 @@ type PersistedSettings = {
   detectionResolutionLevel: DetectionResolutionLevel;
   detectionFrameIntervalLevel: DetectionFrameIntervalLevel;
   detectionPerformanceMode: DetectionPerformanceMode;
+};
+
+type ActiveTimekeepingSession = {
+  timekeepingMode: TimekeepingMode;
+  timerTargetDurationMs: number;
+  timerModeId: TimerModeId;
+  normalTimerMode: boolean;
+  timer: TimerState;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -448,6 +459,197 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
   };
 }
 
+function normalizePersistedTimerModeId(value: unknown): TimerModeId {
+  return timerModePresets.some(mode => mode.id === value)
+    ? (value as TimerModeId)
+    : DEFAULT_TIMER_MODE_ID;
+}
+
+function normalizeStoredTimerNumber(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : fallback;
+}
+
+function normalizeStoredTimerDuration(value: unknown) {
+  return Math.max(0, normalizeStoredTimerNumber(value, 0));
+}
+
+function normalizeStoredTimerTimestamp(value: unknown, fallback: number) {
+  return normalizeStoredTimerNumber(value, fallback);
+}
+
+function normalizeStoredNullableTimerTimestamp(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeStoredDetectionStatus(value: unknown): DetectionStatus {
+  return value === 'looking' ||
+    value === 'notLooking' ||
+    value === 'unknown'
+    ? value
+    : 'unknown';
+}
+
+function normalizeStoredEyeState(value: unknown): TimerState['eyeState'] {
+  return value === 'bothOpen' ||
+    value === 'bothClosed' ||
+    value === 'oneEyeClosed' ||
+    value === 'unknown'
+    ? value
+    : 'unknown';
+}
+
+function normalizeStoredWinkSide(value: unknown): TimerState['winkSide'] {
+  return value === 'left' || value === 'right' ? value : null;
+}
+
+function normalizeStoredTimerState(
+  value: unknown,
+  fallbackNowMs: number,
+): TimerState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (value.phase !== 'active' && value.phase !== 'manualPaused') {
+    return null;
+  }
+
+  const startedAtMs = normalizeStoredNullableTimerTimestamp(value.startedAtMs);
+  if (startedAtMs === null) {
+    return null;
+  }
+
+  const lastUpdatedAtMs = normalizeStoredTimerTimestamp(
+    value.lastUpdatedAtMs,
+    fallbackNowMs,
+  );
+  const targetDurationMs =
+    typeof value.targetDurationMs === 'number' &&
+    Number.isFinite(value.targetDurationMs)
+      ? normalizeTimerTargetDurationMs(value.targetDurationMs)
+      : null;
+
+  return {
+    phase: value.phase,
+    startedAtMs,
+    lastUpdatedAtMs,
+    focusDurationMs: normalizeStoredTimerDuration(value.focusDurationMs),
+    lookPausedDurationMs: normalizeStoredTimerDuration(
+      value.lookPausedDurationMs,
+    ),
+    lookPauseCount: Math.max(
+      0,
+      Math.floor(normalizeStoredTimerNumber(value.lookPauseCount, 0)),
+    ),
+    targetDurationMs,
+    detectionStatus: normalizeStoredDetectionStatus(value.detectionStatus),
+    eyeState: normalizeStoredEyeState(value.eyeState),
+    winkSide: normalizeStoredWinkSide(value.winkSide),
+    smileDetected:
+      typeof value.smileDetected === 'boolean' ? value.smileDetected : null,
+    recentWinkSide: normalizeStoredWinkSide(value.recentWinkSide),
+    recentWinkAtMs: normalizeStoredNullableTimerTimestamp(
+      value.recentWinkAtMs,
+    ),
+    lookingStartedAtMs: normalizeStoredNullableTimerTimestamp(
+      value.lookingStartedAtMs,
+    ),
+    isLookPaused: normalizeStoredBoolean(value.isLookPaused, false),
+    oneEyeClosedStartedAtMs: normalizeStoredNullableTimerTimestamp(
+      value.oneEyeClosedStartedAtMs,
+    ),
+    oneEyeResetArmed: normalizeStoredBoolean(value.oneEyeResetArmed, true),
+  };
+}
+
+function parseStoredJson(raw: string | null) {
+  if (raw === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStoredActiveTimekeepingSession(
+  raw: string | null,
+  nowMs: number,
+): ActiveTimekeepingSession | null {
+  const value = parseStoredJson(raw);
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const savedAtMs = normalizeStoredTimerTimestamp(value.savedAtMs, nowMs);
+  const timer = normalizeStoredTimerState(value.timer, savedAtMs);
+  if (timer === null) {
+    return null;
+  }
+
+  const timekeepingMode = normalizeTimekeepingMode(value.timekeepingMode);
+  const timerTargetDurationMs = normalizeTimerTargetDurationMs(
+    typeof value.timerTargetDurationMs === 'number'
+      ? value.timerTargetDurationMs
+      : timer.targetDurationMs ?? DEFAULT_TIMER_TARGET_DURATION_MS,
+  );
+  const targetDurationMs =
+    timekeepingMode === 'timer'
+      ? timer.targetDurationMs ?? timerTargetDurationMs
+      : null;
+
+  return {
+    timekeepingMode,
+    timerTargetDurationMs,
+    timerModeId: normalizePersistedTimerModeId(value.timerModeId),
+    normalTimerMode: normalizeStoredBoolean(value.normalTimerMode, false),
+    timer: {
+      ...timer,
+      targetDurationMs,
+    },
+  };
+}
+
+function createActiveTimekeepingRecord(
+  session: ActiveTimekeepingSession,
+  savedAtMs: number,
+) {
+  return {
+    version: ACTIVE_TIMEKEEPING_RECORD_VERSION,
+    savedAtMs,
+    timekeepingMode: session.timekeepingMode,
+    timerTargetDurationMs: session.timerTargetDurationMs,
+    timerModeId: session.timerModeId,
+    normalTimerMode: session.normalTimerMode,
+    timer: session.timer,
+  };
+}
+
+function persistActiveTimekeepingSession(
+  session: ActiveTimekeepingSession,
+  savedAtMs = Date.now(),
+) {
+  if (
+    session.timer.phase !== 'active' &&
+    session.timer.phase !== 'manualPaused'
+  ) {
+    return AsyncStorage.removeItem(ACTIVE_TIMEKEEPING_STORAGE_KEY);
+  }
+
+  return AsyncStorage.setItem(
+    ACTIVE_TIMEKEEPING_STORAGE_KEY,
+    JSON.stringify(createActiveTimekeepingRecord(session, savedAtMs)),
+  );
+}
+
+function clearPersistedActiveTimekeepingSession() {
+  return AsyncStorage.removeItem(ACTIVE_TIMEKEEPING_STORAGE_KEY);
+}
+
 function formatsAsZeroHistoryDuration(durationMs: number) {
   return Math.floor(Math.max(0, durationMs) / 10) === 0;
 }
@@ -573,6 +775,41 @@ function getTimerBehavior(modeId: TimerModeId): TimerBehavior {
   return {
     lookPauseEnabled: modeUsesLookPause(modeId),
   };
+}
+
+function getActiveTimekeepingSessionTimerForNow(
+  session: ActiveTimekeepingSession,
+  nowMs: number,
+  sensitivity: Sensitivity,
+) {
+  if (session.timer.phase !== 'active') {
+    return session.timer;
+  }
+
+  const modeRunsPassively =
+    session.normalTimerMode || modeRunsWithoutGaze(session.timerModeId);
+  const timerForTick = modeRunsPassively
+    ? normalizeNormalTimerState(session.timer, true)
+    : session.timer;
+
+  return tickTimerWithBehavior(
+    timerForTick,
+    nowMs,
+    sensitivity,
+    getTimerBehavior(session.timerModeId),
+  );
+}
+
+function getCompletedTimerAlertKey(timer: TimerState) {
+  if (timer.targetDurationMs === null) {
+    return null;
+  }
+
+  return [
+    timer.startedAtMs ?? 'none',
+    timer.targetDurationMs,
+    timer.focusDurationMs,
+  ].join(':');
 }
 
 function markRecognizedWink(
@@ -925,6 +1162,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const [isAppForeground, setIsAppForeground] = useState(true);
   const [gestureInputsBlocked, setGestureInputsBlocked] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [activeTimekeepingLoaded, setActiveTimekeepingLoaded] =
+    useState(false);
   const timerRef = useRef(timer);
   const previousTimerForHistoryRef = useRef(timer);
   const screenRef = useRef(screen);
@@ -968,6 +1207,31 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     setSensitivityState('strict');
   }, []);
 
+  const createActiveTimekeepingSessionSnapshot = useCallback(
+    (nextTimer: TimerState): ActiveTimekeepingSession => ({
+      timekeepingMode: timekeepingModeRef.current,
+      timerTargetDurationMs: timerTargetDurationMsRef.current,
+      timerModeId: timerModeIdRef.current,
+      normalTimerMode: normalTimerModeRef.current,
+      timer: nextTimer,
+    }),
+    [],
+  );
+
+  const persistCurrentActiveTimekeepingSession = useCallback(
+    (nextTimer = timerRef.current, savedAtMs = Date.now()) => {
+      persistActiveTimekeepingSession(
+        createActiveTimekeepingSessionSnapshot(nextTimer),
+        savedAtMs,
+      ).catch(() => undefined);
+    },
+    [createActiveTimekeepingSessionSnapshot],
+  );
+
+  const clearCurrentActiveTimekeepingSession = useCallback(() => {
+    clearPersistedActiveTimekeepingSession().catch(() => undefined);
+  }, []);
+
   const clearTimerAlertAutoClearTimeout = useCallback(() => {
     if (timerAlertAutoClearTimeoutRef.current === null) {
       return;
@@ -1002,6 +1266,14 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     hideBackgroundTimekeepingNotification().catch(() => undefined);
   }, []);
 
+  const clearTimerAlertForegroundArtifacts = useCallback(() => {
+    clearTimerAlertAutoClearTimeout();
+    backgroundTimekeepingNotificationKeyRef.current = null;
+    hideBackgroundTimekeepingNotification().catch(() => undefined);
+    setTimerAlertActive(false);
+    stopNativeTimerEndAlert().catch(() => undefined);
+  }, [clearTimerAlertAutoClearTimeout, setTimerAlertActive]);
+
   const requestStartupPermissionsIfNeeded = useCallback(() => {
     if (startupPermissionsRequestedRef.current) {
       return;
@@ -1012,16 +1284,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   }, []);
 
   const stopTimerEndAlert = useCallback(() => {
-    clearTimerAlertAutoClearTimeout();
     cancelScheduledTimerEndAlertIfNeeded();
-    hideBackgroundTimekeepingNotificationIfNeeded();
-    setTimerAlertActive(false);
-    stopNativeTimerEndAlert().catch(() => undefined);
+    clearTimerAlertForegroundArtifacts();
   }, [
     cancelScheduledTimerEndAlertIfNeeded,
-    clearTimerAlertAutoClearTimeout,
-    hideBackgroundTimekeepingNotificationIfNeeded,
-    setTimerAlertActive,
+    clearTimerAlertForegroundArtifacts,
   ]);
 
   const scheduleTimerAlertAutoClear = useCallback(
@@ -1062,86 +1329,126 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   useEffect(() => {
     let isMounted = true;
 
-    AsyncStorage.getItem(SETTINGS_STORAGE_KEY)
-      .then(raw => {
-        if (!isMounted || raw === null) {
+    Promise.all([
+      AsyncStorage.getItem(SETTINGS_STORAGE_KEY),
+      AsyncStorage.getItem(ACTIVE_TIMEKEEPING_STORAGE_KEY),
+    ])
+      .then(([settingsRaw, activeTimekeepingRaw]) => {
+        if (!isMounted) {
           return;
         }
 
-        const nextSettings = normalizeStoredSettings(JSON.parse(raw));
-        if (nextSettings === null) {
-          return;
-        }
-
-        setSensitivity(nextSettings.sensitivity);
-        setLocale(nextSettings.locale);
-        setStatusDisplayMode(nextSettings.statusDisplayMode);
-        setNormalTimerMode(nextSettings.normalTimerMode);
-        setTimekeepingModeState(nextSettings.timekeepingMode);
-        timekeepingModeRef.current = nextSettings.timekeepingMode;
-        setTimerTargetDurationMsState(nextSettings.timerTargetDurationMs);
-        timerTargetDurationMsRef.current = nextSettings.timerTargetDurationMs;
-        setRecentTimerTargetDurationsMs(
-          nextSettings.recentTimerTargetDurationsMs,
+        const nextSettings = normalizeStoredSettings(
+          parseStoredJson(settingsRaw),
         );
-        setTimer(current => {
-          if (current.phase === 'active') {
-            return current;
+        if (nextSettings !== null) {
+          setSensitivity(nextSettings.sensitivity);
+          setLocale(nextSettings.locale);
+          setStatusDisplayMode(nextSettings.statusDisplayMode);
+          setNormalTimerMode(nextSettings.normalTimerMode);
+          setTimekeepingModeState(nextSettings.timekeepingMode);
+          timekeepingModeRef.current = nextSettings.timekeepingMode;
+          setTimerTargetDurationMsState(nextSettings.timerTargetDurationMs);
+          timerTargetDurationMsRef.current = nextSettings.timerTargetDurationMs;
+          setRecentTimerTargetDurationsMs(
+            nextSettings.recentTimerTargetDurationsMs,
+          );
+          setTimer(current => {
+            if (current.phase === 'active') {
+              return current;
+            }
+
+            return {
+              ...current,
+              targetDurationMs:
+                nextSettings.timekeepingMode === 'timer'
+                  ? nextSettings.timerTargetDurationMs
+                  : null,
+            };
+          });
+          setTimerModeIdState(nextSettings.timerModeId);
+          timerModeIdRef.current = nextSettings.timerModeId;
+          setTimerAlertVibrationEnabled(
+            nextSettings.timerAlertVibrationEnabled,
+          );
+          setTimerAlertSoundEnabled(nextSettings.timerAlertSoundEnabled);
+          setTimerAlertSoundId(nextSettings.timerAlertSoundId);
+          setTimerAlertDurationId(nextSettings.timerAlertDurationId);
+          setTimerAlertVibrationPatternId(
+            nextSettings.timerAlertVibrationPatternId,
+          );
+          setWinkLeftEyeClosedThreshold(
+            nextSettings.winkLeftEyeClosedThreshold,
+          );
+          setWinkRightEyeClosedThreshold(
+            nextSettings.winkRightEyeClosedThreshold,
+          );
+          setWinkLeftEyeProbabilityGapThreshold(
+            nextSettings.winkLeftEyeProbabilityGapThreshold,
+          );
+          setWinkRightEyeProbabilityGapThreshold(
+            nextSettings.winkRightEyeProbabilityGapThreshold,
+          );
+          setWinkDistanceLevel(nextSettings.winkDistanceLevel);
+          setSmileThreshold(nextSettings.smileThreshold);
+          setSmileDistanceLevel(nextSettings.smileDistanceLevel);
+          setLookAngleLevel(nextSettings.lookAngleLevel);
+          setFaceHeightAngleLevel(nextSettings.faceHeightAngleLevel);
+          setDetectionResolutionLevel(nextSettings.detectionResolutionLevel);
+          setDetectionFrameIntervalLevel(
+            nextSettings.detectionFrameIntervalLevel,
+          );
+          setDetectionPerformanceMode(nextSettings.detectionPerformanceMode);
+        }
+
+        const activeSession = normalizeStoredActiveTimekeepingSession(
+          activeTimekeepingRaw,
+          Date.now(),
+        );
+        if (activeSession !== null) {
+          const restoredTimer = getActiveTimekeepingSessionTimerForNow(
+            activeSession,
+            Date.now(),
+            nextSettings?.sensitivity ?? sensitivityRef.current,
+          );
+
+          setTimekeepingModeState(activeSession.timekeepingMode);
+          timekeepingModeRef.current = activeSession.timekeepingMode;
+          setTimerTargetDurationMsState(activeSession.timerTargetDurationMs);
+          timerTargetDurationMsRef.current =
+            activeSession.timerTargetDurationMs;
+          setNormalTimerMode(activeSession.normalTimerMode);
+          normalTimerModeRef.current = activeSession.normalTimerMode;
+          setTimerModeIdState(activeSession.timerModeId);
+          timerModeIdRef.current = activeSession.timerModeId;
+          previousTimerForHistoryRef.current = restoredTimer;
+
+          if (
+            restoredTimer.phase === 'ended' &&
+            activeSession.timekeepingMode === 'timer'
+          ) {
+            lastTimerAlertKeyRef.current =
+              getCompletedTimerAlertKey(restoredTimer);
+            clearTimerAlertForegroundArtifacts();
           }
 
-          return {
-            ...current,
-            targetDurationMs:
-              nextSettings.timekeepingMode === 'timer'
-                ? nextSettings.timerTargetDurationMs
-                : null,
-          };
-        });
-        setTimerModeIdState(nextSettings.timerModeId);
-        timerModeIdRef.current = nextSettings.timerModeId;
-        setTimerAlertVibrationEnabled(
-          nextSettings.timerAlertVibrationEnabled,
-        );
-        setTimerAlertSoundEnabled(nextSettings.timerAlertSoundEnabled);
-        setTimerAlertSoundId(nextSettings.timerAlertSoundId);
-        setTimerAlertDurationId(nextSettings.timerAlertDurationId);
-        setTimerAlertVibrationPatternId(
-          nextSettings.timerAlertVibrationPatternId,
-        );
-        setWinkLeftEyeClosedThreshold(
-          nextSettings.winkLeftEyeClosedThreshold,
-        );
-        setWinkRightEyeClosedThreshold(
-          nextSettings.winkRightEyeClosedThreshold,
-        );
-        setWinkLeftEyeProbabilityGapThreshold(
-          nextSettings.winkLeftEyeProbabilityGapThreshold,
-        );
-        setWinkRightEyeProbabilityGapThreshold(
-          nextSettings.winkRightEyeProbabilityGapThreshold,
-        );
-        setWinkDistanceLevel(nextSettings.winkDistanceLevel);
-        setSmileThreshold(nextSettings.smileThreshold);
-        setSmileDistanceLevel(nextSettings.smileDistanceLevel);
-        setLookAngleLevel(nextSettings.lookAngleLevel);
-        setFaceHeightAngleLevel(nextSettings.faceHeightAngleLevel);
-        setDetectionResolutionLevel(nextSettings.detectionResolutionLevel);
-        setDetectionFrameIntervalLevel(
-          nextSettings.detectionFrameIntervalLevel,
-        );
-        setDetectionPerformanceMode(nextSettings.detectionPerformanceMode);
+          setTimer(restoredTimer);
+          backgroundTimekeepingNotificationKeyRef.current = null;
+          hideBackgroundTimekeepingNotification().catch(() => undefined);
+        }
       })
       .catch(() => undefined)
       .finally(() => {
         if (isMounted) {
           setSettingsLoaded(true);
+          setActiveTimekeepingLoaded(true);
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [setSensitivity, setTimer]);
+  }, [clearTimerAlertForegroundArtifacts, setSensitivity, setTimer]);
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -1211,6 +1518,30 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     winkRightEyeProbabilityGapThreshold,
     winkLeftEyeClosedThreshold,
     winkRightEyeClosedThreshold,
+  ]);
+
+  useEffect(() => {
+    if (!activeTimekeepingLoaded) {
+      return;
+    }
+
+    if (timer.phase === 'active' || timer.phase === 'manualPaused') {
+      persistCurrentActiveTimekeepingSession(timerRef.current);
+      return;
+    }
+
+    clearCurrentActiveTimekeepingSession();
+  }, [
+    activeTimekeepingLoaded,
+    clearCurrentActiveTimekeepingSession,
+    normalTimerMode,
+    persistCurrentActiveTimekeepingSession,
+    timekeepingMode,
+    timer.isLookPaused,
+    timer.phase,
+    timer.startedAtMs,
+    timer.targetDurationMs,
+    timerModeId,
   ]);
 
   const appendSessionHistoryEvent = useCallback(
@@ -2101,7 +2432,32 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       'change',
       nextState => {
         const nextIsForeground = nextState === 'active';
+        const now = Date.now();
         isAppForegroundRef.current = nextIsForeground;
+
+        if (!nextIsForeground) {
+          const currentSession = createActiveTimekeepingSessionSnapshot(
+            timerRef.current,
+          );
+          const currentTimerForNow =
+            getActiveTimekeepingSessionTimerForNow(
+              currentSession,
+              now,
+              sensitivityRef.current,
+            );
+          persistCurrentActiveTimekeepingSession(currentTimerForNow, now);
+        }
+
+        const scheduledBackgroundAlertDue =
+          scheduledTimerAlertMayFireInBackgroundRef.current &&
+          scheduledTimerAlertTriggerAtMsRef.current !== null &&
+          now >= scheduledTimerAlertTriggerAtMsRef.current;
+        if (
+          nextIsForeground &&
+          (scheduledBackgroundAlertDue || timerRef.current.phase === 'ended')
+        ) {
+          clearTimerAlertForegroundArtifacts();
+        }
 
         if (
           !nextIsForeground &&
@@ -2113,7 +2469,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
         if (
           nextIsForeground &&
           scheduledTimerAlertTriggerAtMsRef.current !== null &&
-          Date.now() < scheduledTimerAlertTriggerAtMsRef.current
+          now < scheduledTimerAlertTriggerAtMsRef.current
         ) {
           scheduledTimerAlertMayFireInBackgroundRef.current = false;
         }
@@ -2125,7 +2481,12 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     return () => {
       subscription.remove();
     };
-  }, [setTimer]);
+  }, [
+    clearTimerAlertForegroundArtifacts,
+    createActiveTimekeepingSessionSnapshot,
+    persistCurrentActiveTimekeepingSession,
+    setTimer,
+  ]);
 
   const setTimekeepingMode = useCallback(
     (mode: TimekeepingMode) => {

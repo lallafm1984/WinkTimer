@@ -46,6 +46,8 @@ object TimekeepingNotification {
         .setLocalOnly(true)
         .setWhen(whenMs)
         .setRequestPromotedOngoing(true)
+        .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
+        .setNumber(0)
         .setContentIntent(createOpenAppPendingIntent(context))
 
     if (isRunning) {
@@ -95,7 +97,9 @@ object TimekeepingNotification {
       context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         ?: return
 
-    if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) {
+    notificationManager.getNotificationChannel(CHANNEL_ID)?.let { channel ->
+      channel.setShowBadge(false)
+      notificationManager.createNotificationChannel(channel)
       return
     }
 
@@ -107,6 +111,7 @@ object TimekeepingNotification {
       ).apply {
         setSound(null, null)
         enableVibration(false)
+        setShowBadge(false)
       }
 
     notificationManager.createNotificationChannel(channel)
