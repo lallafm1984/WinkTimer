@@ -112,11 +112,11 @@ describe('detection settings', () => {
     expect(normalizeDetectionResolutionLevel(0)).toBe(1);
     expect(normalizeDetectionResolutionLevel(2.4)).toBe(2);
     expect(normalizeDetectionResolutionLevel(99)).toBe(3);
-    expect(normalizeDetectionResolutionLevel(Number.NaN)).toBe(2);
+    expect(normalizeDetectionResolutionLevel(Number.NaN)).toBe(1);
   });
 
   it('provides three ML Kit frame interval levels', () => {
-    expect(detectionFrameIntervalLevels).toEqual([1, 2, 3]);
+    expect(detectionFrameIntervalLevels).toEqual([3, 2, 1]);
     expect(detectionFrameIntervalMsByLevel).toEqual({
       1: 0,
       2: 120,
@@ -128,13 +128,13 @@ describe('detection settings', () => {
     expect(normalizeDetectionFrameIntervalLevel(0)).toBe(1);
     expect(normalizeDetectionFrameIntervalLevel(2.4)).toBe(2);
     expect(normalizeDetectionFrameIntervalLevel(99)).toBe(3);
-    expect(normalizeDetectionFrameIntervalLevel(Number.NaN)).toBe(1);
+    expect(normalizeDetectionFrameIntervalLevel(Number.NaN)).toBe(2);
   });
 
-  it('provides selectable ML Kit performance modes with fast as the default fallback', () => {
+  it('provides selectable ML Kit performance modes with accurate as the default fallback', () => {
     expect(detectionPerformanceModes).toEqual(['fast', 'accurate']);
     expect(normalizeDetectionPerformanceMode('fast')).toBe('fast');
     expect(normalizeDetectionPerformanceMode('accurate')).toBe('accurate');
-    expect(normalizeDetectionPerformanceMode('unknown')).toBe('fast');
+    expect(normalizeDetectionPerformanceMode('unknown')).toBe('accurate');
   });
 });

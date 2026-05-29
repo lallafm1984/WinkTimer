@@ -1934,12 +1934,15 @@ export function SettingsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t('settings.title')}</Text>
+        <Text style={styles.title} testID="settings-title">
+          {t('settings.title')}
+        </Text>
         <PrimaryButton
           label={t('common.back')}
           onPress={() => {
             setScreen('timer');
           }}
+          testID="settings-back-button"
           variant="secondary"
           style={styles.returnButton}
         />
@@ -2150,6 +2153,11 @@ export function SettingsScreen() {
           toggleSettingsGroup('camera-settings');
         }}
         testID="camera-settings">
+        <Text
+          style={styles.cameraSettingsWarning}
+          testID="camera-settings-warning">
+          {t('settings.camera.warning')}
+        </Text>
         <OptionButtonControl
           title={t('settings.imageSize')}
           value={detectionResolutionLevel}
@@ -2357,14 +2365,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#121A14',
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 21,
+    fontWeight: '900',
     letterSpacing: 0,
+    lineHeight: 25,
   },
   returnButton: {
-    minHeight: 42,
+    minHeight: 34,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   group: {
     backgroundColor: '#FFFFFF',
@@ -2437,6 +2446,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 18,
+  },
+  cameraSettingsWarning: {
+    color: '#B42318',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
   },
   settingCopy: {
     gap: 4,

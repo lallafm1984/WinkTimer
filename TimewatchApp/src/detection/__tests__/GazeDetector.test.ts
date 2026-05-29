@@ -289,7 +289,7 @@ describe('GazeDetector', () => {
     expect(setPerformanceMode).toHaveBeenNthCalledWith(2, 'fast');
   });
 
-  it('falls back to fast when an invalid ML Kit performance mode is provided', async () => {
+  it('falls back to accurate when an invalid ML Kit performance mode is provided', async () => {
     const start = jest.fn().mockResolvedValue(undefined);
     const stop = jest.fn().mockResolvedValue(undefined);
     const setPerformanceMode = jest.fn().mockResolvedValue(undefined);
@@ -298,7 +298,7 @@ describe('GazeDetector', () => {
 
     await detector.setDetectionPerformanceMode('slow' as 'fast');
 
-    expect(setPerformanceMode).toHaveBeenCalledWith('fast');
+    expect(setPerformanceMode).toHaveBeenCalledWith('accurate');
   });
 
   it('uses native gaze detection events as the latest reading', () => {

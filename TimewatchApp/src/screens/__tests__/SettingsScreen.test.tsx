@@ -181,11 +181,11 @@ const mockState = {
   setLookAngleLevel: mockSetLookAngleLevel,
   faceHeightAngleLevel: 2,
   setFaceHeightAngleLevel: mockSetFaceHeightAngleLevel,
-  detectionResolutionLevel: 2,
+  detectionResolutionLevel: 1,
   setDetectionResolutionLevel: mockSetDetectionResolutionLevel,
-  detectionFrameIntervalLevel: 1,
+  detectionFrameIntervalLevel: 2,
   setDetectionFrameIntervalLevel: mockSetDetectionFrameIntervalLevel,
-  detectionPerformanceMode: 'fast',
+  detectionPerformanceMode: 'accurate',
   setDetectionPerformanceMode: mockSetDetectionPerformanceMode,
   timerAlertVibrationEnabled: true,
   setTimerAlertVibrationEnabled: mockSetTimerAlertVibrationEnabled,
@@ -277,6 +277,20 @@ function getNodeStyle(
   testID: string,
 ) {
   return StyleSheet.flatten(renderer.root.findByProps({testID}).props.style);
+}
+
+function getPressedStyleEntriesByTestID(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  testID: string,
+) {
+  const button = renderer.root.findByProps({testID});
+  const style = button.props.style;
+  const resolvedStyle =
+    typeof style === 'function' ? style({pressed: true}) : style;
+
+  return Array.isArray(resolvedStyle)
+    ? resolvedStyle.filter(Boolean)
+    : [resolvedStyle].filter(Boolean);
 }
 
 function setAndroidPlatformVersion(version: number) {
@@ -393,6 +407,9 @@ describe('SettingsScreen', () => {
     mockState.timerAlertSoundId = 'alarm';
     mockState.timerAlertDurationId = 'seconds:4';
     mockState.timerAlertVibrationPatternId = 'double';
+    mockState.detectionResolutionLevel = 1;
+    mockState.detectionFrameIntervalLevel = 2;
+    mockState.detectionPerformanceMode = 'accurate';
     mockState.locale = 'en-US';
     (NativeModules as {NativeTimerAlert?: unknown}).NativeTimerAlert = {
       previewTimerAlertSound: jest.fn().mockResolvedValue(undefined),
@@ -444,6 +461,33 @@ describe('SettingsScreen', () => {
     expect(text).not.toContain('SENSITIVITY');
     expect(text).not.toContain('FACE DIRECTION');
     expect(text).not.toContain('LEFT EYE CLOSED');
+  });
+
+  it('uses the same compact title and back button scale as the main screen', () => {
+    const renderer = renderSettingsScreen();
+
+    expect(getNodeStyle(renderer, 'settings-title')).toEqual(
+      expect.objectContaining({
+        fontSize: 21,
+        fontWeight: '900',
+        lineHeight: 25,
+      }),
+    );
+    expect(getPressedStyleEntriesByTestID(renderer, 'settings-back-button'))
+      .toContainEqual(expect.objectContaining({minHeight: 34}));
+  });
+
+  it('uses localized copy for the camera settings warning', () => {
+    const renderer = renderSettingsScreen();
+
+    pressByTestID(renderer, 'camera-settings-accordion');
+
+    expect(
+      flattenText(
+        renderer.root.findByProps({testID: 'camera-settings-warning'}).props
+          .children,
+      ),
+    ).toBe('Higher settings can increase heat and battery use.');
   });
 
   it('shows permission statuses and requests missing camera permission', async () => {
@@ -847,11 +891,24 @@ describe('SettingsScreen', () => {
     expect(text).toContain('IMAGE SIZE');
     expect(text).toContain('FRAME RATE');
     expect(text).toContain('ANALYSIS MODE');
-    expect(text).toContain('640x480');
+    expect(text).toContain('Higher settings can increase heat and battery use.');
+    expect(text).toContain('480x360');
+    expect(text).toContain('240 MS');
+    expect(text).toContain('120 MS');
     expect(text).toContain('REALTIME');
     expect(text).toContain('FAST');
     expect(text).toContain('ACCURATE');
     expect(getUppercaseValueTextNodes(renderer)).toHaveLength(0);
+    expect(
+      renderer.root
+        .find(
+          node =>
+            node.type === View &&
+            node.props.testID === 'detection-frame-interval-levels',
+        )
+        .findAllByType(Text)
+        .map(node => flattenText(node.props.children)),
+    ).toEqual(['240 MS', '120 MS', 'REALTIME']);
 
     pressToggleOption(renderer, 'detection-resolution-levels', 1);
     pressToggleOption(renderer, 'detection-frame-interval-levels', 2);

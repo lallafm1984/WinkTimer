@@ -8,7 +8,7 @@ data class RewardedAccessRecord(
 )
 
 object RewardedAccessPolicy {
-  const val ACCESS_DURATION_MS = 60L * 60L * 1000L
+  const val ACCESS_DURATION_MS = 3L * 60L * 60L * 1000L
   const val CLOCK_SKEW_GRACE_MS = 5L * 60L * 1000L
   const val CLOCK_ROLLBACK_GRACE_MS = 5L * 60L * 1000L
 

@@ -101,7 +101,7 @@ export const DEFAULT_FACE_HEIGHT_ANGLE_LEVEL: FaceHeightAngleLevel = 2;
 
 export const detectionResolutionLevels: DetectionResolutionLevel[] = [1, 2, 3];
 
-export const DEFAULT_DETECTION_RESOLUTION_LEVEL: DetectionResolutionLevel = 2;
+export const DEFAULT_DETECTION_RESOLUTION_LEVEL: DetectionResolutionLevel = 1;
 
 export const detectionResolutionByLevel: Record<
   DetectionResolutionLevel,
@@ -113,10 +113,10 @@ export const detectionResolutionByLevel: Record<
 };
 
 export const detectionFrameIntervalLevels: DetectionFrameIntervalLevel[] = [
-  1, 2, 3,
+  3, 2, 1,
 ];
 
-export const DEFAULT_DETECTION_FRAME_INTERVAL_LEVEL: DetectionFrameIntervalLevel = 1;
+export const DEFAULT_DETECTION_FRAME_INTERVAL_LEVEL: DetectionFrameIntervalLevel = 2;
 
 export const detectionFrameIntervalMsByLevel: Record<
   DetectionFrameIntervalLevel,
@@ -133,7 +133,7 @@ export const detectionPerformanceModes: DetectionPerformanceMode[] = [
 ];
 
 export const DEFAULT_DETECTION_PERFORMANCE_MODE: DetectionPerformanceMode =
-  'fast';
+  'accurate';
 
 function normalizeProbabilityThreshold(
   value: number,

@@ -45,6 +45,172 @@ describe('mobile Android verification environment', () => {
     expect(script).toContain('am start -n com.winktimer.app/.MainActivity');
   });
 
+  test('mobile Android script preserves the full single connected device id', () => {
+    const script = fs.readFileSync(
+      path.join(projectRoot, 'scripts', 'mobile-android.ps1'),
+      'utf8',
+    );
+
+    expect(script).toContain('$devices = @(');
+    expect(script).toContain('return $devices[0]');
+  });
+
+  test('native timer alert module exposes scheduled alarm APIs', () => {
+    const nativeModule = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'NativeTimerAlertModule.kt',
+      ),
+      'utf8',
+    );
+    const manifest = fs.readFileSync(
+      path.join(projectRoot, 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
+      'utf8',
+    );
+
+    expect(nativeModule).toContain('fun scheduleAlarmAlert(');
+    expect(nativeModule).toContain('fun snoozeAlarmAlert(');
+    expect(nativeModule).toContain('fun cancelAlarmAlert(');
+    expect(nativeModule).toContain('fun getActiveAlarmAlert(');
+    expect(nativeModule).toContain('fun stopAlarmAlert(');
+    expect(nativeModule).toContain('AlarmAlertScheduler.schedule');
+    expect(nativeModule).toContain('AlarmAlertScheduler.scheduleSnooze');
+    expect(manifest).toContain('.alert.AlarmAlertReceiver');
+  });
+
+  test('scheduled alarms keep ringing until the user stops them', () => {
+    const alarmScheduler = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'AlarmAlertScheduler.kt',
+      ),
+      'utf8',
+    );
+    const alertService = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'TimerAlertService.kt',
+      ),
+      'utf8',
+    );
+
+    expect(alarmScheduler).toContain(
+      'private const val DEFAULT_DURATION_ID = "untilStopped"',
+    );
+    expect(alertService).toContain('data class ActiveAlarmAlert');
+    expect(alertService).toContain('fun getActiveAlarmAlert()');
+    expect(alertService).toContain('activeAlarmId');
+  });
+
+  test('timer alert cleanup does not stop active scheduled alarm playback', () => {
+    const nativeModule = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'NativeTimerAlertModule.kt',
+      ),
+      'utf8',
+    );
+    const alertService = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'TimerAlertService.kt',
+      ),
+      'utf8',
+    );
+    const alertPlayback = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'TimerAlertPlayback.kt',
+      ),
+      'utf8',
+    );
+    const alarmReceiver = fs.readFileSync(
+      path.join(
+        projectRoot,
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'winktimer',
+        'app',
+        'alert',
+        'AlarmAlertReceiver.kt',
+      ),
+      'utf8',
+    );
+    const invalidateBody =
+      nativeModule.match(
+        /override fun invalidate\(\) \{([\s\S]*?)\n {2}\}/,
+      )?.[1] ?? '';
+
+    expect(alertService).toContain('const val ALERT_OWNER_ALARM = "alarm"');
+    expect(alertService).toContain('EXTRA_ALERT_OWNER');
+    expect(alertService).toContain('activeAlertOwner');
+    expect(alertPlayback).toContain('alertOwner: String? = null');
+    expect(alarmReceiver).toContain('TimerAlertService.ALERT_OWNER_ALARM');
+    expect(alarmReceiver).toContain('EXTRA_IS_SNOOZE');
+    expect(nativeModule).toContain(
+      'TimerAlertPlayback.stop(reactContext, TimerAlertService.ALERT_OWNER_TIMER)',
+    );
+    expect(invalidateBody).not.toContain('TimerAlertPlayback.stop');
+  });
+
   test('standalone APK script builds a release APK that contains the JS bundle', () => {
     const script = fs.readFileSync(
       path.join(projectRoot, 'scripts', 'build-android-apk.ps1'),

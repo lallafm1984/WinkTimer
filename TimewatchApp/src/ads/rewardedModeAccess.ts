@@ -6,10 +6,10 @@ const REWARDED_MODE_ACCESS_STORAGE_KEY = '@winktimer:ad_rewards:v1';
 const REWARDED_MODE_ACCESS_RECORD_VERSION = 2;
 const REWARDED_MODE_ACCESS_PROBE_MODE_ID: TimerModeId = 'lookPause';
 
-export const REWARDED_MODE_ACCESS_DURATION_MS = 60 * 60 * 1000;
+export const REWARDED_MODE_ACCESS_DURATION_MS = 3 * 60 * 60 * 1000;
 export const REWARDED_MODE_ACCESS_CLOCK_SKEW_GRACE_MS = 5 * 60 * 1000;
 export const REWARDED_MODE_ACCESS_CLOCK_ROLLBACK_GRACE_MS = 5 * 60 * 1000;
-export const REWARDED_MODE_ACCESS_LABEL = '광고 시청 후 1시간 사용 가능';
+export const REWARDED_MODE_ACCESS_LABEL = '광고 시청 후 3시간 사용 가능';
 
 type LegacyRewardedModeAccessRecord = Partial<Record<TimerModeId, number>>;
 type RewardedModeAccessRecord = {

@@ -18,6 +18,43 @@ jest.mock('@react-native-firebase/auth', () => {
   };
 });
 
+jest.mock('@react-native-firebase/analytics', () => {
+  const mockAnalytics = jest.fn(() => ({
+    logEvent: jest.fn(async () => undefined),
+    setAnalyticsCollectionEnabled: jest.fn(async () => undefined),
+  }));
+
+  return {
+    __esModule: true,
+    default: mockAnalytics,
+  };
+});
+
+jest.mock('@react-native-firebase/remote-config', () => {
+  const mockRemoteConfig = jest.fn(() => ({
+    setConfigSettings: jest.fn(async () => undefined),
+    setDefaults: jest.fn(async () => null),
+    fetchAndActivate: jest.fn(async () => false),
+    getBoolean: jest.fn(() => true),
+    getNumber: jest.fn(key => {
+      if (key === 'ads_interstitial_daily_cap') {
+        return 3;
+      }
+
+      if (key === 'ads_interstitial_cooldown_hours') {
+        return 3;
+      }
+
+      return 0;
+    }),
+  }));
+
+  return {
+    __esModule: true,
+    default: mockRemoteConfig,
+  };
+});
+
 jest.mock('react-native-google-mobile-ads', () => {
   const ReactModule = require('react');
   const {View} = require('react-native');
@@ -45,6 +82,13 @@ jest.mock('react-native-google-mobile-ads', () => {
         show: jest.fn(async () => undefined),
       })),
     },
+    InterstitialAd: {
+      createForAdRequest: jest.fn(() => ({
+        addAdEventListener: jest.fn(() => jest.fn()),
+        load: jest.fn(),
+        show: jest.fn(async () => undefined),
+      })),
+    },
     RewardedAdEventType: {
       EARNED_REWARD: 'rewarded_earned_reward',
       LOADED: 'rewarded_loaded',
@@ -59,6 +103,7 @@ jest.mock('react-native-google-mobile-ads', () => {
     },
     TestIds: {
       ADAPTIVE_BANNER: 'ca-app-pub-3940256099942544/9214589741',
+      INTERSTITIAL: 'ca-app-pub-3940256099942544/1033173712',
       REWARDED: 'ca-app-pub-3940256099942544/5224354917',
     },
   };

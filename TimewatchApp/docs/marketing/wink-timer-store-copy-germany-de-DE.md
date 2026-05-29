@@ -5,75 +5,104 @@
 - 국가 이름: 독일
 - 앱 내부 로케일: 독일어/독일 (de-DE)
 - Google Play 스토어 로케일: 독일어 (de-DE)
-- 주요 검색어: Timer, Stoppuhr
+- 주요 검색어: Timer, Wecker, Alarm, Stoppuhr
+- 보조 검색어: Wiederholungsalarm, Snooze-Wecker, Wochentagsalarm, Datumsalarm, Timer ohne Tippen
 
 ## 앱 이름
 
 ```text
-Wink Timer: Timer & Stoppuhr
+Wink Timer: Wecker & Timer
 ```
 
 ## 간단한 설명
 
 ```text
-Timer und Stoppuhr mit Blick-, Zwinker-, Umdreh- und Lächelsteuerung.
+Wecker, Timer, Stoppuhr und Steuerung ohne Tippen.
 ```
 
 ## 전체 설명
 
 ```text
-Wink Timer ist eine Timer- und Stoppuhr-App für die tägliche Zeitmessung.
+Wink Timer ist eine Zeit-App für Wecker, Timer und Stoppuhr im Alltag.
 
-Nutze sie zuerst wie einen normalen Timer mit Tasten. Starte, pausiere, setze fort, setze zurück, stelle Timer-Alarme ein und zeichne Stoppuhr-Runden auf, wenn du schnell Zeit messen möchtest.
+Wenn deine Hände beschäftigt sind, solltest du die Zeit trotzdem pausieren, fortsetzen und erfassen können. Beim Kochen mit nassen Händen oder beim Training ohne Griff zum Bildschirm steuerst du Timer und Stoppuhr per Blick, Zwinkern oder Umdrehen des Geräts.
 
-Wenn du flexiblere Steuerung brauchst, kannst du unterstützte Modi verwenden, die Blickrichtung, Zwinkern, Gerätebewegung oder ein Lächeln nutzen.
+Stelle Wecker für Aufstehen, Unterricht, Meetings, Training, Pausen und Routinen ein. Wecker unterstützen tägliche Wiederholung, Wochentage, bestimmte Daten, Ton, Lautstärke, Vibration und Snooze.
 
-Wichtige Funktionen
+Nutze den Timer für feste Zeitspannen. Nutze die Stoppuhr für verstrichene Zeit und Runden.
 
-- Basic Timer: Starten, Pausieren, Fortsetzen und Zurücksetzen per Taste
-- Stoppuhr: verstrichene Zeit messen und Runden aufzeichnen
-- Timer-Alarme: Ton und Vibration einstellen
+Hauptfunktionen
+
+- Timer: Starten, pausieren, fortsetzen und zurücksetzen mit Tasten
+- Wecker: tägliche Wiederholung, Wochentage, Daten, Ton, Lautstärke, Vibration und Snooze
+- Weckerverwaltung: mehrere Wecker erstellen, aktivieren, deaktivieren, bearbeiten und löschen
+- Weckerbildschirm: Wecker stoppen oder Snooze wählen
+- Stoppuhr: verstrichene Zeit messen und Runden speichern
+- Timer-Alarme: Ton und Vibration am Ende des Countdowns
+- Steuerung ohne Tippen: Blick, Zwinkern und Geräte-Flip für unterstützte Zeitaktionen
 - LOOK PAUSE: pausieren und fortsetzen, je nachdem ob du auf den Bildschirm schaust
-- WINK CONTROL: Timer-Aktionen und Runden mit Zwinkergesten steuern
-- FLIP TIMER: Gerät mit dem Display nach unten drehen zum Starten, nach oben zum Pausieren
-- SMILE MODE: Timer-Steuerung per Lächelerkennung
-- Verlauf: letzte Messungen und Timeline-Ereignisse prüfen
+- WINK CONTROL: Zwinkern für Timer-Aktionen und Runden
+- FLIP TIMER: Gerät mit dem Display nach unten drehen zum Starten, wieder nach oben zum Pausieren
+- SMILE MODE: Timersteuerung über Lächelerkennung
+- Verlauf: aktuelle Zeitmessungen und Timeline-Ereignisse prüfen
 
-Wink Timer ist nicht nur für Fokus- oder Lernsitzungen gedacht. Nutze die App als Küchentimer, Trainingstimer, Lerntimer, Arbeitstimer, Pausentimer oder schnelle Stoppuhr für alltägliche Routinen.
+Wink Timer ist keine reine Fokus- oder Lern-App. Nutze sie als Wecker, Küchentimer, Trainingstimer, Lerntimer, Arbeitstimer, Pausentimer oder schnelle Stoppuhr.
 
-Der einfache Timer und die Stoppuhr sind schnell nutzbar. Kamera- und sensorunterstützte Modi helfen, wenn das Berühren des Bildschirms unpraktisch ist.
-
-Kamerabasierte Funktionen können je nach Geräteleistung, Licht, Gesichtswinkel und Kameraposition unterschiedlich gut funktionieren.
+Kamerabasierte Funktionen können je nach Geräteleistung, Beleuchtung, Gesichtswinkel und Kameraposition variieren.
 ```
 
 ## 앱 설치 캠페인 헤드라인
 
 ```text
-Timer und Stoppuhr in einem
-Timer per Zwinkern steuern
-Stoppuhr mit Gesten
-Zum Starten Handy umdrehen
-Timer für den Alltag
+Wecker, Timer, Stoppuhr
+Zeit steuern ohne Tippen
+Wecker mit Snooze
+Stoppuhr per Zwinkern
+Umdrehen und Timer starten
 ```
 
 ## 앱 설치 캠페인 설명
 
 ```text
-Nutze Timer und Stoppuhr mit Blick, Zwinkern, Umdrehen und Lächeln.
-Miss Kochen, Training, Lernen, Arbeit, Pausen und schnelle Runden.
-Der einfache Timer und die Stoppuhr funktionieren auch ohne Kamera.
-Schau auf den Bildschirm, zwinkere oder drehe dein Handy zur Steuerung.
-Runden, Timer-Alarme und letzte Einträge in einer praktischen App.
+Nutze Wecker, Timer und Stoppuhr mit optionalem Blick-, Zwinker- und Flip-Modus.
+Erstelle tägliche, wöchentliche und datierte Wecker mit Ton, Vibration, Lautstärke und Snooze.
+Plane Aufstehen, Training, Pausen, Kochtimer und schnelle Stoppuhr-Runden.
+Nutze Wecker, Timer und Stoppuhr ohne Kamera; aktiviere Assistenzmodi nur bei Bedarf.
+Passe Timer-Alarme und wiederholte Wecker mit Ton, Lautstärke und Vibration an.
+```
+
+## 알람 중심 광고 소재
+
+### 헤드라인
+
+```text
+Wiederholte Wecker mit Snooze
+Wochentagswecker leicht gemacht
+Datumswecker in einer App
+Wecker mit Ton und Vibration
+Wecker und Timer zusammen
+Wecker für Morgen und Training
+```
+
+### 설명
+
+```text
+Stelle Wecker für Aufstehen, Training, Unterricht und Pausen täglich, wöchentlich oder nach Datum ein.
+Wähle Ton, Lautstärke, Vibration und Snooze und verwalte mehrere Wecker in einer App.
+Wenn der Wecker klingelt, stoppe ihn oder nutze Snooze und arbeite weiter mit Timer und Stoppuhr.
 ```
 
 ## 스크린샷 문구
 
 ```text
-Timer und Stoppuhr in einer App
-Einfacher Timer per Taste
-Mit Blick pausieren und fortsetzen
-Zeit per Zwinkern steuern
-Zum Starten Handy umdrehen
+Wecker, Timer und Stoppuhr
+Wiederholte Wecker und Snooze
+Wecker nach Wochentag oder Datum
+Zeit steuern ohne Tippen
+Timer schnell per Taste
+Timer-Alarme mit Ton und Vibration
+Runden per Zwinkern speichern
+Zum Starten das Handy umdrehen
 ```
 
 ## 문구 기준
@@ -81,4 +110,5 @@ Zum Starten Handy umdrehen
 - 앱을 포커스 전용 앱으로 표현하지 않습니다.
 - 수익화 관련 표현을 사용하지 않습니다.
 - 카메라 인식이 항상 완벽하다고 약속하지 않습니다.
-- BASIC TIMER를 기본 타이머 경험으로 유지합니다.
+- 알람이 모든 기기와 절전 설정에서 항상 정확히 울린다고 보장하지 않습니다.
+- 타이머는 카메라 기능 없이 사용할 수 있는 일반 타이머로 표현합니다.

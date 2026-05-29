@@ -7,6 +7,8 @@ export const PRODUCTION_BANNER_AD_UNIT_ID =
   'ca-app-pub-9163944262143117/2913693702';
 export const PRODUCTION_REWARDED_AD_UNIT_ID =
   'ca-app-pub-9163944262143117/3954935331';
+export const PRODUCTION_INTERSTITIAL_AD_UNIT_ID =
+  'ca-app-pub-9163944262143117/7673768626';
 
 export function getBannerAdUnitId(useTestAds = __DEV__ || FORCE_TEST_ADS) {
   return useTestAds ? TestIds.ADAPTIVE_BANNER : PRODUCTION_BANNER_AD_UNIT_ID;
@@ -14,4 +16,10 @@ export function getBannerAdUnitId(useTestAds = __DEV__ || FORCE_TEST_ADS) {
 
 export function getRewardedAdUnitId(useTestAds = __DEV__ || FORCE_TEST_ADS) {
   return useTestAds ? TestIds.REWARDED : PRODUCTION_REWARDED_AD_UNIT_ID;
+}
+
+export function getInterstitialAdUnitId(useTestAds = __DEV__ || FORCE_TEST_ADS) {
+  return useTestAds
+    ? TestIds.INTERSTITIAL
+    : PRODUCTION_INTERSTITIAL_AD_UNIT_ID;
 }

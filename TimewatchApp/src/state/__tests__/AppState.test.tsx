@@ -33,9 +33,43 @@ type NativeGazeDetectionModuleForTest = {
 };
 
 type NativeTimerAlertModuleForTest = {
-  playTimerEndAlert: jest.Mock<
+  playTimerEndAlert?: jest.Mock<
     Promise<void>,
     [string, boolean, boolean, string, string]
+  >;
+  scheduleAlarmAlert?: jest.Mock<
+    Promise<void>,
+    [
+      string,
+      number,
+      number,
+      number,
+      string,
+      string,
+      string,
+      string,
+      boolean,
+      boolean,
+      number,
+      string,
+      string,
+      string,
+    ]
+  >;
+  cancelAlarmAlert?: jest.Mock<Promise<void>, [string]>;
+  snoozeAlarmAlert?: jest.Mock<
+    Promise<void>,
+    [
+      string,
+      number,
+      string,
+      boolean,
+      boolean,
+      number,
+      string,
+      string,
+      string,
+    ]
   >;
   scheduleTimerEndAlert?: jest.Mock<
     Promise<void>,
@@ -61,6 +95,16 @@ type NativeTimerAlertModuleForTest = {
   >;
   hideTimekeepingNotification?: jest.Mock<Promise<void>, []>;
   stopTimerEndAlert?: jest.Mock<Promise<void>, []>;
+  getActiveAlarmAlert?: jest.Mock<
+    Promise<{
+      active: boolean;
+      alarmId?: string;
+      title?: string;
+      text?: string;
+    } | null>,
+    []
+  >;
+  stopAlarmAlert?: jest.Mock<Promise<void>, []>;
 };
 
 type MutableNativeModules = typeof NativeModules & {
@@ -121,6 +165,7 @@ function AppStateHarness() {
       <Text>{`timerAlertDurationId:${app.timerAlertDurationId}`}</Text>
       <Text>{`timerAlertVibrationPatternId:${app.timerAlertVibrationPatternId}`}</Text>
       <Text>{`timerAlertActive:${app.isTimerAlertActive}`}</Text>
+      <Text>{`activeAlarmAlert:${app.activeAlarmAlert?.title ?? 'none'}`}</Text>
       <Text>{`gestureBlocked:${app.gestureInputsBlocked}`}</Text>
       <Text>{`leftEyeClosed:${app.winkLeftEyeClosedThreshold}`}</Text>
       <Text>{`rightEyeClosed:${app.winkRightEyeClosedThreshold}`}</Text>
@@ -154,6 +199,14 @@ function AppStateHarness() {
           app.setScreen('settings');
         }}>
         settings
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="go-alarms"
+        onPress={() => {
+          app.setScreen('alarms');
+        }}>
+        alarms
       </Text>
       <Text
         accessibilityRole="button"
@@ -288,6 +341,20 @@ function AppStateHarness() {
         accessibilityLabel="stop-timer-alert"
         onPress={app.stopTimerEndAlert}>
         stop timer alert
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="stop-active-alarm-alert"
+        onPress={app.stopActiveAlarmAlert}>
+        stop active alarm alert
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="snooze-active-alarm-5"
+        onPress={() => {
+          app.snoozeActiveAlarmAlert(5);
+        }}>
+        snooze active alarm 5
       </Text>
       <Text
         accessibilityRole="button"
@@ -479,6 +546,44 @@ function AppStateHarness() {
         accessibilityLabel="finish"
         onPress={app.finishTimerSession}>
         finish
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="save-daily-alarm"
+        onPress={() => {
+          app.saveAlarm({
+            id: 'alarm-test',
+            label: 'MORNING',
+            enabled: true,
+            hour: 7,
+            minute: 1,
+            alertSoundId: 'alarm',
+            soundVolume: 0.65,
+            soundEnabled: true,
+            vibrationEnabled: true,
+            snoozeEnabled: true,
+            schedule: {kind: 'daily'},
+            createdAtMs: Date.now(),
+            updatedAtMs: Date.now(),
+          });
+        }}>
+        save daily alarm
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="toggle-daily-alarm"
+        onPress={() => {
+          app.toggleAlarmEnabled('alarm-test');
+        }}>
+        toggle daily alarm
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="delete-daily-alarm"
+        onPress={() => {
+          app.deleteAlarm('alarm-test');
+        }}>
+        delete daily alarm
       </Text>
     </View>
   );
@@ -690,6 +795,103 @@ describe('AppStateProvider app flow', () => {
       true,
     );
     expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('returns from settings to the alarm screen when settings was opened from alarms', async () => {
+    const renderer = await renderHarness();
+
+    await press(renderer, 'go-alarms');
+    await press(renderer, 'go-settings');
+    expect(hasText(renderer, 'screen:settings')).toBe(true);
+
+    await press(renderer, 'go-timer');
+
+    expect(hasText(renderer, 'screen:alarms')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('restores the alarm screen when the app was last closed from alarms', async () => {
+    await AsyncStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        lastPrimaryScreen: 'alarms',
+        timekeepingMode: 'stopwatch',
+      }),
+    );
+
+    const renderer = await renderHarness();
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'screen:alarms')).toBe(true);
+    expect(hasText(renderer, 'timekeepingMode:stopwatch')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('persists alarms as the last primary screen after switching to alarms', async () => {
+    const renderer = await renderHarness();
+    await ReactTestRenderer.act(async () => undefined);
+
+    await press(renderer, 'go-alarms');
+    await ReactTestRenderer.act(async () => undefined);
+
+    const persistedSettings = JSON.parse(
+      (await AsyncStorage.getItem(SETTINGS_STORAGE_KEY)) ?? '{}',
+    );
+    expect(persistedSettings.lastPrimaryScreen).toBe('alarms');
+
+    await unmount(renderer);
+  });
+
+  it('opens the timer screen for restored active countdowns even when alarms was last selected', async () => {
+    await AsyncStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        lastPrimaryScreen: 'alarms',
+        timekeepingMode: 'stopwatch',
+      }),
+    );
+    await AsyncStorage.setItem(
+      ACTIVE_TIMEKEEPING_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        savedAtMs: 2000,
+        timekeepingMode: 'timer',
+        timerTargetDurationMs: 60000,
+        timerModeId: 'basicTimer',
+        normalTimerMode: false,
+        timer: {
+          phase: 'active',
+          startedAtMs: 1000,
+          lastUpdatedAtMs: 2000,
+          focusDurationMs: 1000,
+          lookPausedDurationMs: 0,
+          lookPauseCount: 0,
+          targetDurationMs: 60000,
+          detectionStatus: 'notLooking',
+          eyeState: 'unknown',
+          winkSide: null,
+          smileDetected: null,
+          recentWinkSide: null,
+          recentWinkAtMs: null,
+          lookingStartedAtMs: null,
+          isLookPaused: false,
+          oneEyeClosedStartedAtMs: null,
+          oneEyeResetArmed: true,
+        },
+      }),
+    );
+
+    nowMs = 11000;
+    const renderer = await renderHarness();
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'screen:timer')).toBe(true);
+    expect(hasText(renderer, 'timekeepingMode:timer')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
 
     await unmount(renderer);
   });
@@ -1090,6 +1292,7 @@ describe('AppStateProvider app flow', () => {
 
     expect(persistedSettings).toEqual({
       sensitivity: 'strict',
+      lastPrimaryScreen: 'timer',
       statusDisplayMode: 'text',
       locale: 'ja-JP',
       normalTimerMode: true,
@@ -1654,6 +1857,104 @@ describe('AppStateProvider app flow', () => {
     await press(renderer, 'pause');
 
     expect(cancelScheduledTimerEndAlert).toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('schedules and cancels native alarms when alarms are saved or disabled', async () => {
+    const playTimerEndAlert = jest.fn().mockResolvedValue(undefined);
+    const scheduleAlarmAlert = jest.fn().mockResolvedValue(undefined);
+    const cancelAlarmAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      playTimerEndAlert,
+      scheduleAlarmAlert,
+      cancelAlarmAlert,
+    };
+    nowMs = new Date(2026, 4, 28, 7, 0).getTime();
+    const renderer = await renderHarness();
+
+    await press(renderer, 'save-daily-alarm');
+
+    expect(scheduleAlarmAlert).toHaveBeenLastCalledWith(
+      'alarm-test',
+      new Date(2026, 4, 28, 7, 1).getTime(),
+      7,
+      1,
+      'daily',
+      '',
+      '',
+      'alarm',
+      true,
+      true,
+      0.65,
+      'MORNING',
+      '07:01',
+      'Alarm alerts',
+    );
+
+    await press(renderer, 'toggle-daily-alarm');
+
+    expect(cancelAlarmAlert).toHaveBeenLastCalledWith('alarm-test');
+
+    await unmount(renderer);
+  });
+
+  it('surfaces active native alarms and stops them from app state', async () => {
+    const getActiveAlarmAlert = jest.fn().mockResolvedValue({
+      active: true,
+      alarmId: 'alarm-test',
+      title: 'MORNING',
+      text: '07:01',
+    });
+    const stopAlarmAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {getActiveAlarmAlert, stopAlarmAlert};
+    const renderer = await renderHarness();
+
+    expect(getActiveAlarmAlert).toHaveBeenCalledTimes(1);
+    expect(hasText(renderer, 'activeAlarmAlert:MORNING')).toBe(true);
+
+    await press(renderer, 'stop-active-alarm-alert');
+
+    expect(stopAlarmAlert).toHaveBeenCalledTimes(1);
+    expect(hasText(renderer, 'activeAlarmAlert:none')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('snoozes active native alarms with the saved alarm settings', async () => {
+    const getActiveAlarmAlert = jest.fn().mockResolvedValue({
+      active: true,
+      alarmId: 'alarm-test',
+      title: 'MORNING',
+      text: '07:01',
+    });
+    const stopAlarmAlert = jest.fn().mockResolvedValue(undefined);
+    const scheduleAlarmAlert = jest.fn().mockResolvedValue(undefined);
+    const snoozeAlarmAlert = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      getActiveAlarmAlert,
+      stopAlarmAlert,
+      scheduleAlarmAlert,
+      snoozeAlarmAlert,
+    };
+    nowMs = new Date(2026, 4, 28, 7, 1).getTime();
+    const renderer = await renderHarness();
+
+    await press(renderer, 'save-daily-alarm');
+    await press(renderer, 'snooze-active-alarm-5');
+
+    expect(snoozeAlarmAlert).toHaveBeenLastCalledWith(
+      'alarm-test',
+      new Date(2026, 4, 28, 7, 6).getTime(),
+      'alarm',
+      true,
+      true,
+      0.65,
+      'MORNING',
+      '07:01',
+      'Alarm alerts',
+    );
+    expect(hasText(renderer, 'activeAlarmAlert:none')).toBe(true);
 
     await unmount(renderer);
   });
@@ -2245,8 +2546,8 @@ describe('AppStateProvider app flow', () => {
     };
     const renderer = await renderHarness();
 
-    expect(setAnalysisResolution).toHaveBeenCalledWith(640, 480);
-    expect(setFrameIntervalMs).toHaveBeenCalledWith(0);
+    expect(setAnalysisResolution).toHaveBeenCalledWith(480, 360);
+    expect(setFrameIntervalMs).toHaveBeenCalledWith(120);
 
     await press(renderer, 'resolution-1');
     await press(renderer, 'frame-interval-2');
@@ -2268,8 +2569,8 @@ describe('AppStateProvider app flow', () => {
 
     await ReactTestRenderer.act(async () => undefined);
 
-    expect(hasText(renderer, 'performance:fast')).toBe(true);
-    expect(setPerformanceMode).toHaveBeenCalledWith('fast');
+    expect(hasText(renderer, 'performance:accurate')).toBe(true);
+    expect(setPerformanceMode).toHaveBeenCalledWith('accurate');
 
     await press(renderer, 'performance-accurate');
     await ReactTestRenderer.act(async () => undefined);
@@ -2404,6 +2705,7 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'phase:ended')).toBe(true);
 
     nowMs = 70000;
+    await press(renderer, 'go-timer');
     await press(renderer, 'start');
     await ReactTestRenderer.act(async () => undefined);
 
@@ -2481,6 +2783,54 @@ describe('AppStateProvider app flow', () => {
     expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
     expect(hasText(renderer, 'focus:10000')).toBe(true);
     expect(start).not.toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('stops active gaze detection while the alarm screen is open', async () => {
+    const start = jest.fn().mockResolvedValue(undefined);
+    const stop = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {start, stop};
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'look-pause-mode');
+    await press(renderer, 'start');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(start).toHaveBeenCalledTimes(1);
+
+    await press(renderer, 'go-alarms');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'screen:alarms')).toBe(true);
+    expect(stop).toHaveBeenCalled();
+
+    await unmount(renderer);
+  });
+
+  it('stops flip posture detection while the alarm screen is open', async () => {
+    const startDevicePosture = jest.fn().mockResolvedValue(undefined);
+    const stopDevicePosture = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeGazeDetection = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+      startDevicePosture,
+      stopDevicePosture,
+    };
+    const renderer = await renderHarness();
+
+    nowMs = 1000;
+    await press(renderer, 'flip-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(startDevicePosture).toHaveBeenCalledTimes(1);
+
+    await press(renderer, 'go-alarms');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'screen:alarms')).toBe(true);
+    expect(stopDevicePosture).toHaveBeenCalled();
 
     await unmount(renderer);
   });

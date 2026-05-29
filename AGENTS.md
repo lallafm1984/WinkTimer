@@ -13,25 +13,25 @@
 - Monetization discussions should treat BASIC TIMER as the free/default timer experience and LOOK/WINK/FLIP as premium or rewarded-ad-accessible add-on modes.
 - Runtime app identity should use `WinkTimer` / `com.winktimer.app`; the repository folder may still be `TimewatchApp`.
 
-## Android Release AAB Build
+## Android APK Install
 
-- After completing a user-requested task that changes app behavior, UI, Android code, JS/TS code, or project configuration, finish by incrementing `versionCode` in `E:\LimProjects\Time\TimewatchApp\android\app\build.gradle` and building a release AAB unless the user explicitly says not to build.
-- Put release AAB artifacts under:
-  `E:\LimProjects\Time\TimewatchApp\dist\android`
-- Build from `E:\LimProjects\Time\TimewatchApp\android`:
-
-```powershell
-.\gradlew.bat :app:bundleRelease
-```
-
-- After a successful build, copy the generated AAB:
+- After completing a user-requested task that changes app behavior, UI, Android code, JS/TS code, or project configuration, build and install a release APK on the connected Android device unless the user explicitly says not to install.
+- Do not increment `versionCode` or build a release AAB automatically.
+- Build the APK from `E:\LimProjects\Time\TimewatchApp`:
 
 ```powershell
-$versionCode = Select-String -Path "E:\LimProjects\Time\TimewatchApp\android\app\build.gradle" -Pattern "versionCode\s+(\d+)" | ForEach-Object { $_.Matches[0].Groups[1].Value }
-$dist = "E:\LimProjects\Time\TimewatchApp\dist\android"
-New-Item -ItemType Directory -Force -Path $dist | Out-Null
-Copy-Item -LiteralPath "E:\LimProjects\Time\TimewatchApp\android\app\build\outputs\bundle\release\app-release.aab" -Destination "$dist\winktimer-release-v$versionCode.aab" -Force
+npm run apk:android
 ```
 
-- If release signing properties are missing or the release build fails, report the failure clearly and do not fall back to a debug install.
+- Install and launch the APK:
+
+```powershell
+$adb = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
+$device = (& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "\tdevice$" } | ForEach-Object { ($_ -split "\s+")[0] } | Select-Object -First 1)
+& $adb -s $device install -r "E:\LimProjects\Time\TimewatchApp\dist\android\winktimer-release.apk"
+& $adb -s $device shell am force-stop com.winktimer.app
+& $adb -s $device shell am start -n com.winktimer.app/.MainActivity
+```
+
+- If no Android device is connected or the install fails, report the failure clearly. Do not uninstall the existing app for a clean install unless the user explicitly approves it.
 

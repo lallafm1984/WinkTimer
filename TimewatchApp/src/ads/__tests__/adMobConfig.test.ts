@@ -1,7 +1,9 @@
 import {
   PRODUCTION_BANNER_AD_UNIT_ID,
+  PRODUCTION_INTERSTITIAL_AD_UNIT_ID,
   PRODUCTION_REWARDED_AD_UNIT_ID,
   getBannerAdUnitId,
+  getInterstitialAdUnitId,
   getRewardedAdUnitId,
 } from '../adMobConfig';
 
@@ -13,11 +15,17 @@ describe('adMobConfig', () => {
     expect(getRewardedAdUnitId(true)).toBe(
       'ca-app-pub-3940256099942544/5224354917',
     );
+    expect(getInterstitialAdUnitId(true)).toBe(
+      'ca-app-pub-3940256099942544/1033173712',
+    );
   });
 
   it('keeps the production ad unit IDs available for release builds', () => {
     expect(getBannerAdUnitId(false)).toBe(PRODUCTION_BANNER_AD_UNIT_ID);
     expect(getRewardedAdUnitId(false)).toBe(PRODUCTION_REWARDED_AD_UNIT_ID);
+    expect(getInterstitialAdUnitId(false)).toBe(
+      PRODUCTION_INTERSTITIAL_AD_UNIT_ID,
+    );
   });
 
   it('keeps checked-in ad environment configured for production by default', () => {

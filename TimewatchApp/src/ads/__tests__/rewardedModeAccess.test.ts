@@ -41,8 +41,10 @@ describe('rewardedModeAccess', () => {
     ]);
   });
 
-  it('keeps rewarded access active for one hour from the recorded watch time', () => {
+  it('keeps rewarded access active for three hours from the recorded watch time', () => {
     const watchedAtMs = 10_000;
+
+    expect(REWARDED_MODE_ACCESS_DURATION_MS).toBe(3 * 60 * 60 * 1000);
 
     expect(
       hasActiveRewardedModeAccess('lookPause', watchedAtMs, watchedAtMs),

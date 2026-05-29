@@ -6,9 +6,11 @@ import org.junit.Test
 
 class RewardedAccessPolicyTest {
   @Test
-  fun activeRewardStaysValidBeforeOneHourExpires() {
+  fun activeRewardStaysValidBeforeThreeHoursExpire() {
     val grantedAtWallMs = 100_000L
     val grantedAtElapsedMs = 50_000L
+
+    assertTrue(RewardedAccessPolicy.ACCESS_DURATION_MS == 3L * 60L * 60L * 1000L)
 
     assertTrue(
       RewardedAccessPolicy.isActive(

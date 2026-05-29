@@ -35,6 +35,9 @@
       <receiver
         android:name=".alert.TimerAlertReceiver"
         android:exported="false" />
+      <receiver
+        android:name=".alert.AlarmAlertReceiver"
+        android:exported="false" />
       <service
         android:name=".alert.TimerAlertService"
         android:exported="false"

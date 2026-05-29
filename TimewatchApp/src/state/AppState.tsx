@@ -29,6 +29,14 @@ import {
   type TimerAlertVibrationPatternId,
 } from '../alerts/timerAlert';
 import {
+  cancelAlarmAlert,
+  getActiveAlarmAlert,
+  scheduleAlarmAlert,
+  snoozeActiveAlarmAlert as snoozeNativeActiveAlarmAlert,
+  stopActiveAlarmAlert as stopNativeActiveAlarmAlert,
+  type ActiveAlarmAlert,
+} from '../alerts/alarmAlert';
+import {
   ensureBackgroundTimekeepingNotificationPermission,
   hideBackgroundTimekeepingNotification,
   showBackgroundTimekeepingNotification,
@@ -79,6 +87,7 @@ import {
   normalizeWinkEyeProbabilityGapThreshold,
 } from '../domain/detection';
 import type { SessionSummary } from '../domain/session';
+import { normalizeAlarm, type ScheduledAlarm } from '../domain/alarm';
 import {
   createSessionHistoryEvent,
   getSessionHistoryEventType,
@@ -131,6 +140,8 @@ import {
 } from '../i18n/localization';
 import type { SessionRepository } from '../storage/sessionRepository';
 import { createSessionRepository } from '../storage/sessionRepository';
+import type { AlarmRepository } from '../storage/alarmRepository';
+import { createAlarmRepository } from '../storage/alarmRepository';
 
 const SETTINGS_STORAGE_KEY = '@winktimer:settings:v1';
 const ACTIVE_TIMEKEEPING_STORAGE_KEY = '@winktimer:active_timekeeping:v1';
@@ -144,7 +155,8 @@ export type AppScreen =
   | 'timer'
   | 'summary'
   | 'history'
-  | 'settings';
+  | 'settings'
+  | 'alarms';
 
 type AppStateValue = {
   screen: AppScreen;
@@ -153,6 +165,14 @@ type AppStateValue = {
   setTimer: React.Dispatch<React.SetStateAction<TimerState>>;
   sessions: SessionSummary[];
   setSessions: React.Dispatch<React.SetStateAction<SessionSummary[]>>;
+  alarms: ScheduledAlarm[];
+  activeAlarmAlert: ActiveAlarmAlert | null;
+  saveAlarm(alarm: ScheduledAlarm): void;
+  deleteAlarm(id: string): void;
+  toggleAlarmEnabled(id: string): void;
+  stopActiveAlarmAlert(): void;
+  silenceActiveAlarmAlert(): void;
+  snoozeActiveAlarmAlert(minutes: number): void;
   lastSummary: SessionSummary | null;
   setLastSummary: React.Dispatch<React.SetStateAction<SessionSummary | null>>;
   sessionHistory: SessionHistoryEvent[];
@@ -211,6 +231,9 @@ type AppStateValue = {
   timerTargetDurationMs: number;
   recentTimerTargetDurationsMs: number[];
   setTimerTargetDurationMs(durationMs: number): void;
+  timerTargetPopupRequestId: number;
+  requestTimerTargetPopup(): void;
+  consumeTimerTargetPopupRequest(requestId: number): void;
   timerModeId: TimerModeId;
   setTimerModeId: React.Dispatch<React.SetStateAction<TimerModeId>>;
   timerAlertVibrationEnabled: boolean;
@@ -260,6 +283,7 @@ type AppStateProviderProps = {
 
 type PersistedSettings = {
   sensitivity: Sensitivity;
+  lastPrimaryScreen: 'timer' | 'alarms';
   locale: AppLocale;
   statusDisplayMode: StatusDisplayMode;
   normalTimerMode: boolean;
@@ -304,6 +328,25 @@ function normalizeStoredNumber(value: unknown, fallback: number): number {
 
 function normalizeStoredStatusDisplayMode(value: unknown): StatusDisplayMode {
   return value === 'text' || value === 'minimal' ? value : 'minimal';
+}
+
+function normalizeStoredPrimaryScreen(value: unknown): 'timer' | 'alarms' {
+  return value === 'alarms' ? 'alarms' : 'timer';
+}
+
+function getPrimaryScreenForPersistence(
+  screen: AppScreen,
+  settingsReturnScreen: AppScreen,
+): 'timer' | 'alarms' {
+  if (screen === 'alarms') {
+    return 'alarms';
+  }
+
+  if (screen === 'settings' && settingsReturnScreen === 'alarms') {
+    return 'alarms';
+  }
+
+  return 'timer';
 }
 
 function normalizeStoredBoolean(value: unknown, fallback: boolean): boolean {
@@ -363,6 +406,7 @@ function normalizeStoredSettings(value: unknown): PersistedSettings | null {
 
   return {
     sensitivity: 'strict',
+    lastPrimaryScreen: normalizeStoredPrimaryScreen(value.lastPrimaryScreen),
     locale: normalizeAppLocale(value.locale),
     statusDisplayMode: normalizeStoredStatusDisplayMode(
       value.statusDisplayMode,
@@ -1061,11 +1105,16 @@ function applyDeviceFlipAction(
 
 export function AppStateProvider({ children }: AppStateProviderProps) {
   const repositoryRef = useRef<SessionRepository | null>(null);
+  const alarmRepositoryRef = useRef<AlarmRepository | null>(null);
   const gazeDetectorRef = useRef<MockGazeDetector | null>(null);
   const devicePostureDetectorRef = useRef<DevicePostureDetector | null>(null);
 
   if (repositoryRef.current === null) {
     repositoryRef.current = createSessionRepository();
+  }
+
+  if (alarmRepositoryRef.current === null) {
+    alarmRepositoryRef.current = createAlarmRepository();
   }
 
   if (gazeDetectorRef.current === null) {
@@ -1077,13 +1126,17 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   }
 
   const repository = repositoryRef.current;
+  const alarmRepository = alarmRepositoryRef.current;
   const gazeDetector = gazeDetectorRef.current;
   const devicePostureDetector = devicePostureDetectorRef.current;
-  const [screen, setScreen] = useState<AppScreen>('timer');
+  const [screen, setScreenInternal] = useState<AppScreen>('timer');
   const [timer, setTimerInternal] = useState<TimerState>(() =>
     createInitialTimerState(Date.now()),
   );
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [alarms, setAlarms] = useState<ScheduledAlarm[]>([]);
+  const [activeAlarmAlert, setActiveAlarmAlert] =
+    useState<ActiveAlarmAlert | null>(null);
   const [lastSummary, setLastSummary] = useState<SessionSummary | null>(null);
   const [sessionHistory, setSessionHistory] = useState<SessionHistoryEvent[]>(
     [],
@@ -1137,6 +1190,8 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     useState(DEFAULT_TIMER_TARGET_DURATION_MS);
   const [recentTimerTargetDurationsMs, setRecentTimerTargetDurationsMs] =
     useState<number[]>(getDefaultRecentTimerTargetDurationsMs);
+  const [timerTargetPopupRequestId, setTimerTargetPopupRequestId] =
+    useState(0);
   const [timerModeId, setTimerModeIdState] =
     useState<TimerModeId>(DEFAULT_TIMER_MODE_ID);
   const [
@@ -1167,6 +1222,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const timerRef = useRef(timer);
   const previousTimerForHistoryRef = useRef(timer);
   const screenRef = useRef(screen);
+  const settingsReturnScreenRef = useRef<AppScreen>('timer');
   const sensitivityRef = useRef(sensitivity);
   const normalTimerModeRef = useRef(normalTimerMode);
   const timekeepingModeRef = useRef(timekeepingMode);
@@ -1187,6 +1243,40 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const isFinishingRef = useRef(false);
   const skippedInitialSettingsSaveRef = useRef(false);
 
+  const setScreen = useCallback<React.Dispatch<React.SetStateAction<AppScreen>>>(
+    action => {
+      setScreenInternal(currentScreen => {
+        const requestedScreen =
+          typeof action === 'function'
+            ? (action as (value: AppScreen) => AppScreen)(currentScreen)
+            : action;
+        const returnTarget =
+          currentScreen === 'settings' && requestedScreen === 'timer'
+            ? settingsReturnScreenRef.current
+            : requestedScreen;
+        const nextScreen =
+          currentScreen === 'settings' &&
+          requestedScreen === 'timer' &&
+          returnTarget !== 'settings'
+            ? returnTarget
+            : requestedScreen;
+
+        if (nextScreen === 'settings' && currentScreen !== 'settings') {
+          settingsReturnScreenRef.current = currentScreen;
+        }
+
+        if (nextScreen !== 'settings') {
+          settingsReturnScreenRef.current =
+            nextScreen === 'timer' ? 'timer' : settingsReturnScreenRef.current;
+        }
+
+        screenRef.current = nextScreen;
+        return nextScreen;
+      });
+    },
+    [],
+  );
+
   const setTimer = useCallback<
     React.Dispatch<React.SetStateAction<TimerState>>
   >(action => {
@@ -1200,6 +1290,130 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       return next;
     });
   }, []);
+
+  const syncNativeAlarmSchedule = useCallback(
+    (alarm: ScheduledAlarm) => {
+      scheduleAlarmAlert(alarm, locale).catch(() => undefined);
+    },
+    [locale],
+  );
+
+  const cancelNativeAlarmSchedule = useCallback((id: string) => {
+    cancelAlarmAlert(id).catch(() => undefined);
+  }, []);
+
+  const refreshActiveAlarmAlert = useCallback(() => {
+    getActiveAlarmAlert(locale)
+      .then(nextActiveAlarmAlert => {
+        setActiveAlarmAlert(nextActiveAlarmAlert);
+      })
+      .catch(() => undefined);
+  }, [locale]);
+
+  const stopActiveAlarmAlert = useCallback(() => {
+    stopNativeActiveAlarmAlert()
+      .then(() => {
+        setActiveAlarmAlert(null);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const silenceActiveAlarmAlert = useCallback(() => {
+    stopNativeActiveAlarmAlert().catch(() => undefined);
+  }, []);
+
+  const snoozeActiveAlarmAlert = useCallback(
+    (minutes: number) => {
+      const currentActiveAlarmAlert = activeAlarmAlert;
+      const alarmId = currentActiveAlarmAlert?.alarmId;
+      const matchingAlarm =
+        alarmId === null || alarmId === undefined
+          ? null
+          : alarms.find(alarm => alarm.id === alarmId) ?? null;
+
+      if (matchingAlarm === null || !matchingAlarm.snoozeEnabled) {
+        stopActiveAlarmAlert();
+        return;
+      }
+
+      snoozeNativeActiveAlarmAlert(
+        matchingAlarm,
+        minutes,
+        currentActiveAlarmAlert,
+        locale,
+      )
+        .then(() => {
+          setActiveAlarmAlert(null);
+        })
+        .catch(() => undefined);
+    },
+    [activeAlarmAlert, alarms, locale, stopActiveAlarmAlert],
+  );
+
+  const saveAlarm = useCallback(
+    (alarm: ScheduledAlarm) => {
+      const now = Date.now();
+      const normalizedAlarm = normalizeAlarm({
+        ...alarm,
+        updatedAtMs: now,
+      });
+
+      if (normalizedAlarm === null) {
+        return;
+      }
+
+      setAlarms(currentAlarms => {
+        const withoutCurrent = currentAlarms.filter(
+          current => current.id !== normalizedAlarm.id,
+        );
+        const nextAlarms = [...withoutCurrent, normalizedAlarm].sort(
+          (left, right) => left.createdAtMs - right.createdAtMs,
+        );
+
+        alarmRepository.saveAll(nextAlarms).catch(() => undefined);
+        syncNativeAlarmSchedule(normalizedAlarm);
+        return nextAlarms;
+      });
+    },
+    [alarmRepository, syncNativeAlarmSchedule],
+  );
+
+  const deleteAlarm = useCallback(
+    (id: string) => {
+      setAlarms(currentAlarms => {
+        const nextAlarms = currentAlarms.filter(alarm => alarm.id !== id);
+
+        alarmRepository.saveAll(nextAlarms).catch(() => undefined);
+        cancelNativeAlarmSchedule(id);
+        return nextAlarms;
+      });
+    },
+    [alarmRepository, cancelNativeAlarmSchedule],
+  );
+
+  const toggleAlarmEnabled = useCallback(
+    (id: string) => {
+      setAlarms(currentAlarms => {
+        const now = Date.now();
+        const nextAlarms = currentAlarms.map(alarm =>
+          alarm.id === id
+            ? {
+                ...alarm,
+                enabled: !alarm.enabled,
+                updatedAtMs: now,
+              }
+            : alarm,
+        );
+
+        alarmRepository.saveAll(nextAlarms).catch(() => undefined);
+        nextAlarms
+          .filter(alarm => alarm.id === id)
+          .forEach(syncNativeAlarmSchedule);
+        return nextAlarms;
+      });
+    },
+    [alarmRepository, syncNativeAlarmSchedule],
+  );
 
   const setSensitivity = useCallback<
     React.Dispatch<React.SetStateAction<Sensitivity>>
@@ -1327,6 +1541,28 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   }, [requestStartupPermissionsIfNeeded]);
 
   useEffect(() => {
+    refreshActiveAlarmAlert();
+  }, [refreshActiveAlarmAlert]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    alarmRepository
+      .list()
+      .then(nextAlarms => {
+        if (isMounted) {
+          setAlarms(nextAlarms);
+          nextAlarms.forEach(syncNativeAlarmSchedule);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [alarmRepository, syncNativeAlarmSchedule]);
+
+  useEffect(() => {
     let isMounted = true;
 
     Promise.all([
@@ -1342,6 +1578,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           parseStoredJson(settingsRaw),
         );
         if (nextSettings !== null) {
+          setScreenInternal(nextSettings.lastPrimaryScreen);
+          screenRef.current = nextSettings.lastPrimaryScreen;
+          settingsReturnScreenRef.current =
+            nextSettings.lastPrimaryScreen === 'alarms' ? 'alarms' : 'timer';
           setSensitivity(nextSettings.sensitivity);
           setLocale(nextSettings.locale);
           setStatusDisplayMode(nextSettings.statusDisplayMode);
@@ -1414,6 +1654,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
 
           setTimekeepingModeState(activeSession.timekeepingMode);
           timekeepingModeRef.current = activeSession.timekeepingMode;
+          setScreenInternal('timer');
+          screenRef.current = 'timer';
+          settingsReturnScreenRef.current = 'timer';
           setTimerTargetDurationMsState(activeSession.timerTargetDurationMs);
           timerTargetDurationMsRef.current =
             activeSession.timerTargetDurationMs;
@@ -1462,6 +1705,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
 
     const settings: PersistedSettings = {
       sensitivity,
+      lastPrimaryScreen: getPrimaryScreenForPersistence(
+        screen,
+        settingsReturnScreenRef.current,
+      ),
       locale,
       statusDisplayMode,
       normalTimerMode,
@@ -1499,6 +1746,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     locale,
     lookAngleLevel,
     normalTimerMode,
+    screen,
     sensitivity,
     settingsLoaded,
     smileDistanceLevel,
@@ -2366,7 +2614,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   ]);
 
   const shouldRunGazeDetector =
-    screen !== 'settings' &&
+    screen === 'timer' &&
     !gestureInputsBlocked &&
     isAppForeground &&
     !normalTimerMode &&
@@ -2381,7 +2629,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       canListenForWinkAction(timer, timerModeId, 'right'));
 
   const shouldRunDevicePostureDetector =
-    screen !== 'settings' &&
+    screen === 'timer' &&
     !gestureInputsBlocked &&
     isAppForeground &&
     modeUsesDeviceFlip(timerModeId);
@@ -2474,6 +2722,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           scheduledTimerAlertMayFireInBackgroundRef.current = false;
         }
 
+        if (nextIsForeground) {
+          refreshActiveAlarmAlert();
+        }
+
         setIsAppForeground(nextIsForeground);
       },
     );
@@ -2485,6 +2737,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     clearTimerAlertForegroundArtifacts,
     createActiveTimekeepingSessionSnapshot,
     persistCurrentActiveTimekeepingSession,
+    refreshActiveAlarmAlert,
     setTimer,
   ]);
 
@@ -2554,6 +2807,16 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     },
     [setTimer],
   );
+
+  const requestTimerTargetPopup = useCallback(() => {
+    setTimerTargetPopupRequestId(currentRequestId => currentRequestId + 1);
+  }, []);
+
+  const consumeTimerTargetPopupRequest = useCallback((requestId: number) => {
+    setTimerTargetPopupRequestId(currentRequestId =>
+      currentRequestId === requestId ? 0 : currentRequestId,
+    );
+  }, []);
 
   const startTimerSession = useCallback(() => {
     const now = Date.now();
@@ -2687,7 +2950,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       isFinishingRef.current = false;
       setIsFinishingSession(false);
     }
-  }, [repository, setTimer]);
+  }, [repository, setScreen, setTimer]);
 
   const value = useMemo<AppStateValue>(
     () => ({
@@ -2697,6 +2960,14 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       setTimer,
       sessions,
       setSessions,
+      alarms,
+      activeAlarmAlert,
+      saveAlarm,
+      deleteAlarm,
+      toggleAlarmEnabled,
+      stopActiveAlarmAlert,
+      silenceActiveAlarmAlert,
+      snoozeActiveAlarmAlert,
       lastSummary,
       setLastSummary,
       sessionHistory,
@@ -2737,6 +3008,9 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timerTargetDurationMs,
       recentTimerTargetDurationsMs,
       setTimerTargetDurationMs,
+      timerTargetPopupRequestId,
+      requestTimerTargetPopup,
+      consumeTimerTargetPopupRequest,
       timerModeId,
       setTimerModeId,
       timerAlertVibrationEnabled,
@@ -2767,8 +3041,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     }),
     [
       screen,
+      setScreen,
       timer,
       sessions,
+      alarms,
+      activeAlarmAlert,
       lastSummary,
       sessionHistory,
       sensitivity,
@@ -2790,6 +3067,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timekeepingMode,
       timerTargetDurationMs,
       recentTimerTargetDurationsMs,
+      timerTargetPopupRequestId,
       timerModeId,
       timerAlertVibrationEnabled,
       timerAlertSoundEnabled,
@@ -2802,10 +3080,18 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       isFinishingSession,
       repository,
       gazeDetector,
+      saveAlarm,
+      deleteAlarm,
+      toggleAlarmEnabled,
+      stopActiveAlarmAlert,
+      silenceActiveAlarmAlert,
+      snoozeActiveAlarmAlert,
       setSensitivity,
       setTimer,
       setTimekeepingMode,
       setTimerTargetDurationMs,
+      requestTimerTargetPopup,
+      consumeTimerTargetPopupRequest,
       setTimerModeId,
       stopTimerEndAlert,
       startTimerSession,

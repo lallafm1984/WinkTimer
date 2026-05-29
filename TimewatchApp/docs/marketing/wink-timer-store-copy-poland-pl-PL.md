@@ -5,74 +5,103 @@
 - 국가 이름: 폴란드
 - 앱 내부 로케일: 폴란드어/폴란드 (pl-PL)
 - Google Play 스토어 로케일: 폴란드어 (pl-PL)
-- 주요 검색어: minutnik, stoper, timer
+- 주요 검색어: minutnik, alarm, stoper, timer
+- 보조 검색어: alarm cykliczny, alarm z drzemką, alarm na dni tygodnia, alarm na datę, timer bez dotyku
 
 ## 앱 이름
 
 ```text
-Wink Timer: Minutnik Stoper
+Wink Timer: Alarm i Timer
 ```
 
 ## 간단한 설명
 
 ```text
-Minutnik i stoper sterowany spojrzeniem, mrugnięciem, obrotem i uśmiechem.
+Alarm, minutnik, stoper i sterowanie bez dotyku.
 ```
 
 ## 전체 설명
 
 ```text
-Wink Timer to aplikacja z minutnikiem i stoperem do codziennego mierzenia czasu.
+Wink Timer to codzienna aplikacja do alarmów, minutnika i stopera.
 
-Najpierw używaj jej jak zwykłego minutnika z przyciskami. Uruchamiaj, pauzuj, wznawiaj, resetuj, ustawiaj alarmy minutnika i zapisuj okrążenia stopera, gdy chcesz szybko zmierzyć czas.
+Gdy masz zajęte ręce, nadal powinno dać się łatwo wstrzymać, wznowić i zapisać czas. Podczas gotowania z mokrymi rękami albo treningu bez dotykania ekranu steruj minutnikiem i stoperem spojrzeniem, mrugnięciem lub odwróceniem telefonu.
 
-Gdy potrzebujesz bardziej elastycznego sterowania, przełącz się na tryby wspomagane, które wykorzystują spojrzenie, mrugnięcie, ruch telefonu lub uśmiech.
+Ustawiaj alarmy na pobudkę, zajęcia, spotkania, treningi, przerwy i codzienne rutyny. Alarmy obsługują powtarzanie codzienne, dni tygodnia, konkretne daty, dźwięk, głośność, wibracje i drzemkę.
+
+Użyj minutnika, gdy chcesz odliczyć określony czas. Użyj stopera, gdy potrzebujesz mierzyć czas i zapisywać okrążenia.
 
 Najważniejsze funkcje
 
-- Basic Timer: start, pauza, wznowienie i reset przyciskami
-- Stoper: pomiar czasu i zapisywanie okrążeń
-- Alarmy minutnika: ustawienia dźwięku i wibracji
-- LOOK PAUSE: pauza i wznowienie w zależności od patrzenia na ekran
-- WINK CONTROL: gesty mrugnięcia do akcji minutnika i okrążeń
-- FLIP TIMER: odwróć telefon ekranem w dół, aby zacząć, i w górę, aby pauzować
+- Minutnik: start, pauza, wznowienie i reset przyciskami
+- Alarmy: powtarzanie codzienne, dni tygodnia, daty, dźwięk, głośność, wibracje i drzemka
+- Zarządzanie alarmami: twórz, włączaj, wyłączaj, edytuj i usuwaj wiele alarmów
+- Ekran alarmu: zatrzymaj alarm albo wybierz drzemkę
+- Stoper: mierz upływający czas i zapisuj okrążenia
+- Alerty minutnika: dźwięk i wibracje po zakończeniu odliczania
+- Sterowanie bez dotyku: spojrzenie, mrugnięcie i odwrócenie urządzenia dla obsługiwanych akcji
+- LOOK PAUSE: pauza i wznowienie zależnie od patrzenia na ekran
+- WINK CONTROL: mrugnięcie do akcji minutnika i zapisu okrążeń
+- FLIP TIMER: odwróć telefon ekranem w dół, aby wystartować, i do góry, aby wstrzymać
 - SMILE MODE: sterowanie minutnikiem przez wykrywanie uśmiechu
-- Historia: przegląd ostatnich pomiarów i zdarzeń osi czasu
+- Historia: przeglądaj ostatnie pomiary i zdarzenia osi czasu
 
-Wink Timer nie jest tylko aplikacją do skupienia lub nauki. Używaj jej jako minutnika kuchennego, treningowego, do nauki, do pracy, przerw albo szybkiego stopera do codziennych rutyn.
+Wink Timer nie jest aplikacją tylko do skupienia lub nauki. Używaj jej jako budzika, minutnika kuchennego, minutnika treningowego, minutnika do nauki, minutnika pracy, minutnika przerwy albo szybkiego stopera.
 
-Podstawowy minutnik i stoper są proste w użyciu, a tryby z kamerą i czujnikami pomagają, gdy dotykanie ekranu jest niewygodne.
-
-Funkcje kamery mogą różnić się w zależności od wydajności urządzenia, oświetlenia, kąta twarzy i położenia kamery.
+Funkcje z kamerą mogą działać różnie zależnie od wydajności urządzenia, oświetlenia, kąta twarzy i położenia kamery.
 ```
 
 ## 앱 설치 캠페인 헤드라인
 
 ```text
-Minutnik i stoper w jednym
-Steruj mrugnięciem
-Stoper z gestami
-Odwróć telefon, by zacząć
-Minutnik na co dzień
+Alarm, Minutnik, Stoper
+Steruj czasem bez dotyku
+Alarmy z drzemką
+Stoper na mrugnięcie
+Odwróć, aby uruchomić
 ```
 
 ## 앱 설치 캠페인 설명
 
 ```text
-Używaj minutnika i stopera ze spojrzeniem, mrugnięciem, obrotem i uśmiechem.
-Mierz gotowanie, trening, naukę, pracę, przerwy i szybkie okrążenia.
-Podstawowy minutnik i stoper działają także bez włączania kamery.
-Spójrz na ekran, mrugnij albo odwróć telefon, aby sterować czasem.
-Zapisuj okrążenia, alarmy i ostatnią historię w jednej praktycznej aplikacji.
+Używaj alarmów, minutnika i stopera z opcją spojrzenia, mrugnięcia i odwrócenia.
+Twórz alarmy codzienne, tygodniowe lub według daty z dźwiękiem, wibracją, głośnością i drzemką.
+Zarządzaj pobudką, treningiem, przerwami, gotowaniem i szybkimi okrążeniami stopera.
+Alarm, minutnik i stoper działają bez kamery; włącz sterowanie wspomagane, gdy chcesz.
+Dopasuj alerty minutnika i alarmy cykliczne przez dźwięk, głośność i wibracje.
+```
+
+## 알람 중심 광고 소재
+
+### 헤드라인
+
+```text
+Alarmy cykliczne z drzemką
+Alarmy na dni tygodnia
+Alarmy na konkretną datę
+Alarm z dźwiękiem i wibracją
+Alarm i timer razem
+Alarmy na rano, trening, przerwę
+```
+
+### 설명
+
+```text
+Ustaw alarmy na pobudkę, trening, zajęcia i przerwy codziennie, co tydzień lub według daty.
+Wybierz dźwięk, głośność, wibracje i drzemkę, a potem zarządzaj wieloma alarmami.
+Gdy alarm zadzwoni, zatrzymaj go albo wybierz drzemkę i dalej korzystaj z minutnika oraz stopera.
 ```
 
 ## 스크린샷 문구
 
 ```text
-Minutnik i stoper w jednej aplikacji
-Prosty minutnik z przyciskami
-Pauza i wznowienie spojrzeniem
-Steruj czasem mrugnięciem
+Alarm, minutnik i stoper
+Alarmy cykliczne i drzemka
+Alarmy na dzień lub datę
+Steruj czasem bez dotyku
+Szybki minutnik przyciskami
+Alerty z dźwiękiem i wibracją
+Zapisuj okrążenia mrugnięciem
 Odwróć telefon, aby zacząć
 ```
 
@@ -81,4 +110,5 @@ Odwróć telefon, aby zacząć
 - 앱을 포커스 전용 앱으로 표현하지 않습니다.
 - 수익화 관련 표현을 사용하지 않습니다.
 - 카메라 인식이 항상 완벽하다고 약속하지 않습니다.
-- BASIC TIMER를 기본 타이머 경험으로 유지합니다.
+- 알람이 모든 기기와 절전 설정에서 항상 정확히 울린다고 보장하지 않습니다.
+- 타이머는 카메라 기능 없이 사용할 수 있는 일반 타이머로 표현합니다.

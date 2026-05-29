@@ -5,6 +5,7 @@ import {
   recordAdDiagnosticLog,
   resetAdDiagnosticLogsForTests,
 } from '../../ads/adDiagnosticLog';
+import {GhostMascot} from '../../components/GhostMascot';
 import type {TimerState} from '../../domain/timerEngine';
 import {
   TimerScreen,
@@ -27,9 +28,13 @@ const mockSetTimerModeId = jest.fn();
 const mockSetGestureInputsBlocked = jest.fn();
 const mockSetTimekeepingMode = jest.fn();
 const mockSetTimerTargetDurationMs = jest.fn();
+const mockConsumeTimerTargetPopupRequest = jest.fn();
 const mockCopyTimelineText = jest.fn<Promise<void>, [string]>();
 const mockHasActiveRewardedModeAccess = jest.fn<Promise<boolean>, [unknown?]>();
-const mockGrantRewardedModeAccess = jest.fn<Promise<void>, [unknown?, unknown?]>();
+const mockGrantRewardedModeAccess = jest.fn<
+  Promise<void>,
+  [unknown?, unknown?]
+>();
 const mockShowRewardedAdForAccess = jest.fn<Promise<void>, []>();
 const mockIsRewardedAdNoFillError = jest.fn<boolean, [unknown]>();
 const mockEnsureCameraPermission = jest.fn<Promise<boolean>, [unknown?]>();
@@ -97,6 +102,9 @@ const baseState = {
   timerTargetDurationMs: 5 * 60 * 1000,
   recentTimerTargetDurationsMs: [] as number[],
   setTimerTargetDurationMs: mockSetTimerTargetDurationMs,
+  timerTargetPopupRequestId: 0,
+  requestTimerTargetPopup: jest.fn(),
+  consumeTimerTargetPopupRequest: mockConsumeTimerTargetPopupRequest,
   timerModeId: 'lookPause',
   setTimerModeId: mockSetTimerModeId,
   timerAlertVibrationEnabled: true,
@@ -188,8 +196,9 @@ async function openModeMenuWithRewardedAccessCheck(
   renderer: ReactTestRenderer.ReactTestRenderer,
 ) {
   await ReactTestRenderer.act(async () => {
-    renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-      .onPress();
+    renderer.root
+      .findByProps({accessibilityLabel: 'Open mode menu'})
+      .props.onPress();
   });
 
   await ReactTestRenderer.act(async () => {
@@ -204,9 +213,7 @@ function getRenderedText(renderer: ReactTestRenderer.ReactTestRenderer) {
     .join(' ');
 }
 
-function getPressedStyleEntries(
-  button: ReactTestRenderer.ReactTestInstance,
-) {
+function getPressedStyleEntries(button: ReactTestRenderer.ReactTestInstance) {
   const pressable =
     typeof button.props.style === 'function'
       ? button
@@ -225,7 +232,7 @@ describe('TimerScreen', () => {
     jest.clearAllMocks();
     mockState = baseState;
     mockCopyTimelineText.mockResolvedValue(undefined);
-    mockHasActiveRewardedModeAccess.mockResolvedValue(true);
+    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
     mockGrantRewardedModeAccess.mockResolvedValue(undefined);
     mockShowRewardedAdForAccess.mockResolvedValue(undefined);
     mockIsRewardedAdNoFillError.mockReturnValue(false);
@@ -253,17 +260,17 @@ describe('TimerScreen', () => {
     const header = renderer.root.findByProps({testID: 'timer-header'});
 
     expect(textContent).toContain('STOPWATCH');
-    expect(
-      header.findByProps({testID: 'timer-title'}).props.children,
-    ).toBe('STOPWATCH');
+    expect(header.findByProps({testID: 'timer-title'}).props.children).toBe(
+      'STOPWATCH',
+    );
     expect(textContent).not.toContain('WINK STOPWATCH');
-    expect(
-      header.findByProps({testID: 'timer-title'}).props.style,
-    ).toEqual(expect.objectContaining({flex: 1}));
+    expect(header.findByProps({testID: 'timer-title'}).props.style).toEqual(
+      expect.objectContaining({flex: 1}),
+    );
     expect(header.findByProps({testID: 'settings-button'})).toBeTruthy();
     expect(header.findAllByProps({testID: 'exit-button'})).toHaveLength(0);
     expect(textContent).not.toContain('ARCADE GHOST TIMER');
-    expect(textContent).toContain('LOOK PAUSE');
+    expect(textContent).toContain('LOOK MODE');
     expect(textContent).toContain('01:01.04');
     expect(textContent).not.toContain('RUNNING');
     expect(textContent).not.toContain('MANUAL PAUSE');
@@ -278,19 +285,17 @@ describe('TimerScreen', () => {
       .findAllByType(Text)
       .map(node => flattenText(node.props.children))
       .join(' ');
-    expect(mainContentText).not.toContain('LOOK PAUSE');
+    expect(mainContentText).not.toContain('LOOK MODE');
     expect(
       renderer.root.findAll(
         node =>
           node.props.accessibilityRole === 'summary' &&
           typeof node.props.accessibilityLabel === 'string' &&
-          node.props.accessibilityLabel.includes('LOOK PAUSE'),
+          node.props.accessibilityLabel.includes('LOOK MODE'),
       ),
     ).toHaveLength(0);
     expect(textContent).toContain('- STOPPED -');
     expect(textContent).not.toContain('DETECTION TEST');
-    expect(renderer.root.findByProps({testID: 'ad-slot'})).toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'admob-banner'})).toBeTruthy();
     expect(
       renderer.root.findByProps({testID: 'mode-selector-bottom'}),
     ).toBeTruthy();
@@ -302,20 +307,98 @@ describe('TimerScreen', () => {
     const header = renderer.root.findByProps({testID: 'timer-header'});
 
     expect(header.findByProps({testID: 'settings-button'})).toBeTruthy();
-    expect(header.findAllByProps({testID: 'timekeeping-toggle-button'}))
-      .toHaveLength(0);
-    expect(header.findAllByProps({accessibilityLabel: 'STOPWATCH'}))
-      .toHaveLength(0);
-    expect(header.findAllByProps({accessibilityLabel: 'TIMER'}))
-      .toHaveLength(0);
+    expect(
+      header.findAllByProps({testID: 'timekeeping-toggle-button'}),
+    ).toHaveLength(0);
+    expect(
+      header.findAllByProps({accessibilityLabel: 'STOPWATCH'}),
+    ).toHaveLength(0);
+    expect(header.findAllByProps({accessibilityLabel: 'TIMER'})).toHaveLength(
+      0,
+    );
     expect(header.findAllByProps({accessibilityLabel: 'EXIT'})).toHaveLength(0);
+  });
+
+  it('keeps the shared bottom selector visible when the mode popup is closed', () => {
+    const renderer = renderTimerScreen();
+    const optionText = renderer.root
+      .findByProps({testID: 'timekeeping-mode-options'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children));
+
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(optionText).toEqual(['STOPWATCH', 'TIMER', 'ALARM']);
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
+        .accessibilityState,
+    ).toEqual({selected: true});
+  });
+
+  it('uses compact header and bottom selector heights to leave more timer space', () => {
+    const renderer = renderTimerScreen();
+    const header = renderer.root.findByProps({testID: 'timer-header'});
+    const title = header.findByProps({testID: 'timer-title'});
+    const settingsButton = header.findByProps({testID: 'settings-button'});
+    const modeButton = renderer.root.findByProps({
+      accessibilityLabel: 'Open mode menu',
+    });
+    const stopwatchButton = renderer.root.findByProps({
+      testID: 'timekeeping-stopwatch-button',
+    });
+
+    expect(StyleSheet.flatten(title.props.style)).toEqual(
+      expect.objectContaining({
+        fontSize: 21,
+        lineHeight: 25,
+      }),
+    );
+    expect(getPressedStyleEntries(settingsButton)).toContainEqual(
+      expect.objectContaining({minHeight: 34}),
+    );
+    expect(getPressedStyleEntries(modeButton)).toContainEqual(
+      expect.objectContaining({minHeight: 50}),
+    );
+    expect(getPressedStyleEntries(stopwatchButton)).toContainEqual(
+      expect.objectContaining({minHeight: 50}),
+    );
+  });
+
+  it('keeps the status label constrained above the action dock', () => {
+    const renderer = renderTimerScreen();
+    const mascot = renderer.root.findByType(GhostMascot);
+    const statusLabel = renderer.root.findByProps({
+      testID: 'timer-status-label',
+    });
+    const actionDock = renderer.root.findByProps({
+      testID: 'timer-action-dock',
+    });
+
+    expect(statusLabel.props.numberOfLines).toBe(1);
+    expect(statusLabel.props.minimumFontScale).toBe(0.58);
+    expect(StyleSheet.flatten(statusLabel.props.style)).toEqual(
+      expect.objectContaining({
+        fontSize: 32,
+        lineHeight: 36,
+        maxWidth: '100%',
+      }),
+    );
+    expect(mascot.props.size).toBe('medium');
+    expect(mascot.props.scale).toBeGreaterThan(1.25);
+    expect(mascot.props.scale).toBeLessThanOrEqual(1.42);
+    expect(StyleSheet.flatten(actionDock.props.style)).toEqual(
+      expect.objectContaining({
+        flexShrink: 0,
+        minHeight: 54,
+      }),
+    );
   });
 
   it('uses the selected timekeeping mode in the top-left title', () => {
     const stopwatchRenderer = renderTimerScreen();
 
     expect(
-      stopwatchRenderer.root.findByProps({testID: 'timer-title'}).props.children,
+      stopwatchRenderer.root.findByProps({testID: 'timer-title'}).props
+        .children,
     ).toBe('STOPWATCH');
 
     mockState = {
@@ -347,19 +430,105 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
     const text = getRenderedText(renderer);
 
-    expect(renderer.root.findByProps({testID: 'timer-title'}).props.children)
-      .toBe('タイマー');
+    expect(
+      renderer.root.findByProps({testID: 'timer-title'}).props.children,
+    ).toBe('タイマー');
     expect(text).toContain('設定');
     expect(text).toContain('開始');
-    expect(text).toContain('ベーシックタイマー');
+    expect(text).toContain('基本モード');
   });
 
-  it('expands the bottom mode button into 5-5 timekeeping controls and shows the mode popup', () => {
+  it('renders Korean mode menu titles with short descriptions', () => {
+    mockState = {
+      ...baseState,
+      locale: 'ko-KR',
+      timerModeId: 'basicTimer',
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+    };
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: '모드 메뉴 열기'})
+        .props.onPress();
+    });
+
+    const modeMenuText = renderer.root
+      .findByProps({testID: 'mode-menu'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(modeMenuText).toContain('시선 모드');
+    expect(modeMenuText).not.toContain('룩 모드');
+    expect(modeMenuText).toContain('쳐다보면 멈춰요');
+    expect(modeMenuText).toContain('윙크로 제어하세요');
+    expect(modeMenuText).toContain('웃어보세요');
+    expect(modeMenuText).toContain('뒤집으면 시간이 흘러요');
+    expect(modeMenuText).toContain('시작/일시정지/계속: 오른쪽 윙크');
+    expect(modeMenuText).toContain('초기화/랩: 왼쪽 윙크');
+    expect(modeMenuText).toContain('광고 시청시 3시간 자유이용');
+    const lookModeDescription = renderer.root
+      .findByProps({testID: 'mode-menu'})
+      .findAllByType(Text)
+      .find(node => flattenText(node.props.children) === '쳐다보면 멈춰요');
+    expect(StyleSheet.flatten(lookModeDescription?.props.style)).toEqual(
+      expect.objectContaining({
+        textAlign: 'left',
+      }),
+    );
+  });
+
+  it('renders Japanese mode menu titles with short descriptions', () => {
+    mockState = {
+      ...baseState,
+      locale: 'ja-JP',
+      timerModeId: 'basicTimer',
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'モードメニューを開く'})
+        .props.onPress();
+    });
+
+    const modeMenuText = renderer.root
+      .findByProps({testID: 'mode-menu'})
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(modeMenuText).toContain('基本モード');
+    expect(modeMenuText).toContain('ボタンだけで使えます');
+    expect(modeMenuText).toContain('見ると一時停止します');
+    expect(modeMenuText).toContain('ウインクで操作できます');
+    expect(modeMenuText).toContain('笑顔で操作できます');
+    expect(modeMenuText).toContain('裏返すと時間が進みます');
+  });
+
+  it('expands the bottom mode button into timekeeping and alarm controls and shows the mode popup', () => {
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     const optionText = renderer.root
@@ -372,6 +541,9 @@ describe('TimerScreen', () => {
     const timerButton = renderer.root.findByProps({
       testID: 'timekeeping-timer-button',
     });
+    const alarmButton = renderer.root.findByProps({
+      testID: 'timekeeping-alarm-button',
+    });
     const modeOptions = renderer.root.findByProps({
       testID: 'timekeeping-mode-options',
     });
@@ -381,17 +553,19 @@ describe('TimerScreen', () => {
       .findAllByType(Text)
       .map(node => flattenText(node.props.children));
 
-    expect(optionText).toEqual(['STOPWATCH', 'TIMER']);
+    expect(optionText).toEqual(['STOPWATCH', 'TIMER', 'ALARM']);
     expect(modeOptions.props.style).toEqual(
       expect.objectContaining({elevation: 70, zIndex: 70}),
     );
     expect(StyleSheet.flatten(modeMenu.props.style)).toEqual(
       expect.objectContaining({elevation: 50, zIndex: 50}),
     );
-    expect(renderer.root.findAllByProps({testID: 'timer-main-content'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-cancel-button'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-main-content'}),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-cancel-button'}),
+    ).toHaveLength(0);
     expect(getPressedStyleEntries(stopwatchButton)).toContainEqual(
       expect.objectContaining({flex: 5}),
     );
@@ -405,9 +579,9 @@ describe('TimerScreen', () => {
     );
     expect(stopwatchButton.findByType(Text).props.style).toContainEqual(
       expect.objectContaining({
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '900',
-        lineHeight: 22,
+        lineHeight: 20,
       }),
     );
     expect(getPressedStyleEntries(timerButton)).toContainEqual(
@@ -418,26 +592,29 @@ describe('TimerScreen', () => {
     );
     expect(timerButton.findByType(Text).props.style).toContainEqual(
       expect.objectContaining({
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '900',
-        lineHeight: 22,
+        lineHeight: 20,
       }),
+    );
+    expect(getPressedStyleEntries(alarmButton)).toContainEqual(
+      expect.objectContaining({flex: 5}),
     );
     expect(
       modeMenuText.filter(text =>
         [
-          'BASIC TIMER',
-          'FLIP TIMER',
-          'LOOK PAUSE',
-          'WINK CONTROL',
+          'BASIC MODE',
+          'FLIP MODE',
+          'LOOK MODE',
+          'WINK MODE',
           'SMILE MODE',
         ].includes(text),
       ),
     ).toEqual([
-      'BASIC TIMER',
-      'FLIP TIMER',
-      'LOOK PAUSE',
-      'WINK CONTROL',
+      'BASIC MODE',
+      'FLIP MODE',
+      'LOOK MODE',
+      'WINK MODE',
       'SMILE MODE',
     ]);
     expect(modeMenuText).not.toContain('BETA');
@@ -447,8 +624,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     const modeMenu = renderer.root.findByProps({testID: 'mode-menu'});
@@ -492,7 +670,11 @@ describe('TimerScreen', () => {
       standardTimerMetrics.topStripMinHeight,
     );
     expect(ultraTimerMetrics.timerDisplayScale).toBeGreaterThan(1);
-    expect(ultraTimerMetrics.mascotScale).toBeGreaterThan(1);
+    expect(standardTimerMetrics.mascotScale).toBeGreaterThan(1.25);
+    expect(ultraTimerMetrics.mascotScale).toBeGreaterThan(
+      standardTimerMetrics.mascotScale,
+    );
+    expect(ultraTimerMetrics.mascotScale).toBeLessThanOrEqual(1.42);
     expect(ultraModeMetrics.itemMinHeight).toBeGreaterThan(
       standardModeMetrics.itemMinHeight,
     );
@@ -504,22 +686,35 @@ describe('TimerScreen', () => {
     );
   });
 
-  it('pushes the ad banner toward the bottom while the mode menu is open', () => {
+  it('keeps the mode list above the shared bottom selector', () => {
     const renderer = renderTimerScreen();
 
-    expect(renderer.root.findAllByProps({testID: 'mode-menu-ad-spacer'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'mode-menu-area'}),
+    ).toHaveLength(0);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
-    expect(renderer.root.findByProps({testID: 'mode-menu-ad-spacer'}).props.style)
-      .toEqual(expect.objectContaining({flex: 1}));
+    const modeMenuArea = renderer.root.findByProps({
+      testID: 'mode-menu-area',
+    });
+    const modeSection = renderer.root.findByProps({
+      testID: 'mode-selector-bottom',
+    });
+
+    expect(modeMenuArea.props.style).toEqual(expect.objectContaining({flex: 1}));
+    expect(modeMenuArea.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(modeSection.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(
+      modeSection.findByProps({testID: 'timekeeping-mode-options'}),
+    ).toBeTruthy();
   });
 
-  it('selects Basic Timer from the restored mode popup while keeping it open', () => {
+  it('selects Basic Timer from the restored mode popup and closes it', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -534,15 +729,18 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     const basicTimerCard = renderer.root.findByProps({
-      accessibilityLabel: 'BASIC TIMER mode',
+      accessibilityLabel: 'BASIC MODE mode',
     });
 
-    expect(basicTimerCard.props.accessibilityState).toEqual({selected: false});
+    expect(basicTimerCard.props.accessibilityState).toEqual({
+      selected: false,
+    });
 
     ReactTestRenderer.act(() => {
       basicTimerCard.props.onPress();
@@ -550,12 +748,13 @@ describe('TimerScreen', () => {
 
     expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
     expect(mockSetTimerModeId).toHaveBeenCalledWith('basicTimer');
-    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
-      .toBeTruthy();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-mode-options'}),
+    ).toBeTruthy();
   });
 
-  it('labels camera-assisted modes as one-hour ad unlock modes', async () => {
+  it('labels camera-assisted modes as three-hour ad unlock modes', async () => {
     mockHasActiveRewardedModeAccess.mockResolvedValue(false);
     mockState = {
       ...baseState,
@@ -581,10 +780,98 @@ describe('TimerScreen', () => {
     expect(
       rewardedLabels.map(label => flattenText(label.props.children)),
     ).toEqual([
-      'Available for 1 hour after watching an ad',
-      'Available for 1 hour after watching an ad',
-      'Available for 1 hour after watching an ad',
+      'Watch ad: 3 hours free',
+      'Watch ad: 3 hours free',
+      'Watch ad: 3 hours free',
     ]);
+    rewardedLabels.forEach(label => {
+      expect(StyleSheet.flatten(label.props.style)).toEqual(
+        expect.objectContaining({
+          alignSelf: 'center',
+          fontSize: 11,
+          lineHeight: 15,
+          textAlign: 'center',
+        }),
+      );
+    });
+  });
+
+  it('lets Japanese rewarded ad labels use the full badge width', async () => {
+    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockState = {
+      ...baseState,
+      locale: 'ja-JP',
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'モードメニューを開く'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
+    const rewardedLabel = renderer.root
+      .findAllByType(Text)
+      .find(label => label.props.testID === 'rewarded-mode-access-label');
+
+    expect(rewardedLabel).toBeTruthy();
+    expect(flattenText(rewardedLabel!.props.children)).toBe(
+      '広告を見ると3時間利用できます',
+    );
+    expect(rewardedLabel!.props.numberOfLines).toBeUndefined();
+    expect(rewardedLabel!.props.adjustsFontSizeToFit).toBeUndefined();
+    expect(StyleSheet.flatten(rewardedLabel!.props.style)).toEqual(
+      expect.objectContaining({
+        width: '100%',
+      }),
+    );
+    expect(
+      StyleSheet.flatten(rewardedLabel!.props.style).overflow,
+    ).toBeUndefined();
+  });
+
+  it('shows rewarded badges while access status is still being checked', () => {
+    mockHasActiveRewardedModeAccess.mockImplementation(
+      () => new Promise<boolean>(() => {}),
+    );
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
+    });
+
+    expect(
+      renderer.root
+        .findAllByType(Text)
+        .filter(label => label.props.testID === 'rewarded-mode-access-label'),
+    ).toHaveLength(3);
   });
 
   it('hides ad unlock labels on restart when local rewarded access is still active', async () => {
@@ -609,7 +896,7 @@ describe('TimerScreen', () => {
     expect(
       renderer.root
         .findAllByType(Text)
-      .filter(label => label.props.testID === 'rewarded-mode-access-label'),
+        .filter(label => label.props.testID === 'rewarded-mode-access-label'),
     ).toHaveLength(0);
   });
 
@@ -633,7 +920,7 @@ describe('TimerScreen', () => {
 
     await ReactTestRenderer.act(async () => {
       await renderer.root
-        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
         .props.onPress();
     });
 
@@ -642,6 +929,7 @@ describe('TimerScreen', () => {
     });
     expect(mockHasActiveRewardedModeAccess).toHaveBeenCalledWith('lookPause');
     expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
   });
 
   it('does not show an ad or enter a camera-assisted mode when camera permission is denied', async () => {
@@ -665,7 +953,7 @@ describe('TimerScreen', () => {
 
     await ReactTestRenderer.act(async () => {
       await renderer.root
-        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
         .props.onPress();
     });
 
@@ -675,11 +963,15 @@ describe('TimerScreen', () => {
     expect(mockShowRewardedAdForAccess).not.toHaveBeenCalled();
     expect(mockResetTimerSession).not.toHaveBeenCalled();
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
   });
 
-  it('does not enter a locked rewarded mode before rewarded ad access is granted', async () => {
+  it('records rewarded access but waits for another selection before entering a rewarded mode', async () => {
     let resolveRewardedAd: (() => void) | undefined;
-    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockHasActiveRewardedModeAccess
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
     mockShowRewardedAdForAccess.mockImplementation(
       () =>
         new Promise(resolve => {
@@ -704,7 +996,7 @@ describe('TimerScreen', () => {
 
     ReactTestRenderer.act(() => {
       renderer.root
-        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
         .props.onPress();
     });
 
@@ -733,11 +1025,23 @@ describe('TimerScreen', () => {
     expect(mockGrantRewardedModeAccess).toHaveBeenCalledWith(
       expect.any(Number),
     );
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(1);
     expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
     expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
   });
 
-  it('keeps the timer value and menu open when selecting the current preset mode', () => {
+  it('keeps the timer value and closes the menu when selecting the current preset mode', () => {
     mockState = {
       ...baseState,
       timer: {
@@ -752,24 +1056,30 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     ReactTestRenderer.act(() => {
       renderer.root
-        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
         .props.onPress();
     });
 
     expect(mockResetTimerSession).not.toHaveBeenCalled();
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
-    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
-      .toBeTruthy();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-mode-options'}),
+    ).toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'top-timer-readout'}),
+    ).toBeTruthy();
+    expect(getRenderedText(renderer)).toContain('01:01.04');
   });
 
-  it('shows a rewarded ad and records access before entering a locked rewarded mode', async () => {
+  it('stores one-hour access after a rewarded ad without entering the locked mode immediately', async () => {
     mockHasActiveRewardedModeAccess
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
@@ -791,7 +1101,7 @@ describe('TimerScreen', () => {
 
     await ReactTestRenderer.act(async () => {
       await renderer.root
-        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
         .props.onPress();
     });
 
@@ -800,7 +1110,53 @@ describe('TimerScreen', () => {
     expect(mockGrantRewardedModeAccess).toHaveBeenCalledWith(
       expect.any(Number),
     );
-    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+  });
+
+  it('keeps the mode popup open and preserves time when rewarded ad loading fails', async () => {
+    const loadError = new Error('Ad load failed');
+    mockHasActiveRewardedModeAccess
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    mockShowRewardedAdForAccess.mockRejectedValue(loadError);
+    mockIsRewardedAdNoFillError.mockReturnValue(false);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 61042,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    const rewardedMessage = renderer.root.findByProps({
+      testID: 'rewarded-ad-access-message',
+    });
+
+    expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(1);
+    expect(mockIsRewardedAdNoFillError).toHaveBeenCalledWith(loadError);
+    expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+    expect(flattenText(rewardedMessage.props.children)).toBe(
+      'Could not load the ad. Please try again.',
+    );
   });
 
   it('enters a rewarded mode on no-fill without recording rewarded access', async () => {
@@ -828,7 +1184,7 @@ describe('TimerScreen', () => {
 
     await ReactTestRenderer.act(async () => {
       await renderer.root
-        .findByProps({accessibilityLabel: 'LOOK PAUSE mode'})
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
         .props.onPress();
     });
 
@@ -836,6 +1192,55 @@ describe('TimerScreen', () => {
     expect(mockIsRewardedAdNoFillError).toHaveBeenCalledWith(noFillError);
     expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
     expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
+    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+  });
+
+  it('requests an ad again after a no-fill entry because no one-hour access was stored', async () => {
+    const firstNoFillError = new Error('No fill 1');
+    const secondNoFillError = new Error('No fill 2');
+    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockShowRewardedAdForAccess
+      .mockRejectedValueOnce(firstNoFillError)
+      .mockRejectedValueOnce(secondNoFillError);
+    mockIsRewardedAdNoFillError.mockReturnValue(true);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(2);
+    expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
+    expect(mockResetTimerSession).toHaveBeenCalledTimes(2);
     expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
   });
 
@@ -856,18 +1261,18 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
-    });
-
-    await ReactTestRenderer.act(async () => {
-      await renderer.root.findByProps({testID: 'timekeeping-timer-button'})
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
         .props.onPress();
     });
 
-    expect(mockHasActiveRewardedModeAccess).toHaveBeenCalledWith(
-      'winkControl',
-    );
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({testID: 'timekeeping-timer-button'})
+        .props.onPress();
+    });
+
+    expect(mockHasActiveRewardedModeAccess).toHaveBeenCalledWith('winkControl');
     expect(mockShowRewardedAdForAccess).not.toHaveBeenCalled();
     expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
     expect(mockSetTimekeepingMode).toHaveBeenCalledWith('timer');
@@ -888,22 +1293,25 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timekeeping-timer-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timekeeping-timer-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimekeepingMode).toHaveBeenCalledWith('timer');
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
-    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
-      .toBeTruthy();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length,
+    ).toBeGreaterThan(0);
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-popup'}),
+    ).toBeTruthy();
 
     mockState = {
       ...baseState,
@@ -921,12 +1329,35 @@ describe('TimerScreen', () => {
       renderer.update(<TimerScreen />);
     });
 
-    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
-      .toBeTruthy();
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-popup'}),
+    ).toBeTruthy();
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('opens the timer target picker when requested by an alarm-to-timer transition', () => {
+    mockState = {
+      ...baseState,
+      timekeepingMode: 'timer',
+      timerTargetPopupRequestId: 7,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        isLookPaused: false,
+      },
+    };
+
+    const renderer = renderTimerScreen();
+
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-popup'}),
+    ).toBeTruthy();
+    expect(mockConsumeTimerTargetPopupRequest).toHaveBeenCalledWith(7);
   });
 
   it('switches from timer to stopwatch from the bottom mode controls', () => {
@@ -945,20 +1376,22 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timekeeping-stopwatch-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimekeepingMode).toHaveBeenCalledWith('stopwatch');
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length,
+    ).toBeGreaterThan(0);
   });
 
   it('shows remaining time while the timer function is selected', () => {
@@ -980,10 +1413,12 @@ describe('TimerScreen', () => {
 
     expect(topTimerText).toBe('1:01:02');
     expect(topTimerText).not.toContain('.');
-    expect(renderer.root.findAllByProps({testID: 'timer-target-controls'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-controls'}),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-popup'}),
+    ).toHaveLength(0);
   });
 
   it('opens the timer target picker popup from the timer readout while idle', () => {
@@ -1001,8 +1436,9 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
 
-    expect(renderer.root.findAllByProps({testID: 'timer-target-controls'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-controls'}),
+    ).toHaveLength(0);
 
     ReactTestRenderer.act(() => {
       renderer.root
@@ -1045,17 +1481,20 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
-    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-popup'}),
+    ).toBeTruthy();
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(true);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timer-target-cancel-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timer-target-cancel-button'})
+        .props.onPress();
     });
 
-    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-popup'}),
+    ).toHaveLength(0);
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
   });
 
@@ -1098,15 +1537,17 @@ describe('TimerScreen', () => {
         width: 72,
       }),
     );
-    expect(renderer.root.findAllByProps({testID: 'timer-target-reset-row'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-reset-row'}),
+    ).toHaveLength(0);
 
     ReactTestRenderer.act(() => {
       resetTimeButton.props.onPress();
     });
 
-    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-popup'}),
+    ).toBeTruthy();
   });
 
   it('keeps the reset time icon on the same top line as the latest timer mark', () => {
@@ -1178,8 +1619,9 @@ describe('TimerScreen', () => {
       targetButton.props.onPress();
     });
 
-    expect(renderer.root.findByProps({testID: 'timer-target-popup'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-popup'}),
+    ).toBeTruthy();
   });
 
   it('renders animated reels for the timer target wheels', () => {
@@ -1203,12 +1645,15 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
-    expect(renderer.root.findByProps({testID: 'timer-target-hour-reel'}))
-      .toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timer-target-minute-reel'}))
-      .toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timer-target-second-reel'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-hour-reel'}),
+    ).toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-minute-reel'}),
+    ).toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-second-reel'}),
+    ).toBeTruthy();
   });
 
   it('shows the three most recent timer targets in the picker and applies a selected target', () => {
@@ -1248,8 +1693,9 @@ describe('TimerScreen', () => {
       flattenText(button.findAllByType(Text)[0].props.children),
     );
 
-    expect(renderer.root.findByProps({testID: 'timer-target-recent-section'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-recent-section'}),
+    ).toBeTruthy();
     expect(recentLabels).toEqual(['05:00', '10:00', '01:30']);
     expect(getRenderedText(renderer)).not.toContain('00:30');
     expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
@@ -1259,8 +1705,9 @@ describe('TimerScreen', () => {
     });
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timer-target-done-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timer-target-done-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(10 * 60 * 1000);
@@ -1296,11 +1743,14 @@ describe('TimerScreen', () => {
         typeof node.props.onPress === 'function',
     );
 
-    expect(renderer.root.findByProps({testID: 'timer-target-recent-section'}))
-      .toBeTruthy();
-    expect(recentButtons.map(button =>
-      flattenText(button.findAllByType(Text)[0].props.children),
-    )).toEqual(['00:30', '01:00', '10:00']);
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-recent-section'}),
+    ).toBeTruthy();
+    expect(
+      recentButtons.map(button =>
+        flattenText(button.findAllByType(Text)[0].props.children),
+      ),
+    ).toEqual(['00:30', '01:00', '10:00']);
   });
 
   it('drafts timer target wheel changes and applies them only after Done', () => {
@@ -1354,8 +1804,9 @@ describe('TimerScreen', () => {
     ).toBe('1:02:03');
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timer-target-done-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timer-target-done-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
@@ -1395,13 +1846,15 @@ describe('TimerScreen', () => {
     });
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timer-target-cancel-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timer-target-cancel-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
-    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-popup'}),
+    ).toHaveLength(0);
   });
 
   it('keeps Set Timer centered with a dedicated X cancel button', () => {
@@ -1429,17 +1882,20 @@ describe('TimerScreen', () => {
       renderer.root.findByProps({testID: 'timer-target-popup-title'}).props
         .style,
     ).toEqual(expect.objectContaining({textAlign: 'center'}));
-    expect(renderer.root.findByProps({testID: 'timer-target-cancel-button'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timer-target-cancel-button'}),
+    ).toBeTruthy();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timer-target-done-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timer-target-done-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
-    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-popup'}),
+    ).toHaveLength(0);
   });
 
   it('adjusts the timer target while the wheel is still moving with relaxed sensitivity', () => {
@@ -1475,8 +1931,9 @@ describe('TimerScreen', () => {
     expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timer-target-done-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timer-target-done-button'})
+        .props.onPress();
     });
 
     expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
@@ -1563,8 +2020,9 @@ describe('TimerScreen', () => {
       expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
 
       ReactTestRenderer.act(() => {
-        renderer.root.findByProps({testID: 'timer-target-done-button'}).props
-          .onPress();
+        renderer.root
+          .findByProps({testID: 'timer-target-done-button'})
+          .props.onPress();
       });
 
       expect(mockSetTimerTargetDurationMs).toHaveBeenCalledWith(
@@ -1626,8 +2084,9 @@ describe('TimerScreen', () => {
 
     expect(targetButton.props.disabled).toBe(true);
     expect(targetButton.props.onPress).toBeUndefined();
-    expect(renderer.root.findAllByProps({testID: 'timer-target-popup'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-target-popup'}),
+    ).toHaveLength(0);
     expect(mockSetTimerTargetDurationMs).not.toHaveBeenCalled();
   });
 
@@ -1641,11 +2100,14 @@ describe('TimerScreen', () => {
     expect(textContent).toContain('Look elsewhere');
     expect(textContent).toContain('TIMELINE');
     expect(textContent).toContain('Button');
-    expect(renderer.root.findAllByProps({accessibilityLabel: 'PAUSE Look'}))
-      .toHaveLength(0);
-    expect(renderer.root.findByProps({
-      accessibilityLabel: 'RESUME Look elsewhere',
-    })).toBeTruthy();
+    expect(
+      renderer.root.findAllByProps({accessibilityLabel: 'PAUSE Look'}),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findByProps({
+        accessibilityLabel: 'RESUME Look elsewhere',
+      }),
+    ).toBeTruthy();
   });
 
   it('shows the stopped status immediately when look-pause detects looking', () => {
@@ -1680,8 +2142,9 @@ describe('TimerScreen', () => {
       accessibilityLabel: 'RESUME Look elsewhere',
     });
 
-    expect(renderer.root.findAllByProps({accessibilityLabel: 'PAUSE Look'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({accessibilityLabel: 'PAUSE Look'}),
+    ).toHaveLength(0);
     expect(resumeButton.props.disabled).toBe(false);
 
     ReactTestRenderer.act(() => {
@@ -1738,9 +2201,7 @@ describe('TimerScreen', () => {
       testID: 'timer-wink-unavailable-label',
     });
 
-    expect(winkReadyLabel.props.children).toBe(
-      'OPEN BOTH EYES, THEN WINK',
-    );
+    expect(winkReadyLabel.props.children).toBe('OPEN BOTH EYES, THEN WINK');
     expect(StyleSheet.flatten(winkReadyLabel.props.style).color).toBe(
       '#18794E',
     );
@@ -1822,14 +2283,9 @@ describe('TimerScreen', () => {
 
     const getHintLabel = () =>
       renderer.root.findByProps({testID: 'timer-wink-unavailable-label'});
-    const getHintStyle = () =>
-      StyleSheet.flatten(
-        getHintLabel().props.style,
-      );
+    const getHintStyle = () => StyleSheet.flatten(getHintLabel().props.style);
 
-    expect(getHintLabel().props.children).toBe(
-      'OPEN BOTH EYES, THEN WINK',
-    );
+    expect(getHintLabel().props.children).toBe('OPEN BOTH EYES, THEN WINK');
     expect(getHintStyle().color).toBe('#18794E');
     expect(getHintStyle().opacity).toBe(1);
 
@@ -1847,17 +2303,13 @@ describe('TimerScreen', () => {
     ReactTestRenderer.act(() => {
       jest.advanceTimersByTime(249);
     });
-    expect(getHintLabel().props.children).toBe(
-      'OPEN BOTH EYES, THEN WINK',
-    );
+    expect(getHintLabel().props.children).toBe('OPEN BOTH EYES, THEN WINK');
     expect(getHintStyle().color).toBe('#18794E');
 
     ReactTestRenderer.act(() => {
       jest.advanceTimersByTime(1);
     });
-    expect(getHintLabel().props.children).toBe(
-      'WINK JUDGMENT UNAVAILABLE.',
-    );
+    expect(getHintLabel().props.children).toBe('WINK JUDGMENT UNAVAILABLE.');
     expect(getHintStyle().color).toBe('#B42318');
 
     mockState = {
@@ -1874,17 +2326,13 @@ describe('TimerScreen', () => {
     ReactTestRenderer.act(() => {
       jest.advanceTimersByTime(799);
     });
-    expect(getHintLabel().props.children).toBe(
-      'WINK JUDGMENT UNAVAILABLE.',
-    );
+    expect(getHintLabel().props.children).toBe('WINK JUDGMENT UNAVAILABLE.');
     expect(getHintStyle().color).toBe('#B42318');
 
     ReactTestRenderer.act(() => {
       jest.advanceTimersByTime(1);
     });
-    expect(getHintLabel().props.children).toBe(
-      'OPEN BOTH EYES, THEN WINK',
-    );
+    expect(getHintLabel().props.children).toBe('OPEN BOTH EYES, THEN WINK');
     expect(getHintStyle().color).toBe('#18794E');
   });
 
@@ -1938,8 +2386,9 @@ describe('TimerScreen', () => {
       renderer.root.findByProps({accessibilityLabel: 'RESET Button'}).props
         .disabled,
     ).toBe(true);
-    expect(renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}),
+    ).toHaveLength(0);
     expect(
       renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
         .disabled,
@@ -1961,8 +2410,9 @@ describe('TimerScreen', () => {
       accessibilityLabel: 'LAP Button',
     });
 
-    expect(renderer.root.findAllByProps({accessibilityLabel: 'RESET Button'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({accessibilityLabel: 'RESET Button'}),
+    ).toHaveLength(0);
     expect(lapButton.props.disabled).toBe(false);
     expect(getPressedStyleEntries(lapButton)).toContainEqual(
       expect.objectContaining({transform: [{scale: 0.96}]}),
@@ -2007,8 +2457,9 @@ describe('TimerScreen', () => {
       .map(node => flattenText(node.props.children))
       .join(' ');
 
-    expect(renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({accessibilityLabel: 'LAP Button'}),
+    ).toHaveLength(0);
     expect(markButton.props.disabled).toBe(false);
     expect(latestMarkText).toContain('LAST MARK');
     expect(latestMarkText).toContain('E 00:10.00');
@@ -2026,7 +2477,13 @@ describe('TimerScreen', () => {
       ...baseState,
       timerModeId: 'basicTimer',
       sessionHistory: [
-        {id: 'START-1000', type: 'START', atMs: 1000, elapsedMs: 0, deltaMs: 0},
+        {
+          id: 'START-1000',
+          type: 'START',
+          atMs: 1000,
+          elapsedMs: 0,
+          deltaMs: 0,
+        },
         {
           id: 'LAP-6000',
           type: 'LAP',
@@ -2171,11 +2628,14 @@ describe('TimerScreen', () => {
       modeButton.props.onPress();
     });
 
-    expect(renderer.root.findAllByProps({
-      accessibilityLabel: 'START Look elsewhere',
-    })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({testID: 'timer-main-content'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({
+        accessibilityLabel: 'START Look elsewhere',
+      }),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timer-main-content'}),
+    ).toHaveLength(0);
   });
 
   it('blocks gesture inputs while the timekeeping mode controls are open', () => {
@@ -2204,8 +2664,9 @@ describe('TimerScreen', () => {
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(true);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({testID: 'timekeeping-stopwatch-button'})
+        .props.onPress();
     });
 
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
@@ -2217,15 +2678,17 @@ describe('TimerScreen', () => {
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     expect(mockSetGestureInputsBlocked).toHaveBeenLastCalledWith(false);
@@ -2430,8 +2893,9 @@ describe('TimerScreen', () => {
       modeButton.props.onPress();
     });
 
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length)
-      .toBeGreaterThan(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length,
+    ).toBeGreaterThan(0);
   });
 
   it('disables the mode selector while the timer is actively running', () => {
@@ -2450,8 +2914,15 @@ describe('TimerScreen', () => {
 
     expect(modeButton.props.disabled).toBe(true);
     expect(modeButton.props.onPress).toBeUndefined();
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
+    const disabledModeOptions = renderer.root.findByProps({
+      testID: 'timekeeping-mode-options',
+    });
+
+    expect(disabledModeOptions).toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
+        .disabled,
+    ).toBe(true);
   });
 
   it('enables the mode selector after a timer alarm has ended', () => {
@@ -2480,12 +2951,13 @@ describe('TimerScreen', () => {
     });
 
     expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-mode-options'}),
+    ).toBeTruthy();
 
     ReactTestRenderer.act(() => {
       renderer.root
-        .findByProps({accessibilityLabel: 'BASIC TIMER mode'})
+        .findByProps({accessibilityLabel: 'BASIC MODE mode'})
         .props.onPress();
     });
 
@@ -2508,22 +2980,24 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     expect(
       renderer.root.findAllByProps({
-        accessibilityLabel: 'BASIC TIMER mode',
+        accessibilityLabel: 'BASIC MODE mode',
       }).length,
     ).toBeGreaterThan(0);
     expect(
       renderer.root.findAllByProps({
-        accessibilityLabel: 'LOOK PAUSE mode',
+        accessibilityLabel: 'LOOK MODE mode',
       }).length,
     ).toBeGreaterThan(0);
     expect(
       renderer.root.findAllByProps({
-        accessibilityLabel: 'WINK CONTROL mode',
+        accessibilityLabel: 'WINK MODE mode',
       }).length,
     ).toBeGreaterThan(0);
     expect(
@@ -2533,7 +3007,7 @@ describe('TimerScreen', () => {
     ).toBeGreaterThan(0);
     expect(
       renderer.root.findAllByProps({
-        accessibilityLabel: 'FLIP TIMER mode',
+        accessibilityLabel: 'FLIP MODE mode',
       }).length,
     ).toBeGreaterThan(0);
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
@@ -2555,7 +3029,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     const modeMenuText = renderer.root
@@ -2569,7 +3045,9 @@ describe('TimerScreen', () => {
     );
     expect(modeMenuText).toContain('START/PAUSE/RESUME/RESET/LAP: Button');
     expect(modeMenuText).not.toContain('Right wink toggles the timer');
-    expect(modeMenuText).not.toContain('Button-only timer without camera detection');
+    expect(modeMenuText).not.toContain(
+      'Button-only timer without camera detection',
+    );
     expect(modeMenuText).not.toContain('ACTIVE');
     expect(
       renderer.root.findAllByProps({testID: 'active-mode-indicator'}).length,
@@ -2594,9 +3072,11 @@ describe('TimerScreen', () => {
     };
     const basicRenderer = renderTimerScreen();
 
-    expect(basicRenderer.root.findAllByProps({
-      testID: 'timer-camera-preparing-label',
-    })).toHaveLength(0);
+    expect(
+      basicRenderer.root.findAllByProps({
+        testID: 'timer-camera-preparing-label',
+      }),
+    ).toHaveLength(0);
 
     mockState = {
       ...baseState,
@@ -2612,9 +3092,11 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
 
-    expect(renderer.root.findAllByProps({
-      testID: 'timer-camera-preparing-label',
-    })).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'timer-camera-preparing-label',
+      }),
+    ).toHaveLength(0);
     expect(getRenderedText(renderer)).not.toContain('준비중 입니다.');
   });
 
@@ -2634,7 +3116,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     const modeMenuText = renderer.root
@@ -2644,9 +3128,11 @@ describe('TimerScreen', () => {
       .join(' ');
 
     expect(modeMenuText).not.toContain('준비중 입니다.');
-    expect(renderer.root.findAllByProps({
-      testID: 'timer-camera-preparing-label',
-    })).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'timer-camera-preparing-label',
+      }),
+    ).toHaveLength(0);
   });
 
   it('keeps the timer value when selecting the current timekeeping mode', () => {
@@ -2664,7 +3150,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     ReactTestRenderer.act(() => {
@@ -2676,8 +3164,9 @@ describe('TimerScreen', () => {
     expect(mockResetTimerSession).not.toHaveBeenCalled();
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
     expect(mockSetTimekeepingMode).not.toHaveBeenCalled();
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-mode-options'}).length,
+    ).toBeGreaterThan(0);
   });
 
   it('does not render a cancel button in the timekeeping selector', () => {
@@ -2695,16 +3184,20 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     expect(mockResetTimerSession).not.toHaveBeenCalled();
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
     expect(mockSetTimekeepingMode).not.toHaveBeenCalled();
-    expect(renderer.root.findAllByProps({testID: 'timekeeping-cancel-button'}))
-      .toHaveLength(0);
-    expect(renderer.root.findAllByProps({accessibilityLabel: 'Close mode menu'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'timekeeping-cancel-button'}),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({accessibilityLabel: 'Close mode menu'}),
+    ).toHaveLength(0);
   });
 
   it('renders the restored preset mode menu above the timekeeping controls', () => {
@@ -2722,12 +3215,15 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
-    expect(renderer.root.findByProps({testID: 'timekeeping-mode-options'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-mode-options'}),
+    ).toBeTruthy();
   });
 
   it('marks the selected timekeeping mode in the bottom controls', () => {
@@ -2746,7 +3242,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'Open mode menu'}).props.onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
     });
 
     expect(
@@ -2755,6 +3253,10 @@ describe('TimerScreen', () => {
     ).toEqual({selected: true});
     expect(
       renderer.root.findByProps({testID: 'timekeeping-stopwatch-button'}).props
+        .accessibilityState,
+    ).toEqual({selected: false});
+    expect(
+      renderer.root.findByProps({testID: 'timekeeping-alarm-button'}).props
         .accessibilityState,
     ).toEqual({selected: false});
     expect(
@@ -2769,12 +3271,36 @@ describe('TimerScreen', () => {
     ).toContainEqual(expect.objectContaining({backgroundColor: '#FFFFFF'}));
   });
 
+  it('opens the alarm page from the expanded timekeeping controls', () => {
+    const renderer = renderTimerScreen();
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'timekeeping-alarm-button'})
+        .props.onPress();
+    });
+
+    expect(mockSetScreen).toHaveBeenCalledWith('alarms');
+  });
+
   it('toggles the current mode timeline overlay from the bottom Timeline button', () => {
     mockState = {
       ...baseState,
       timerModeId: 'basicTimer',
       sessionHistory: [
-        {id: 'START-1000', type: 'START', atMs: 1000, elapsedMs: 0, deltaMs: 0},
+        {
+          id: 'START-1000',
+          type: 'START',
+          atMs: 1000,
+          elapsedMs: 0,
+          deltaMs: 0,
+        },
         {
           id: 'LAP-6000',
           type: 'LAP',
@@ -2800,12 +3326,14 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
 
-    expect(renderer.root.findAllByProps({testID: 'session-history-overlay'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'session-history-overlay'}),
+    ).toHaveLength(0);
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     const historyButton = renderer.root.findByProps({
@@ -2813,6 +3341,15 @@ describe('TimerScreen', () => {
     });
     const overlay = renderer.root.findByProps({
       testID: 'session-history-overlay',
+    });
+    const historyHeader = overlay.findByProps({
+      testID: 'session-history-header',
+    });
+    const historyTitle = overlay.findByProps({
+      testID: 'session-history-title',
+    });
+    const copyButton = renderer.root.findByProps({
+      testID: 'timeline-copy-button',
     });
     const overlayText = overlay
       .findAllByType(Text)
@@ -2824,10 +3361,25 @@ describe('TimerScreen', () => {
 
     expect(historyButton.props.accessibilityState).toEqual({selected: true});
     expect(overlay).toBeTruthy();
+    expect(StyleSheet.flatten(overlay.props.style)).toEqual(
+      expect.objectContaining({gap: 4, padding: 8}),
+    );
+    expect(StyleSheet.flatten(historyHeader.props.style)).toEqual(
+      expect.objectContaining({minHeight: 28, paddingBottom: 4}),
+    );
+    expect(StyleSheet.flatten(historyTitle.props.style)).toEqual(
+      expect.objectContaining({fontSize: 15, lineHeight: 18}),
+    );
+    expect(getPressedStyleEntries(copyButton)).toContainEqual(
+      expect.objectContaining({height: 26, width: 26}),
+    );
     expect(
       renderer.root.findByProps({testID: 'timeline-copy-button'}),
     ).toBeTruthy();
     expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
+    expect(StyleSheet.flatten(historyRows[0].props.style)).toEqual(
+      expect.objectContaining({minHeight: 30}),
+    );
     expect(historyRows.map(row => row.props.style)).toEqual(
       expect.arrayContaining([
         expect.arrayContaining([
@@ -2850,8 +3402,9 @@ describe('TimerScreen', () => {
       historyButton.props.onPress();
     });
 
-    expect(renderer.root.findAllByProps({testID: 'session-history-overlay'}))
-      .toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({testID: 'session-history-overlay'}),
+    ).toHaveLength(0);
   });
 
   it('copies visible timeline events to the clipboard from the header icon', async () => {
@@ -2859,7 +3412,13 @@ describe('TimerScreen', () => {
       ...baseState,
       timerModeId: 'basicTimer',
       sessionHistory: [
-        {id: 'START-1000', type: 'START', atMs: 1000, elapsedMs: 0, deltaMs: 0},
+        {
+          id: 'START-1000',
+          type: 'START',
+          atMs: 1000,
+          elapsedMs: 0,
+          deltaMs: 0,
+        },
         {
           id: 'LAP-6000',
           type: 'LAP',
@@ -2886,13 +3445,15 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     await ReactTestRenderer.act(async () => {
-      await renderer.root.findByProps({testID: 'timeline-copy-button'}).props
-        .onPress();
+      await renderer.root
+        .findByProps({testID: 'timeline-copy-button'})
+        .props.onPress();
     });
 
     expect(mockCopyTimelineText).toHaveBeenCalledWith(
@@ -2949,8 +3510,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     const overlayText = renderer.root
@@ -2984,8 +3546,9 @@ describe('TimerScreen', () => {
     expect(getRenderedText(renderer)).toContain('START');
     expect(getRenderedText(renderer)).toContain('Flip Down');
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'START Flip Down'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'START Flip Down'})
+        .props.onPress();
     });
     expect(mockStartTimerSession).toHaveBeenCalledTimes(1);
   });
@@ -3011,9 +3574,11 @@ describe('TimerScreen', () => {
     expect(text).toContain('START');
     expect(text).toContain('Smile');
     expect(text).toContain('SMILE READY');
-    expect(renderer.root.findByProps({
-      testID: 'timer-smile-unavailable-label',
-    })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-smile-unavailable-label',
+      }),
+    ).toBeTruthy();
   });
 
   it('shows Smile as the active Smile Mode pause gesture', () => {
@@ -3036,8 +3601,9 @@ describe('TimerScreen', () => {
     expect(text).toContain('PAUSE');
     expect(text).toContain('Smile');
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'PAUSE Smile'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'PAUSE Smile'})
+        .props.onPress();
     });
     expect(mockPauseTimerSession).toHaveBeenCalledTimes(1);
   });
@@ -3062,8 +3628,9 @@ describe('TimerScreen', () => {
     expect(text).toContain('RESUME');
     expect(text).toContain('Smile');
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'RESUME Smile'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'RESUME Smile'})
+        .props.onPress();
     });
     expect(mockResumeTimerSession).toHaveBeenCalledTimes(1);
   });
@@ -3127,7 +3694,13 @@ describe('TimerScreen', () => {
       },
       timerModeId: 'lookPause',
       sessionHistory: [
-        {id: 'START-1000', type: 'START', atMs: 1000, elapsedMs: 0, deltaMs: 0},
+        {
+          id: 'START-1000',
+          type: 'START',
+          atMs: 1000,
+          elapsedMs: 0,
+          deltaMs: 0,
+        },
         {
           id: 'STOP-6000',
           type: 'STOP',
@@ -3147,8 +3720,9 @@ describe('TimerScreen', () => {
     const renderer = renderTimerScreen();
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     const overlayText = renderer.root
@@ -3169,8 +3743,9 @@ describe('TimerScreen', () => {
     );
     expect(overlayText).toContain('STOP');
     expect(overlayText).not.toContain('LAP');
-    expect(renderer.root.findByProps({testID: 'latest-history-record'}))
-      .toBeTruthy();
+    expect(
+      renderer.root.findByProps({testID: 'latest-history-record'}),
+    ).toBeTruthy();
   });
 
   it('replaces the timeline overlay with the restored mode menu', () => {
@@ -3186,7 +3761,13 @@ describe('TimerScreen', () => {
       },
       timerModeId: 'basicTimer',
       sessionHistory: [
-        {id: 'START-1000', type: 'START', atMs: 1000, elapsedMs: 0, deltaMs: 0},
+        {
+          id: 'START-1000',
+          type: 'START',
+          atMs: 1000,
+          elapsedMs: 0,
+          deltaMs: 0,
+        },
         {
           id: 'LAP-6000',
           type: 'LAP',
@@ -3204,8 +3785,9 @@ describe('TimerScreen', () => {
     );
 
     ReactTestRenderer.act(() => {
-      renderer.root.findByProps({accessibilityLabel: 'TIMELINE Button'}).props
-        .onPress();
+      renderer.root
+        .findByProps({accessibilityLabel: 'TIMELINE Button'})
+        .props.onPress();
     });
 
     ReactTestRenderer.act(() => {
@@ -3220,9 +3802,11 @@ describe('TimerScreen', () => {
     });
     const modeMenu = renderer.root.findByProps({testID: 'mode-menu'});
 
-    expect(renderer.root.findAllByProps({
-      testID: 'session-history-overlay',
-    })).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({
+        testID: 'session-history-overlay',
+      }),
+    ).toHaveLength(0);
     expect(modeSection.props.style).toEqual(
       expect.objectContaining({elevation: 40, zIndex: 40}),
     );
@@ -3371,7 +3955,6 @@ describe('TimerScreen', () => {
 
     expect(modeButton.props.disabled).toBe(true);
     expect(modeButton.props.onPress).toBeUndefined();
-    expect(renderer.root.findAllByProps({testID: 'mode-menu'}))
-      .toHaveLength(0);
+    expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
   });
 });

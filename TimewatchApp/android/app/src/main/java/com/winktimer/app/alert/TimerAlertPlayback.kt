@@ -20,6 +20,7 @@ object TimerAlertPlayback {
   private var activePlayer: MediaPlayer? = null
   private var activeRingtone: Ringtone? = null
   private var activeCleanupContext: Context? = null
+  private var activeAlertOwner: String? = null
   private var previousAlarmVolume: Int? = null
   private val stopAlertRunnable = Runnable {
     stop(null)
@@ -32,17 +33,24 @@ object TimerAlertPlayback {
     soundEnabled: Boolean,
     durationId: String,
     vibrationPatternId: String,
+    alertOwner: String = TimerAlertService.ALERT_OWNER_TIMER,
+    soundVolume: Float? = null,
   ) {
     val durationMs = getAlertDurationMs(durationId)
     stop(context)
     activeCleanupContext = context.applicationContext
+    activeAlertOwner = alertOwner
 
     if (vibrationEnabled) {
       vibrate(context, vibrationPatternId, durationMs)
     }
 
     if (soundEnabled) {
-      boostAlarmVolume(context)
+      if (soundVolume == null) {
+        boostMinimumAlarmVolume(context)
+      } else {
+        applyAlarmVolume(context, soundVolume)
+      }
       playSystemSound(context, soundId)
     }
 
@@ -54,7 +62,8 @@ object TimerAlertPlayback {
   fun preview(context: Context, soundId: String, durationMs: Long) {
     stop(context)
     activeCleanupContext = context.applicationContext
-    boostAlarmVolume(context)
+    activeAlertOwner = ALERT_OWNER_PREVIEW
+    boostMinimumAlarmVolume(context)
     playPreviewSound(context, soundId)
     mainHandler.postDelayed(
       stopAlertRunnable,
@@ -62,13 +71,19 @@ object TimerAlertPlayback {
     )
   }
 
-  fun stop(context: Context?) {
+  fun stop(context: Context?, alertOwner: String? = null): Boolean {
+    if (alertOwner != null && activeAlertOwner != null && activeAlertOwner != alertOwner) {
+      return false
+    }
+
     val cleanupContext = context ?: activeCleanupContext
     mainHandler.removeCallbacks(stopAlertRunnable)
     stopActiveSound()
     cleanupContext?.let(::restoreAlarmVolume)
     cleanupContext?.let(::cancelVibration)
     activeCleanupContext = null
+    activeAlertOwner = null
+    return true
   }
 
   fun getAlertDurationMs(durationId: String): Long? =
@@ -103,12 +118,24 @@ object TimerAlertPlayback {
     val vibrator =
       context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         ?: return
-    val pattern = getVibrationPattern(patternId)
+    val pattern =
+      TimerAlertVibrationPolicy.buildPatternForDuration(
+        getVibrationPattern(patternId),
+        durationMs,
+      )
     val repeatIndex = TimerAlertVibrationPolicy.getRepeatIndex(durationMs)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       vibrator.vibrate(
-        VibrationEffect.createWaveform(pattern, repeatIndex),
+        VibrationEffect.createWaveform(
+          pattern,
+          TimerAlertVibrationPolicy.buildAmplitudePattern(pattern),
+          repeatIndex,
+        ),
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_ALARM)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+          .build(),
       )
     } else {
       vibrator.vibrate(pattern, repeatIndex)
@@ -285,7 +312,7 @@ object TimerAlertPlayback {
     activeRingtone = null
   }
 
-  private fun boostAlarmVolume(context: Context) {
+  private fun applyAlarmVolume(context: Context, soundVolume: Float) {
     val audioManager =
       context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         ?: return
@@ -296,11 +323,11 @@ object TimerAlertPlayback {
     }
 
     val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
-    val boostedVolume =
-      kotlin.math.ceil(maxVolume * MIN_ALARM_VOLUME_RATIO).toInt()
+    val targetVolume =
+      kotlin.math.ceil(maxVolume * soundVolume.coerceIn(0.1f, 1.0f)).toInt()
         .coerceIn(1, maxVolume)
 
-    if (currentVolume >= boostedVolume) {
+    if (currentVolume == targetVolume) {
       return
     }
 
@@ -311,7 +338,41 @@ object TimerAlertPlayback {
     try {
       audioManager.setStreamVolume(
         AudioManager.STREAM_ALARM,
-        boostedVolume,
+        targetVolume,
+        0,
+      )
+    } catch (_: SecurityException) {
+      previousAlarmVolume = null
+    }
+  }
+
+  private fun boostMinimumAlarmVolume(context: Context) {
+    val audioManager =
+      context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        ?: return
+    val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+
+    if (maxVolume <= 0) {
+      return
+    }
+
+    val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+    val minimumVolume =
+      kotlin.math.ceil(maxVolume * DEFAULT_ALARM_VOLUME_RATIO).toInt()
+        .coerceIn(1, maxVolume)
+
+    if (currentVolume >= minimumVolume) {
+      return
+    }
+
+    if (previousAlarmVolume == null) {
+      previousAlarmVolume = currentVolume
+    }
+
+    try {
+      audioManager.setStreamVolume(
+        AudioManager.STREAM_ALARM,
+        minimumVolume,
         0,
       )
     } catch (_: SecurityException) {
@@ -353,11 +414,12 @@ object TimerAlertPlayback {
 
   private const val SHORT_ALERT_MS = 4000L
   private const val LONG_ALERT_MS = 15000L
-  private const val MIN_ALARM_VOLUME_RATIO = 0.85
+  const val DEFAULT_ALARM_VOLUME_RATIO = 0.85f
   private const val MAX_PLAYER_VOLUME = 1.0f
   private const val URI_SOUND_ID_PREFIX = "uri:"
   private const val CATEGORY_DEFAULT = "Default"
   private const val CATEGORY_ALARM = "Alarm"
   private const val VIBRATION_PATTERN_LONG_REPEAT = "longRepeat"
   private const val TIMER_ALERT_UNTIL_STOPPED = "untilStopped"
+  private const val ALERT_OWNER_PREVIEW = "preview"
 }

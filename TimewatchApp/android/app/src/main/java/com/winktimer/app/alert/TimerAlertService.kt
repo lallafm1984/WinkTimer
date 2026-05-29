@@ -15,6 +15,12 @@ import android.os.Looper
 import androidx.core.app.NotificationManagerCompat
 import com.winktimer.app.MainActivity
 
+data class ActiveAlarmAlert(
+  val alarmId: String?,
+  val title: String,
+  val text: String,
+)
+
 class TimerAlertService : Service() {
   private val mainHandler = Handler(Looper.getMainLooper())
   private val stopRunnable = Runnable {
@@ -25,7 +31,13 @@ class TimerAlertService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == ACTION_STOP) {
-      stopSelf()
+      val requestedOwner =
+        intent.getStringExtra(EXTRA_ALERT_OWNER) ?: ALERT_OWNER_TIMER
+
+      if (activeAlertOwner == null || activeAlertOwner == requestedOwner) {
+        stopSelf()
+      }
+
       return START_NOT_STICKY
     }
 
@@ -39,6 +51,15 @@ class TimerAlertService : Service() {
       intent.getBooleanExtra(TimerAlertScheduler.EXTRA_VIBRATION_ENABLED, true)
     val soundEnabled =
       intent.getBooleanExtra(TimerAlertScheduler.EXTRA_SOUND_ENABLED, true)
+    val soundVolume =
+      if (intent.hasExtra(TimerAlertScheduler.EXTRA_SOUND_VOLUME)) {
+        intent.getFloatExtra(
+          TimerAlertScheduler.EXTRA_SOUND_VOLUME,
+          TimerAlertPlayback.DEFAULT_ALARM_VOLUME_RATIO,
+        )
+      } else {
+        null
+      }
     val durationId =
       intent.getStringExtra(TimerAlertScheduler.EXTRA_DURATION_ID)
         ?: "seconds:4"
@@ -54,6 +75,9 @@ class TimerAlertService : Service() {
     val notificationChannelName =
       intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME)
         ?: "Timer alerts"
+    val alertOwner =
+      intent.getStringExtra(EXTRA_ALERT_OWNER) ?: ALERT_OWNER_TIMER
+    val alarmId = intent.getStringExtra(AlarmAlertScheduler.EXTRA_ALARM_ID)
 
     startAlertForeground(
       notificationTitle,
@@ -61,6 +85,7 @@ class TimerAlertService : Service() {
       notificationChannelName,
     )
 
+    setActiveAlertState(alertOwner, alarmId, notificationTitle, notificationText)
     TimerAlertPlayback.play(
       applicationContext,
       soundId,
@@ -68,6 +93,8 @@ class TimerAlertService : Service() {
       soundEnabled,
       durationId,
       vibrationPatternId,
+      alertOwner,
+      soundVolume,
     )
 
     TimerAlertPlayback.getAlertDurationMs(durationId)?.let { durationMs ->
@@ -79,7 +106,9 @@ class TimerAlertService : Service() {
 
   override fun onDestroy() {
     mainHandler.removeCallbacks(stopRunnable)
-    TimerAlertPlayback.stop(applicationContext)
+    val alertOwner = activeAlertOwner
+    clearActiveAlertState(alertOwner)
+    TimerAlertPlayback.stop(applicationContext, alertOwner)
     super.onDestroy()
   }
 
@@ -168,10 +197,17 @@ class TimerAlertService : Service() {
   }
 
   companion object {
+    const val ALERT_OWNER_TIMER = "timer"
+    const val ALERT_OWNER_ALARM = "alarm"
     private const val ACTION_PLAY = "com.winktimer.app.alert.START_ALERT_SERVICE"
     private const val ACTION_STOP = "com.winktimer.app.alert.STOP_ALERT_SERVICE"
+    private const val EXTRA_ALERT_OWNER = "alertOwner"
     private const val CHANNEL_ID = "winktimer_timer_alerts"
     private const val NOTIFICATION_ID = 9202
+    private var activeAlertOwner: String? = null
+    private var activeAlarmId: String? = null
+    private var activeNotificationTitle: String? = null
+    private var activeNotificationText: String? = null
 
     fun createPlayIntent(
       context: Context,
@@ -183,12 +219,18 @@ class TimerAlertService : Service() {
       notificationTitle: String,
       notificationText: String,
       notificationChannelName: String,
+      alertOwner: String = ALERT_OWNER_TIMER,
+      alarmId: String? = null,
+      soundVolume: Float? = null,
     ): Intent =
       Intent(context, TimerAlertService::class.java).apply {
         action = ACTION_PLAY
         putExtra(TimerAlertScheduler.EXTRA_SOUND_ID, soundId)
         putExtra(TimerAlertScheduler.EXTRA_VIBRATION_ENABLED, vibrationEnabled)
         putExtra(TimerAlertScheduler.EXTRA_SOUND_ENABLED, soundEnabled)
+        soundVolume?.let {
+          putExtra(TimerAlertScheduler.EXTRA_SOUND_VOLUME, it)
+        }
         putExtra(TimerAlertScheduler.EXTRA_DURATION_ID, durationId)
         putExtra(
           TimerAlertScheduler.EXTRA_VIBRATION_PATTERN_ID,
@@ -200,25 +242,69 @@ class TimerAlertService : Service() {
           TimerAlertScheduler.EXTRA_NOTIFICATION_CHANNEL_NAME,
           notificationChannelName,
         )
+        putExtra(EXTRA_ALERT_OWNER, alertOwner)
+        alarmId?.let {
+          putExtra(AlarmAlertScheduler.EXTRA_ALARM_ID, it)
+        }
       }
 
-    fun stop(context: Context) {
+    fun stop(context: Context, alertOwner: String = ALERT_OWNER_TIMER) {
       try {
         context.startService(
           Intent(context, TimerAlertService::class.java).apply {
             action = ACTION_STOP
+            putExtra(EXTRA_ALERT_OWNER, alertOwner)
           },
         )
       } catch (_: IllegalStateException) {
-        TimerAlertPlayback.stop(context)
+        TimerAlertPlayback.stop(context, alertOwner)
       } catch (_: SecurityException) {
-        TimerAlertPlayback.stop(context)
+        TimerAlertPlayback.stop(context, alertOwner)
       }
-      clearNotification(context)
+
+      if (activeAlertOwner == null || activeAlertOwner == alertOwner) {
+        clearActiveAlertState(alertOwner)
+        clearNotification(context)
+      }
+    }
+
+    fun getActiveAlarmAlert(): ActiveAlarmAlert? {
+      if (activeAlertOwner != ALERT_OWNER_ALARM) {
+        return null
+      }
+
+      return ActiveAlarmAlert(
+        activeAlarmId,
+        activeNotificationTitle?.trim()?.ifEmpty { null } ?: "Alarm",
+        activeNotificationText?.trim()?.ifEmpty { null } ?: "Alarm",
+      )
     }
 
     fun clearNotification(context: Context) {
       NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+    }
+
+    private fun setActiveAlertState(
+      alertOwner: String,
+      alarmId: String?,
+      notificationTitle: String,
+      notificationText: String,
+    ) {
+      activeAlertOwner = alertOwner
+      activeAlarmId = if (alertOwner == ALERT_OWNER_ALARM) alarmId else null
+      activeNotificationTitle = notificationTitle
+      activeNotificationText = notificationText
+    }
+
+    private fun clearActiveAlertState(alertOwner: String?) {
+      if (alertOwner != null && activeAlertOwner != alertOwner) {
+        return
+      }
+
+      activeAlertOwner = null
+      activeAlarmId = null
+      activeNotificationTitle = null
+      activeNotificationText = null
     }
   }
 }

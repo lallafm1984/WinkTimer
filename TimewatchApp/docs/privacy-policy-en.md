@@ -60,7 +60,7 @@ Wink Timer includes Firebase/Google Analytics for app measurement. Firebase Anal
 
 ### Advertising data
 
-Wink Timer uses Google Mobile Ads / AdMob to show banner ads and rewarded ads. Rewarded ads may be used to provide temporary access to assisted timer modes.
+Wink Timer uses Google Mobile Ads / AdMob to show banner ads, rewarded ads, and interstitial ads. Rewarded ads may be used to provide temporary access to assisted timer modes.
 
 The app requests non-personalized ads. Non-personalized ads are not based on your past behavior, but Google may still process information such as IP address, coarse location, cookies or mobile advertising identifiers, ad views, ad interactions, device information, and fraud-prevention signals for purposes such as ad delivery, frequency capping, aggregated reporting, security, and invalid-activity prevention.
 
@@ -100,7 +100,7 @@ We do not sell personal and sensitive user data.
 Wink Timer may share or allow processing of data with service providers that help operate the app:
 
 - Google Firebase, for anonymous authentication, analytics, app measurement, security, and service operation;
-- Google Mobile Ads / AdMob, for ad delivery, rewarded ads, reporting, frequency capping, and invalid-activity prevention;
+- Google Mobile Ads / AdMob, for ad delivery, rewarded and interstitial ads, reporting, frequency capping, and invalid-activity prevention;
 - Android system services, for permissions, notifications, alarms, vibration, audio playback, camera access, and device sensors.
 
 These third-party services process data under their own terms and privacy policies. You can review Google's Privacy Policy at https://policies.google.com/privacy.

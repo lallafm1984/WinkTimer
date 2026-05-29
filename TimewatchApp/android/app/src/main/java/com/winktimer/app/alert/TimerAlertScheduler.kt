@@ -11,6 +11,7 @@ object TimerAlertScheduler {
   const val EXTRA_SOUND_ID = "soundId"
   const val EXTRA_VIBRATION_ENABLED = "vibrationEnabled"
   const val EXTRA_SOUND_ENABLED = "soundEnabled"
+  const val EXTRA_SOUND_VOLUME = "soundVolume"
   const val EXTRA_DURATION_ID = "durationId"
   const val EXTRA_VIBRATION_PATTERN_ID = "vibrationPatternId"
   const val EXTRA_NOTIFICATION_TITLE = "notificationTitle"

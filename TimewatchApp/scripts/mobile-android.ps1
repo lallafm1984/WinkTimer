@@ -52,10 +52,10 @@ function Get-DeviceId {
     throw "adb devices failed. Check Android SDK platform-tools installation."
   }
 
-  $devices = $rawDevices |
+  $devices = @($rawDevices |
     Select-Object -Skip 1 |
     Where-Object { $_ -match "\tdevice$" } |
-    ForEach-Object { ($_ -split "\s+")[0] }
+    ForEach-Object { ($_ -split "\s+")[0] })
 
   if ($RequestedDeviceId) {
     if ($devices -notcontains $RequestedDeviceId) {
