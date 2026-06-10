@@ -59,16 +59,22 @@ object TimerAlertPlayback {
     }
   }
 
-  fun preview(context: Context, soundId: String, durationMs: Long) {
+  fun preview(context: Context, soundId: String, durationMs: Long?) {
     stop(context)
     activeCleanupContext = context.applicationContext
     activeAlertOwner = ALERT_OWNER_PREVIEW
     boostMinimumAlarmVolume(context)
     playPreviewSound(context, soundId)
-    mainHandler.postDelayed(
-      stopAlertRunnable,
-      durationMs.coerceIn(500L, 10000L),
-    )
+    durationMs?.let {
+      mainHandler.postDelayed(
+        stopAlertRunnable,
+        it.coerceIn(500L, 10000L),
+      )
+    }
+  }
+
+  fun stopPreview(context: Context): Boolean {
+    return stop(context, ALERT_OWNER_PREVIEW)
   }
 
   fun stop(context: Context?, alertOwner: String? = null): Boolean {

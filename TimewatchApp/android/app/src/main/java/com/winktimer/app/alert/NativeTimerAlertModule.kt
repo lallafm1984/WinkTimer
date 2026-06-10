@@ -297,6 +297,25 @@ class NativeTimerAlertModule(
   }
 
   @ReactMethod
+  fun playTimerAlertSoundPreview(
+    soundId: String,
+    promise: Promise,
+  ) {
+    try {
+      TimerAlertPlayback.preview(reactContext, soundId, null)
+      promise.resolve(null)
+    } catch (error: Exception) {
+      promise.reject("E_TIMER_ALERT_PREVIEW_FAILED", error)
+    }
+  }
+
+  @ReactMethod
+  fun stopTimerAlertSoundPreview(promise: Promise) {
+    TimerAlertPlayback.stopPreview(reactContext)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun stopTimerEndAlert(promise: Promise) {
     TimerAlertScheduler.cancel(reactContext)
     TimerAlertService.stop(reactContext, TimerAlertService.ALERT_OWNER_TIMER)

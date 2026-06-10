@@ -45,14 +45,18 @@ function Invoke-Checked {
   }
 }
 
+function Write-AdMobEnvironmentFile {
+  param([string]$Content)
+
+  $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+  [System.IO.File]::WriteAllText($AdMobEnvironmentFile, $Content, $utf8NoBom)
+}
+
 function Set-AdMobEnvironment {
   param([bool]$ForceTestAds)
 
   $value = if ($ForceTestAds) { "true" } else { "false" }
-  Set-Content `
-    -LiteralPath $AdMobEnvironmentFile `
-    -Value "export const FORCE_TEST_ADS = $value;" `
-    -Encoding UTF8
+  Write-AdMobEnvironmentFile "export const FORCE_TEST_ADS = $value;`n"
 }
 
 try {
@@ -100,9 +104,6 @@ try {
   exit 1
 } finally {
   if ($null -ne $OriginalAdMobEnvironment) {
-    Set-Content `
-      -LiteralPath $AdMobEnvironmentFile `
-      -Value $OriginalAdMobEnvironment `
-      -Encoding UTF8
+    Write-AdMobEnvironmentFile $OriginalAdMobEnvironment
   }
 }

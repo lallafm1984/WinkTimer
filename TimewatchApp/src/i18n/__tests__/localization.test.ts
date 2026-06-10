@@ -107,11 +107,25 @@ describe('localization', () => {
     expect(english('alarm.setupTitle')).toBe('ALARM SETUP');
   });
 
-  it('uses natural Japanese wording for rewarded ad access', () => {
-    const japanese = createTranslator('ja-JP');
+  it('uses clear rewarded ad opt-in popup wording', () => {
+    const english = createTranslator('en-US');
+    const korean = createTranslator('ko-KR');
 
-    expect(japanese('rewarded.accessLabel')).toBe(
-      '広告を見ると3時間利用できます',
+    expect(english('rewarded.unlockTitle')).toBe('Mode access');
+    expect(english('rewarded.unlockMessage')).toBe(
+      'Watch an ad to use all modes for 3 hours.',
+    );
+    expect(english('rewarded.watchAdAction')).toBe('Watch ad');
+    expect(english('rewarded.noFillOneTimeMessage')).toBe(
+      'No ad is available right now. This mode opened one time only.',
+    );
+    expect(korean('rewarded.unlockTitle')).toBe('모드 이용');
+    expect(korean('rewarded.unlockMessage')).toBe(
+      '광고를 보면 모든 모드를 3시간 이용할 수 있어요.',
+    );
+    expect(korean('rewarded.watchAdAction')).toBe('광고 보기');
+    expect(korean('rewarded.noFillOneTimeMessage')).toBe(
+      '지금은 볼 수 있는 광고가 없어 이 모드를 1회만 이용할 수 있어요.',
     );
   });
 

@@ -7,7 +7,9 @@ import {
   getInterstitialAdDateKey,
   type InterstitialAdFrequencySnapshot,
   showAlarmStopInterstitialIfEligible,
+  showSettingsEntryInterstitialIfEligible,
   showInterstitialAd,
+  shouldShowSettingsEntryInterstitialAd,
   shouldShowInterstitialAd,
   type InterstitialAdForDisplay,
   type InterstitialAdFrequencyRepository,
@@ -128,6 +130,22 @@ describe('interstitialAd', () => {
     ).toBe(false);
   });
 
+  it('skips settings-entry interstitials when their remote flag is disabled', () => {
+    expect(
+      shouldShowSettingsEntryInterstitialAd(
+        createFrequencySnapshot(),
+        {
+          enabled: true,
+          dailyCap: 3,
+          cooldownMs: INTERSTITIAL_AD_COOLDOWN_MS,
+          settingsEntryEnabled: false,
+          settingsCloseReviewPromptEnabled: true,
+        },
+        1_000,
+      ),
+    ).toBe(false);
+  });
+
   it('loads and shows an interstitial before resolving after it closes', async () => {
     const interstitialAd = createFakeInterstitialAd();
     const promise = showInterstitialAd({
@@ -154,6 +172,23 @@ describe('interstitialAd', () => {
 
     await expect(
       showAlarmStopInterstitialIfEligible({
+        nowMs: shownAtMs,
+        repository,
+        showAd,
+      }),
+    ).resolves.toBe(true);
+
+    expect(showAd).toHaveBeenCalledTimes(1);
+    expect(repository.recordShown).toHaveBeenCalledWith(shownAtMs);
+  });
+
+  it('records settings-entry exposure only after an eligible ad is shown', async () => {
+    const shownAtMs = 1_000_000;
+    const repository = createFrequencyRepository(createFrequencySnapshot());
+    const showAd = jest.fn(async () => undefined);
+
+    await expect(
+      showSettingsEntryInterstitialIfEligible({
         nowMs: shownAtMs,
         repository,
         showAd,

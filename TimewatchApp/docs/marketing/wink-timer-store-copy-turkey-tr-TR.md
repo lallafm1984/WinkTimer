@@ -17,7 +17,7 @@ Wink Timer: Alarm ve Timer
 ## 간단한 설명
 
 ```text
-Alarm, zamanlayıcı, kronometre ve dokunmadan kontrol.
+Kamerayla kontrol edilebilen zamanlayıcı, kronometre ve alarm.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Göz kırpma ile kronometre
 ## 앱 설치 캠페인 설명
 
 ```text
-Alarm, zamanlayıcı ve kronometreyi bakış, göz kırpma ve çevirme kontrolleriyle kullanın.
-Ses, titreşim, seviye ve ertelemeli günlük, haftalık veya tarihli alarmlar oluşturun.
-Uyanma, antrenman, mola, yemek ve hızlı kronometre turlarını tek uygulamada yönetin.
-Alarm, zamanlayıcı ve kronometre kamera olmadan çalışır; destekli kontrolleri gerektiğinde açın.
-Zamanlayıcı uyarılarını ve tekrar alarmlarını ses, seviye ve titreşimle ayarlayın.
+Zamanlayıcıyı bakış, göz kırpma veya gülümseme ile kontrol edin; turları kaydedin.
+Elleriniz ıslakken veya antrenmandayken ekrana dokunmadan zamanlayıcıyı kontrol edin.
+Bakışla duraklatma, göz kırpma, gülümseme veya telefonu çevirme modunu seçin.
+Yemek, spor, ders veya iş sırasında zamanlayıcıyı daha kolay sürdürün.
+Kamera algılama ile başlatın, duraklatın, sürdürün ve daha az dokunuşla kaydedin.
 ```
 
 ## 알람 중심 광고 소재

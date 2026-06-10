@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
+import com.winktimer.app.MainActivity
 import java.util.Calendar
 
 object AlarmAlertScheduler {
@@ -20,6 +22,7 @@ object AlarmAlertScheduler {
   private const val REQUEST_CODE_BASE = 120_000
   private const val DEFAULT_DURATION_ID = "untilStopped"
   private const val DEFAULT_VIBRATION_PATTERN_ID = "longRepeat"
+  private const val TAG = "WinkTimerAlarm"
 
   fun schedule(
     context: Context,
@@ -67,13 +70,35 @@ object AlarmAlertScheduler {
       ) ?: return
 
     schedulePendingIntent(
+      context,
       alarmManager,
       triggerAtMs.coerceAtLeast(System.currentTimeMillis()),
       pendingIntent,
     )
+
+    AlarmAlertStore.save(
+      context,
+      PersistedAlarmAlert(
+        alarmId,
+        hour,
+        minute,
+        scheduleKind,
+        weekdaysCsv,
+        datesCsv,
+        soundId,
+        vibrationEnabled,
+        soundEnabled,
+        soundVolume,
+        notificationTitle,
+        notificationText,
+        notificationChannelName,
+      ),
+    )
   }
 
   fun cancel(context: Context, alarmId: String) {
+    AlarmAlertStore.remove(context, alarmId)
+
     val alarmManager =
       context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
         ?: return
@@ -142,6 +167,7 @@ object AlarmAlertScheduler {
       ) ?: return
 
     schedulePendingIntent(
+      context,
       alarmManager,
       triggerAtMs.coerceAtLeast(System.currentTimeMillis()),
       pendingIntent,
@@ -191,7 +217,12 @@ object AlarmAlertScheduler {
         weekdaysCsv,
         datesCsv,
         System.currentTimeMillis() + 1000L,
-      ) ?: return
+      )
+
+    if (nextTriggerAtMs == null) {
+      AlarmAlertStore.remove(context, alarmId)
+      return
+    }
 
     schedule(
       context,
@@ -222,6 +253,59 @@ object AlarmAlertScheduler {
   }
 
   private fun schedulePendingIntent(
+    context: Context,
+    alarmManager: AlarmManager,
+    triggerAtMs: Long,
+    pendingIntent: PendingIntent,
+  ) {
+    val canScheduleExactAlarms = canScheduleUserVisibleExactAlarms(alarmManager)
+    val scheduleMode =
+      AlarmAlertSchedulingPolicy.getScheduleMode(
+        isExactAlarmPermissionRequired = isExactAlarmPermissionRequired(),
+        canScheduleExactAlarms = canScheduleExactAlarms,
+      )
+
+    Log.i(
+      TAG,
+      "schedule mode=$scheduleMode exactAllowed=$canScheduleExactAlarms triggerAtMs=$triggerAtMs",
+    )
+
+    if (
+      scheduleMode == AlarmAlertSchedulingPolicy.SCHEDULE_MODE_ALARM_CLOCK
+    ) {
+      try {
+        alarmManager.setAlarmClock(
+          AlarmManager.AlarmClockInfo(
+            triggerAtMs,
+            createShowAlarmPendingIntent(context),
+          ),
+          pendingIntent,
+        )
+        return
+      } catch (error: SecurityException) {
+        Log.w(
+          TAG,
+          "setAlarmClock denied; falling back to allow-while-idle scheduling",
+          error,
+        )
+      }
+
+      scheduleAllowWhileIdle(alarmManager, triggerAtMs, pendingIntent)
+      return
+    }
+
+    scheduleAllowWhileIdle(alarmManager, triggerAtMs, pendingIntent)
+  }
+
+  private fun canScheduleUserVisibleExactAlarms(
+    alarmManager: AlarmManager,
+  ): Boolean =
+    !isExactAlarmPermissionRequired() || alarmManager.canScheduleExactAlarms()
+
+  private fun isExactAlarmPermissionRequired(): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+  private fun scheduleAllowWhileIdle(
     alarmManager: AlarmManager,
     triggerAtMs: Long,
     pendingIntent: PendingIntent,
@@ -247,6 +331,20 @@ object AlarmAlertScheduler {
           pendingIntent,
         )
     }
+  }
+
+  private fun createShowAlarmPendingIntent(context: Context): PendingIntent {
+    val intent =
+      Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+      }
+
+    return PendingIntent.getActivity(
+      context,
+      REQUEST_CODE_BASE - 1,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
   }
 
   private fun createPendingIntent(
@@ -308,7 +406,7 @@ object AlarmAlertScheduler {
       ((if (isSnooze) "$alarmId:snooze" else alarmId).hashCode() and
         0x0FFFFFFF)
 
-  private fun getNextTriggerAtMs(
+  internal fun getNextTriggerAtMs(
     hour: Int,
     minute: Int,
     scheduleKind: String,

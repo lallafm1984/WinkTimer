@@ -9,6 +9,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.winktimer.app.alert.NativeTimerAlertPackage
 import com.winktimer.app.clipboard.NativeTimelineClipboardPackage
 import com.winktimer.app.gaze.NativeGazeDetectionPackage
+import com.winktimer.app.review.NativeAppReviewPackage
 import com.winktimer.app.reward.NativeRewardedAccessPackage
 
 class MainApplication : Application(), ReactApplication {
@@ -23,6 +24,7 @@ class MainApplication : Application(), ReactApplication {
           add(NativeGazeDetectionPackage())
           add(NativeTimerAlertPackage())
           add(NativeTimelineClipboardPackage())
+          add(NativeAppReviewPackage())
           add(NativeRewardedAccessPackage())
         },
     )

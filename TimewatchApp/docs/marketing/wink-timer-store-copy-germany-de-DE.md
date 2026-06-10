@@ -17,7 +17,7 @@ Wink Timer: Wecker & Timer
 ## 간단한 설명
 
 ```text
-Wecker, Timer, Stoppuhr und Steuerung ohne Tippen.
+Timer und Stoppuhr per Kamera steuern, plus Wecker.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Umdrehen und Timer starten
 ## 앱 설치 캠페인 설명
 
 ```text
-Nutze Wecker, Timer und Stoppuhr mit optionalem Blick-, Zwinker- und Flip-Modus.
-Erstelle tägliche, wöchentliche und datierte Wecker mit Ton, Vibration, Lautstärke und Snooze.
-Plane Aufstehen, Training, Pausen, Kochtimer und schnelle Stoppuhr-Runden.
-Nutze Wecker, Timer und Stoppuhr ohne Kamera; aktiviere Assistenzmodi nur bei Bedarf.
-Passe Timer-Alarme und wiederholte Wecker mit Ton, Lautstärke und Vibration an.
+Steuere Timer per Blick, Zwinkern oder Lächeln; speichere Runden per Zwinkern.
+Mit nassen Händen oder beim Training steuerst du den Timer ohne Tippen.
+Wähle Blick-Pause, Steuerung per Zwinkern, Lächeln oder Flip-Timer.
+Beim Kochen, Training, Lernen oder Arbeiten läuft dein Timer leichter weiter.
+Nutze Kameraerkennung zum Starten, Pausieren, Fortsetzen und Speichern mit weniger Tippen.
 ```
 
 ## 알람 중심 광고 소재

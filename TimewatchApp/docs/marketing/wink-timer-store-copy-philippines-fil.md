@@ -17,7 +17,7 @@ Wink Timer: Alarm Timer
 ## 간단한 설명
 
 ```text
-Alarm, timer, stopwatch, may no-touch controls.
+Timer at stopwatch na makokontrol gamit ang camera, may alarm.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Flip phone to start timer
 ## 앱 설치 캠페인 설명
 
 ```text
-Gamitin ang alarms, timer, at stopwatch na may optional tingin, kindat, at phone flip.
-Gumawa ng daily, weekday, o date alarms na may sound, vibration, volume, at snooze.
-I-manage ang wake-up, workout, breaks, cooking timer, at quick stopwatch laps.
-Gamitin ang alarm, timer, at stopwatch nang walang camera; i-on ang assisted controls kapag kailangan.
-I-adjust ang timer alerts at repeating alarms gamit ang sound, volume, at vibration.
+Kontrolin ang timer gamit ang tingin, kindat, o ngiti; mag-record ng laps sa kindat.
+Kapag basa ang kamay o nagwo-workout, kontrolin ang timer nang hindi tina-tap ang screen.
+Piliin ang pause sa tingin, kindat control, smile control, o flip timer ayon sa sitwasyon.
+Sa pagluluto, workout, pag-aaral, o trabaho, mas madali mong maitutuloy ang timer.
+Gamitin ang camera detection para mag-start, pause, resume, at record sa mas kaunting tap.
 ```
 
 ## 알람 중심 광고 소재

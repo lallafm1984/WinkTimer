@@ -26,6 +26,7 @@ class TimerAlertService : Service() {
   private val stopRunnable = Runnable {
     stopSelf()
   }
+  private var requestedStopOwner: String? = null
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -34,7 +35,13 @@ class TimerAlertService : Service() {
       val requestedOwner =
         intent.getStringExtra(EXTRA_ALERT_OWNER) ?: ALERT_OWNER_TIMER
 
-      if (activeAlertOwner == null || activeAlertOwner == requestedOwner) {
+      if (
+        TimerAlertServiceStopPolicy.shouldStopServiceForOwner(
+          activeAlertOwner,
+          requestedOwner,
+        )
+      ) {
+        requestedStopOwner = requestedOwner
         stopSelf()
       }
 
@@ -79,10 +86,12 @@ class TimerAlertService : Service() {
       intent.getStringExtra(EXTRA_ALERT_OWNER) ?: ALERT_OWNER_TIMER
     val alarmId = intent.getStringExtra(AlarmAlertScheduler.EXTRA_ALARM_ID)
 
+    requestedStopOwner = null
     startAlertForeground(
       notificationTitle,
       notificationText,
       notificationChannelName,
+      alertOwner,
     )
 
     setActiveAlertState(alertOwner, alarmId, notificationTitle, notificationText)
@@ -106,9 +115,14 @@ class TimerAlertService : Service() {
 
   override fun onDestroy() {
     mainHandler.removeCallbacks(stopRunnable)
-    val alertOwner = activeAlertOwner
+    val alertOwner =
+      TimerAlertServiceStopPolicy.getDestroyPlaybackOwner(
+        activeAlertOwner,
+        requestedStopOwner,
+      )
     clearActiveAlertState(alertOwner)
     TimerAlertPlayback.stop(applicationContext, alertOwner)
+    requestedStopOwner = null
     super.onDestroy()
   }
 
@@ -116,9 +130,11 @@ class TimerAlertService : Service() {
     notificationTitle: String,
     notificationText: String,
     notificationChannelName: String,
+    alertOwner: String,
   ) {
-    createNotificationChannel(notificationChannelName)
-    val notification = createNotification(notificationTitle, notificationText)
+    createNotificationChannel(notificationChannelName, alertOwner)
+    val notification =
+      createNotification(notificationTitle, notificationText, alertOwner)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       startForeground(
@@ -134,6 +150,7 @@ class TimerAlertService : Service() {
   private fun createNotification(
     notificationTitle: String,
     notificationText: String,
+    alertOwner: String,
   ): Notification {
     val openIntent =
       Intent(this, MainActivity::class.java).apply {
@@ -149,7 +166,10 @@ class TimerAlertService : Service() {
 
     val builder =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        Notification.Builder(this, CHANNEL_ID)
+        Notification.Builder(
+          this,
+          TimerAlertNotificationPolicy.getChannelId(alertOwner),
+        )
       } else {
         @Suppress("DEPRECATION")
         Notification.Builder(this)
@@ -164,12 +184,22 @@ class TimerAlertService : Service() {
       .setContentText(notificationText.trim().ifEmpty { "Timer finished" })
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setCategory(Notification.CATEGORY_ALARM)
+      .setPriority(TimerAlertNotificationPolicy.getNotificationPriority(alertOwner))
+      .setVisibility(Notification.VISIBILITY_PUBLIC)
       .setOngoing(true)
       .setContentIntent(openPendingIntent)
+      .apply {
+        if (alertOwner == ALERT_OWNER_ALARM) {
+          setFullScreenIntent(openPendingIntent, true)
+        }
+      }
       .build()
   }
 
-  private fun createNotificationChannel(notificationChannelName: String) {
+  private fun createNotificationChannel(
+    notificationChannelName: String,
+    alertOwner: String,
+  ) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       return
     }
@@ -178,7 +208,9 @@ class TimerAlertService : Service() {
       getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         ?: return
 
-    notificationManager.getNotificationChannel(CHANNEL_ID)?.let { channel ->
+    val channelId = TimerAlertNotificationPolicy.getChannelId(alertOwner)
+
+    notificationManager.getNotificationChannel(channelId)?.let { channel ->
       channel.setShowBadge(false)
       notificationManager.createNotificationChannel(channel)
       return
@@ -186,11 +218,12 @@ class TimerAlertService : Service() {
 
     val channel =
       NotificationChannel(
-        CHANNEL_ID,
+        channelId,
         notificationChannelName.trim().ifEmpty { "Timer alerts" },
-        NotificationManager.IMPORTANCE_LOW,
+        TimerAlertNotificationPolicy.getChannelImportance(alertOwner),
       ).apply {
         setShowBadge(false)
+        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
       }
 
     notificationManager.createNotificationChannel(channel)
@@ -202,7 +235,6 @@ class TimerAlertService : Service() {
     private const val ACTION_PLAY = "com.winktimer.app.alert.START_ALERT_SERVICE"
     private const val ACTION_STOP = "com.winktimer.app.alert.STOP_ALERT_SERVICE"
     private const val EXTRA_ALERT_OWNER = "alertOwner"
-    private const val CHANNEL_ID = "winktimer_timer_alerts"
     private const val NOTIFICATION_ID = 9202
     private var activeAlertOwner: String? = null
     private var activeAlarmId: String? = null
@@ -249,6 +281,16 @@ class TimerAlertService : Service() {
       }
 
     fun stop(context: Context, alertOwner: String = ALERT_OWNER_TIMER) {
+      if (
+        !TimerAlertServiceStopPolicy.shouldStartServiceForStop(
+          activeAlertOwner,
+          alertOwner,
+        )
+      ) {
+        TimerAlertPlayback.stop(context, alertOwner)
+        return
+      }
+
       try {
         context.startService(
           Intent(context, TimerAlertService::class.java).apply {
@@ -277,6 +319,19 @@ class TimerAlertService : Service() {
         activeAlarmId,
         activeNotificationTitle?.trim()?.ifEmpty { null } ?: "Alarm",
         activeNotificationText?.trim()?.ifEmpty { null } ?: "Alarm",
+      )
+    }
+
+    fun setFallbackActiveAlarmAlert(
+      alarmId: String?,
+      notificationTitle: String,
+      notificationText: String,
+    ) {
+      setActiveAlertState(
+        ALERT_OWNER_ALARM,
+        alarmId,
+        notificationTitle,
+        notificationText,
       )
     }
 

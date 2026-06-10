@@ -9,18 +9,24 @@ export const INTERSTITIAL_AD_REMOTE_CONFIG_KEYS = {
   enabled: 'ads_interstitial_enabled',
   dailyCap: 'ads_interstitial_daily_cap',
   cooldownHours: 'ads_interstitial_cooldown_hours',
+  settingsEntryEnabled: 'ads_settings_entry_interstitial_enabled',
+  settingsCloseReviewPromptEnabled: 'app_review_prompt_settings_close_enabled',
 } as const;
 
 export const INTERSTITIAL_AD_REMOTE_CONFIG_DEFAULTS = {
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.enabled]: true,
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.dailyCap]: 3,
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.cooldownHours]: 3,
+  [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsEntryEnabled]: true,
+  [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsCloseReviewPromptEnabled]: true,
 };
 
 export type InterstitialAdPolicy = {
   enabled: boolean;
   dailyCap: number;
   cooldownMs: number;
+  settingsEntryEnabled: boolean;
+  settingsCloseReviewPromptEnabled: boolean;
 };
 
 export type InterstitialAdRemoteConfigClient = {
@@ -39,6 +45,8 @@ export const DEFAULT_INTERSTITIAL_AD_POLICY: InterstitialAdPolicy = {
   enabled: true,
   dailyCap: 3,
   cooldownMs: 3 * HOURS_TO_MS,
+  settingsEntryEnabled: true,
+  settingsCloseReviewPromptEnabled: true,
 };
 
 const MIN_INTERSTITIAL_AD_DAILY_CAP = 0;
@@ -72,10 +80,14 @@ export function sanitizeInterstitialAdPolicy({
   enabled,
   dailyCap,
   cooldownHours,
+  settingsEntryEnabled,
+  settingsCloseReviewPromptEnabled,
 }: {
   enabled: unknown;
   dailyCap: unknown;
   cooldownHours: unknown;
+  settingsEntryEnabled?: unknown;
+  settingsCloseReviewPromptEnabled?: unknown;
 }): InterstitialAdPolicy {
   const normalizedDailyCap = normalizeInteger(
     dailyCap,
@@ -94,6 +106,14 @@ export function sanitizeInterstitialAdPolicy({
     enabled: typeof enabled === 'boolean' ? enabled : true,
     dailyCap: normalizedDailyCap,
     cooldownMs: normalizedCooldownHours * HOURS_TO_MS,
+    settingsEntryEnabled:
+      typeof settingsEntryEnabled === 'boolean'
+        ? settingsEntryEnabled
+        : DEFAULT_INTERSTITIAL_AD_POLICY.settingsEntryEnabled,
+    settingsCloseReviewPromptEnabled:
+      typeof settingsCloseReviewPromptEnabled === 'boolean'
+        ? settingsCloseReviewPromptEnabled
+        : DEFAULT_INTERSTITIAL_AD_POLICY.settingsCloseReviewPromptEnabled,
   };
 }
 
@@ -105,6 +125,12 @@ function readInterstitialAdPolicyFromClient(
     dailyCap: client.getNumber(INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.dailyCap),
     cooldownHours: client.getNumber(
       INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.cooldownHours,
+    ),
+    settingsEntryEnabled: client.getBoolean(
+      INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsEntryEnabled,
+    ),
+    settingsCloseReviewPromptEnabled: client.getBoolean(
+      INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsCloseReviewPromptEnabled,
     ),
   });
 }
@@ -150,6 +176,9 @@ export function initializeInterstitialAdRemoteConfig({
         enabled: activeInterstitialAdPolicy.enabled,
         dailyCap: activeInterstitialAdPolicy.dailyCap,
         cooldownMs: activeInterstitialAdPolicy.cooldownMs,
+        settingsEntryEnabled: activeInterstitialAdPolicy.settingsEntryEnabled,
+        settingsCloseReviewPromptEnabled:
+          activeInterstitialAdPolicy.settingsCloseReviewPromptEnabled,
       });
       return activeInterstitialAdPolicy;
     })
@@ -166,4 +195,8 @@ export function initializeInterstitialAdRemoteConfig({
 export function resetInterstitialAdRemoteConfigForTests() {
   initializationPromise = null;
   activeInterstitialAdPolicy = DEFAULT_INTERSTITIAL_AD_POLICY;
+}
+
+export function isSettingsCloseAppReviewPromptEnabled() {
+  return activeInterstitialAdPolicy.settingsCloseReviewPromptEnabled;
 }

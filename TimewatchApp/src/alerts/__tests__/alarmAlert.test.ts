@@ -58,6 +58,39 @@ describe('alarmAlert localization', () => {
     );
   });
 
+  it('passes vibration-only alarms to native scheduling without sound', async () => {
+    const scheduleNativeAlarm = jest.fn().mockResolvedValue(undefined);
+    nativeModules.NativeTimerAlert = {
+      scheduleAlarmAlert: scheduleNativeAlarm,
+    };
+
+    await scheduleAlarmAlert(
+      {
+        ...createDefaultAlarm(1000),
+        soundEnabled: false,
+        vibrationEnabled: true,
+      },
+      'en-US',
+    );
+
+    expect(scheduleNativeAlarm).toHaveBeenLastCalledWith(
+      'alarm-1000',
+      new Date(2026, 4, 28, 7, 0).getTime(),
+      7,
+      0,
+      'daily',
+      '',
+      '',
+      'alarm',
+      true,
+      false,
+      0.85,
+      'Alarm',
+      '07:00',
+      'Alarm alerts',
+    );
+  });
+
   it('uses localized fallback text for active native alarm alerts', async () => {
     nativeModules.NativeTimerAlert = {
       getActiveAlarmAlert: jest.fn().mockResolvedValue({

@@ -19,7 +19,8 @@ import {
   getTimerAlertDurationSeconds,
   isTimerAlertUntilStopped,
   loadTimerAlertSoundOptions,
-  previewTimerAlertSound,
+  playTimerAlertSoundPreview,
+  stopTimerAlertSoundPreview,
   timerAlertSoundOptions,
   timerAlertVibrationPatternOptions,
   type TimerAlertDurationId,
@@ -857,9 +858,17 @@ function SoundOptionControl({value, t, onChange}: SoundOptionControlProps) {
     () => [...timerAlertSoundOptions],
   );
   const [soundModalVisible, setSoundModalVisible] = useState(false);
+  const [playingPreviewSoundId, setPlayingPreviewSoundId] = useState<
+    string | null
+  >(null);
   const selectedOption =
     soundOptions.find(option => option.id === value) ??
     timerAlertSoundOptions.find(option => option.id === value);
+
+  const stopSoundPreview = React.useCallback(() => {
+    setPlayingPreviewSoundId(null);
+    stopTimerAlertSoundPreview().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -874,8 +883,23 @@ function SoundOptionControl({value, t, onChange}: SoundOptionControlProps) {
 
     return () => {
       mounted = false;
+      stopTimerAlertSoundPreview().catch(() => undefined);
     };
   }, []);
+
+  const toggleSoundPreview = (soundId: string) => {
+    if (playingPreviewSoundId === soundId) {
+      stopSoundPreview();
+      return;
+    }
+
+    setPlayingPreviewSoundId(soundId);
+    playTimerAlertSoundPreview(soundId).catch(() => {
+      setPlayingPreviewSoundId(current =>
+        current === soundId ? null : current,
+      );
+    });
+  };
 
   return (
     <View style={styles.section}>
@@ -904,6 +928,7 @@ function SoundOptionControl({value, t, onChange}: SoundOptionControlProps) {
         <Modal
           animationType="fade"
           onRequestClose={() => {
+            stopSoundPreview();
             setSoundModalVisible(false);
           }}
           transparent
@@ -915,6 +940,7 @@ function SoundOptionControl({value, t, onChange}: SoundOptionControlProps) {
                 <PrimaryButton
                   label={t('common.close')}
                   onPress={() => {
+                    stopSoundPreview();
                     setSoundModalVisible(false);
                   }}
                   testID="timer-alert-sound-close"
@@ -934,6 +960,7 @@ function SoundOptionControl({value, t, onChange}: SoundOptionControlProps) {
                       accessibilityState={{selected: value === option.id}}
                       label={formatSoundOptionLabel(option, t)}
                       onPress={() => {
+                        stopSoundPreview();
                         onChange(option.id);
                         setSoundModalVisible(false);
                       }}
@@ -942,15 +969,21 @@ function SoundOptionControl({value, t, onChange}: SoundOptionControlProps) {
                       style={styles.soundOptionSelectButton}
                     />
                     <PrimaryButton
-                      accessibilityLabel={t('common.preview')}
-                      label="▶"
+                      accessibilityLabel={
+                        playingPreviewSoundId === option.id
+                          ? t('alarm.stopPreview')
+                          : t('common.preview')
+                      }
+                      label={playingPreviewSoundId === option.id ? '■' : '▶'}
                       onPress={() => {
-                        previewTimerAlertSound(option.id).catch(
-                          () => undefined,
-                        );
+                        toggleSoundPreview(option.id);
                       }}
                       testID={getSoundOptionPreviewTestID(option, index)}
-                      variant="secondary"
+                      variant={
+                        playingPreviewSoundId === option.id
+                          ? 'primary'
+                          : 'secondary'
+                      }
                       style={styles.soundOptionPreviewButton}
                     />
                   </View>

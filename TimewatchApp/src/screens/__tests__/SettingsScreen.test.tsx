@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
-import {TIMER_ALERT_PREVIEW_DURATION_MS} from '../../alerts/timerAlert';
 import {SettingsScreen} from '../SettingsScreen';
 
 const mockSetScreen = jest.fn();
@@ -413,6 +412,8 @@ describe('SettingsScreen', () => {
     mockState.locale = 'en-US';
     (NativeModules as {NativeTimerAlert?: unknown}).NativeTimerAlert = {
       previewTimerAlertSound: jest.fn().mockResolvedValue(undefined),
+      playTimerAlertSoundPreview: jest.fn().mockResolvedValue(undefined),
+      stopTimerAlertSoundPreview: jest.fn().mockResolvedValue(undefined),
       getTimerAlertSoundOptions: jest.fn().mockResolvedValue([
         {id: 'alarm', label: 'DEFAULT ALARM', category: 'Default'},
         {
@@ -1049,15 +1050,58 @@ describe('SettingsScreen', () => {
     expect(
       (
         NativeModules as {
+          NativeTimerAlert?: {playTimerAlertSoundPreview: jest.Mock};
+        }
+      ).NativeTimerAlert?.playTimerAlertSoundPreview,
+    ).toHaveBeenCalledWith('uri:content://settings/system/alarm_alert');
+    expect(
+      (
+        NativeModules as {
           NativeTimerAlert?: {previewTimerAlertSound: jest.Mock};
         }
       ).NativeTimerAlert?.previewTimerAlertSound,
-    ).toHaveBeenCalledWith(
-      'uri:content://settings/system/alarm_alert',
-      TIMER_ALERT_PREVIEW_DURATION_MS,
-    );
+    ).not.toHaveBeenCalled();
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-alert-sound-preview-1',
+      }).props.accessibilityLabel,
+    ).toBe('STOP');
+    expect(getRenderedText(renderer)).toContain('■');
+
+    pressByTestID(renderer, 'timer-alert-sound-preview-1');
+
+    expect(
+      (
+        NativeModules as {
+          NativeTimerAlert?: {stopTimerAlertSoundPreview: jest.Mock};
+        }
+      ).NativeTimerAlert?.stopTimerAlertSoundPreview,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      renderer.root.findByProps({
+        testID: 'timer-alert-sound-preview-1',
+      }).props.accessibilityLabel,
+    ).toBe('PREVIEW');
+    expect(getRenderedText(renderer)).toContain('▶');
+
+    pressByTestID(renderer, 'timer-alert-sound-preview-1');
+    expect(
+      (
+        NativeModules as {
+          NativeTimerAlert?: {playTimerAlertSoundPreview: jest.Mock};
+        }
+      ).NativeTimerAlert?.playTimerAlertSoundPreview,
+    ).toHaveBeenCalledTimes(2);
 
     pressByTestID(renderer, 'timer-alert-sound-select-1');
+
+    expect(
+      (
+        NativeModules as {
+          NativeTimerAlert?: {stopTimerAlertSoundPreview: jest.Mock};
+        }
+      ).NativeTimerAlert?.stopTimerAlertSoundPreview,
+    ).toHaveBeenCalledTimes(2);
 
     expect(mockSetTimerAlertSoundId).toHaveBeenCalledWith(
       'uri:content://settings/system/alarm_alert',

@@ -40,12 +40,29 @@ type InterstitialAdOptions = {
   timeoutMs?: number;
 };
 
-type AlarmStopInterstitialOptions = {
+type BaseInterstitialAdPolicy = Pick<
+  InterstitialAdPolicy,
+  'enabled' | 'dailyCap' | 'cooldownMs'
+>;
+
+type SettingsEntryInterstitialPolicy = BaseInterstitialAdPolicy &
+  Pick<
+    InterstitialAdPolicy,
+    'settingsEntryEnabled' | 'settingsCloseReviewPromptEnabled'
+  >;
+
+type GatedInterstitialOptions = {
   nowMs?: number;
   repository?: InterstitialAdFrequencyRepository;
   showAd?: () => Promise<void>;
   getPolicy?: () => InterstitialAdPolicy;
 };
+
+type InterstitialEligibilityChecker = (
+  snapshot: InterstitialAdFrequencySnapshot,
+  policy: InterstitialAdPolicy,
+  nowMs: number,
+) => boolean;
 
 type InterstitialAdRecord = {
   version?: number;
@@ -133,7 +150,7 @@ function createFrequencySnapshot(
 
 export function shouldShowInterstitialAd(
   snapshot: InterstitialAdFrequencySnapshot,
-  policy = DEFAULT_INTERSTITIAL_AD_POLICY,
+  policy: BaseInterstitialAdPolicy = DEFAULT_INTERSTITIAL_AD_POLICY,
   nowMs = Date.now(),
 ) {
   if (!policy.enabled || policy.dailyCap <= 0) {
@@ -149,6 +166,18 @@ export function shouldShowInterstitialAd(
   }
 
   return nowMs - snapshot.lastShownAtMs >= policy.cooldownMs;
+}
+
+export function shouldShowSettingsEntryInterstitialAd(
+  snapshot: InterstitialAdFrequencySnapshot,
+  policy: SettingsEntryInterstitialPolicy = DEFAULT_INTERSTITIAL_AD_POLICY,
+  nowMs = Date.now(),
+) {
+  if (!policy.settingsEntryEnabled) {
+    return false;
+  }
+
+  return shouldShowInterstitialAd(snapshot, policy, nowMs);
 }
 
 export function createInterstitialAdFrequencyRepository(): InterstitialAdFrequencyRepository {
@@ -256,19 +285,46 @@ export function showInterstitialAd({
   });
 }
 
-export async function showAlarmStopInterstitialIfEligible({
-  nowMs = Date.now(),
-  repository = createInterstitialAdFrequencyRepository(),
-  showAd = showInterstitialAd,
-  getPolicy = getInterstitialAdPolicy,
-}: AlarmStopInterstitialOptions = {}) {
+async function showGatedInterstitialIfEligible(
+  {
+    nowMs = Date.now(),
+    repository = createInterstitialAdFrequencyRepository(),
+    showAd = showInterstitialAd,
+    getPolicy = getInterstitialAdPolicy,
+  }: GatedInterstitialOptions,
+  shouldShow: InterstitialEligibilityChecker,
+) {
   const policy = getPolicy();
   const snapshot = await repository.getFrequencySnapshot(nowMs);
-  if (!shouldShowInterstitialAd(snapshot, policy, nowMs)) {
+  if (!shouldShow(snapshot, policy, nowMs)) {
     return false;
   }
 
   await showAd();
   await repository.recordShown(nowMs);
   return true;
+}
+
+export async function showAlarmStopInterstitialIfEligible({
+  nowMs = Date.now(),
+  repository = createInterstitialAdFrequencyRepository(),
+  showAd = showInterstitialAd,
+  getPolicy = getInterstitialAdPolicy,
+}: GatedInterstitialOptions = {}) {
+  return showGatedInterstitialIfEligible(
+    {nowMs, repository, showAd, getPolicy},
+    shouldShowInterstitialAd,
+  );
+}
+
+export async function showSettingsEntryInterstitialIfEligible({
+  nowMs = Date.now(),
+  repository = createInterstitialAdFrequencyRepository(),
+  showAd = showInterstitialAd,
+  getPolicy = getInterstitialAdPolicy,
+}: GatedInterstitialOptions = {}) {
+  return showGatedInterstitialIfEligible(
+    {nowMs, repository, showAd, getPolicy},
+    shouldShowSettingsEntryInterstitialAd,
+  );
 }

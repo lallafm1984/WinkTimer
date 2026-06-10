@@ -16,7 +16,7 @@ Wink Timer: Alarm Timer
 ## 간단한 설명
 
 ```text
-Alarm, timer, stopwatch, plus kontrol tanpa sentuh.
+Timer dan stopwatch yang bisa dikontrol kamera, plus alarm.
 ```
 
 ## 전체 설명
@@ -63,11 +63,11 @@ Balik ponsel untuk mulai
 ## 앱 설치 캠페인 설명
 
 ```text
-Gunakan alarm, timer, dan stopwatch dengan opsi tatapan, kedipan, dan balik ponsel.
-Buat alarm harian, mingguan, atau tanggal dengan suara, getaran, volume, dan snooze.
-Kelola bangun tidur, olahraga, istirahat, timer memasak, dan lap stopwatch cepat.
-Alarm, timer, dan stopwatch bisa dipakai tanpa kamera; aktifkan kontrol bantuan saat perlu.
-Atur peringatan timer dan alarm berulang dengan suara, volume, dan getaran.
+Kontrol timer dengan tatapan, kedipan, atau senyum; catat lap stopwatch dengan kedipan.
+Saat tangan basah atau sedang olahraga, kontrol timer tanpa menyentuh layar.
+Pilih jeda tatapan, kontrol kedipan, senyum, atau timer dengan membalik ponsel.
+Saat memasak, olahraga, belajar, atau bekerja, lanjutkan timer dengan lebih mudah.
+Gunakan deteksi kamera untuk mulai, jeda, lanjut, dan catat dengan lebih sedikit sentuhan.
 ```
 
 ## 알람 중심 광고 소재

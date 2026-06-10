@@ -94,6 +94,8 @@ type NativeTimerAlertModule = {
   ): Promise<void>;
   cancelScheduledTimerEndAlert?(): Promise<void>;
   previewTimerAlertSound?(soundId: string, durationMs: number): Promise<void>;
+  playTimerAlertSoundPreview?(soundId: string): Promise<void>;
+  stopTimerAlertSoundPreview?(): Promise<void>;
   stopTimerEndAlert?(): Promise<void>;
   getTimerAlertSoundOptions?(): Promise<unknown>;
 };
@@ -359,6 +361,21 @@ export function previewTimerAlertSound(
       soundId,
       TIMER_ALERT_PREVIEW_DURATION_MS,
     ) ?? Promise.resolve()
+  );
+}
+
+export function playTimerAlertSoundPreview(
+  soundId: TimerAlertSoundId,
+): Promise<void> {
+  return (
+    getNativeTimerAlert()?.playTimerAlertSoundPreview?.(soundId) ??
+    Promise.resolve()
+  );
+}
+
+export function stopTimerAlertSoundPreview(): Promise<void> {
+  return (
+    getNativeTimerAlert()?.stopTimerAlertSoundPreview?.() ?? Promise.resolve()
   );
 }
 

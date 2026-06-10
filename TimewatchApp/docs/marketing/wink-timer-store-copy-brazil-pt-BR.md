@@ -16,7 +16,7 @@ Wink Timer: Alarme e Timer
 ## 간단한 설명
 
 ```text
-Alarme, timer e cronômetro, com controle sem tocar.
+Timer e cronômetro controláveis por câmera, com alarme.
 ```
 
 ## 전체 설명
@@ -63,11 +63,11 @@ Vire para iniciar o timer
 ## 앱 설치 캠페인 설명
 
 ```text
-Use alarme, timer e cronômetro com controles opcionais por olhar, piscada e virada.
-Crie alarmes diários, por dia da semana ou por data com som, vibração, volume e soneca.
-Gerencie acordar, treino, pausas, timer de cozinha e voltas rápidas do cronômetro.
-Use alarme, timer e cronômetro sem câmera; ative os controles assistidos quando precisar.
-Ajuste alertas do timer e alarmes recorrentes com som, volume e vibração.
+Controle o timer com olhar, piscada ou sorriso, e registre voltas com uma piscada.
+Com as mãos molhadas ou durante o treino, controle o timer sem tocar na tela.
+Escolha pausa pelo olhar, controle por piscada, sorriso ou timer ao virar o celular.
+Ao cozinhar, treinar, estudar ou trabalhar, continue o timer com facilidade.
+Use o reconhecimento da câmera para iniciar, pausar, retomar e registrar com menos toques.
 ```
 
 ## 알람 중심 광고 소재

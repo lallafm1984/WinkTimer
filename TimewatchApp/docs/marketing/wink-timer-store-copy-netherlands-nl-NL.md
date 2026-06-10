@@ -17,7 +17,7 @@ Wink Timer: Alarm & Timer
 ## 간단한 설명
 
 ```text
-Alarm, timer, stopwatch en bediening zonder tikken.
+Timer en stopwatch met camerabediening, plus alarm.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Draai om en start de timer
 ## 앱 설치 캠페인 설명
 
 ```text
-Gebruik alarmen, timers en stopwatch met optioneel kijken, knipogen en omdraaien.
-Maak dagelijkse, wekelijkse en datumalarmen met geluid, trillen, volume en sluimeren.
-Beheer opstaan, workouts, pauzes, kooktimers en snelle stopwatchrondes.
-Gebruik alarm, timer en stopwatch zonder camera; zet hulpfuncties aan wanneer nodig.
-Stem timerwaarschuwingen en herhaalalarmen af met geluid, volume en trillen.
+Bedien timers met kijken, knipogen of glimlachen; sla rondes op met een knipoog.
+Met natte handen of tijdens het sporten bedien je de timer zonder op het scherm te tikken.
+Kies kijkpauze, knipoogbediening, glimlachbediening of flip-timer voor elke situatie.
+Tijdens koken, sporten, studeren of werken laat je de timer makkelijker doorlopen.
+Gebruik cameradetectie om te starten, pauzeren, hervatten en vast te leggen.
 ```
 
 ## 알람 중심 광고 소재

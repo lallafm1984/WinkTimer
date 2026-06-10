@@ -64,8 +64,8 @@ jest.mock('react-native-google-mobile-ads', () => {
     setRequestConfiguration: jest.fn(async () => undefined),
   }));
 
-  const MockBannerAd = () =>
-    ReactModule.createElement(View, {testID: 'mock-banner-ad'});
+  const MockBannerAd = (props: Record<string, unknown>) =>
+    ReactModule.createElement(View, {...props, testID: 'mock-banner-ad'});
 
   return {
     __esModule: true,

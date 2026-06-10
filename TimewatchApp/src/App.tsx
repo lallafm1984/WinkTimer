@@ -11,12 +11,25 @@ import {MascotImageCache} from './components/MascotImageCache';
 import {PrimaryButton} from './components/PrimaryButton';
 import {preloadMascotImages} from './components/mascotImages';
 import {AdMobBanner} from './ads/AdMobBanner';
-import {showAlarmStopInterstitialIfEligible} from './ads/interstitialAd';
-import {initializeInterstitialAdRemoteConfig} from './ads/interstitialAdRemoteConfig';
+import {
+  showAlarmStopInterstitialIfEligible,
+  showSettingsEntryInterstitialIfEligible,
+} from './ads/interstitialAd';
+import {
+  initializeInterstitialAdRemoteConfig,
+  isSettingsCloseAppReviewPromptEnabled,
+} from './ads/interstitialAdRemoteConfig';
+import {recordAdDiagnosticLog} from './ads/adDiagnosticLog';
 import {ensureAnonymousUser} from './auth/anonymousAuth';
 import {initializeMobileAds} from './ads/mobileAds';
 import {arcadeTheme} from './theme/arcadeTheme';
 import {createTranslator} from './i18n/localization';
+import {
+  openAppReviewPage,
+  recordAppReviewPromptRated,
+  recordAppReviewPromptShown,
+  shouldShowAppReviewPrompt,
+} from './review/appReviewPrompt';
 
 type SetScreen = React.Dispatch<React.SetStateAction<AppScreen>>;
 
@@ -153,7 +166,112 @@ function ActiveAlarmAlertPopup() {
   );
 }
 
-function SharedPrimaryScreenAd() {
+function AppReviewPrompt({
+  visible,
+  onLater,
+  onRate,
+}: {
+  visible: boolean;
+  onLater: () => void;
+  onRate: () => Promise<void>;
+}) {
+  const {locale} = useAppState();
+  const t = createTranslator(locale);
+
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      accessibilityViewIsModal>
+      <View style={styles.reviewModalBackdrop} testID="app-review-prompt">
+        <View style={styles.reviewModalPanel}>
+          <Text style={styles.reviewModalTitle} testID="app-review-prompt-title">
+            {t('appReview.title')}
+          </Text>
+          <Text style={styles.reviewModalText}>{t('appReview.message')}</Text>
+          <View style={styles.reviewModalActions}>
+            <PrimaryButton
+              label={t('appReview.later')}
+              onPress={onLater}
+              testID="app-review-later-button"
+              accessibilityLabel={t('appReview.later')}
+              variant="secondary"
+              style={styles.reviewModalAction}
+            />
+            <PrimaryButton
+              label={t('appReview.rate')}
+              onPress={onRate}
+              testID="app-review-rate-button"
+              accessibilityLabel={t('appReview.rate')}
+              style={styles.reviewModalAction}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function SettingsTransitionEffects() {
+  const {screen} = useAppState();
+  const previousScreenRef = React.useRef<AppScreen>(screen);
+  const [reviewPromptVisible, setReviewPromptVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    const previousScreen = previousScreenRef.current;
+    previousScreenRef.current = screen;
+
+    if (previousScreen === screen) {
+      return;
+    }
+
+    if (screen === 'settings') {
+      showSettingsEntryInterstitialIfEligible().catch(() => undefined);
+      return;
+    }
+
+    if (
+      previousScreen === 'settings' &&
+      isSettingsCloseAppReviewPromptEnabled()
+    ) {
+      shouldShowAppReviewPrompt()
+        .then(shouldShow => {
+          if (!shouldShow) {
+            return;
+          }
+
+          setReviewPromptVisible(true);
+          recordAppReviewPromptShown().catch(() => undefined);
+        })
+        .catch(() => undefined);
+    }
+  }, [screen]);
+
+  const handleLater = React.useCallback(() => {
+    setReviewPromptVisible(false);
+  }, []);
+
+  const handleRate = React.useCallback(async () => {
+    try {
+      await openAppReviewPage();
+      await recordAppReviewPromptRated();
+      setReviewPromptVisible(false);
+    } catch {
+      // Keep the prompt eligible if the store cannot be opened.
+    }
+  }, []);
+
+  return (
+    <AppReviewPrompt
+      visible={reviewPromptVisible}
+      onLater={handleLater}
+      onRate={handleRate}
+    />
+  );
+}
+
+function SharedPrimaryScreenAd({mobileAdsReady}: {mobileAdsReady: boolean}) {
   const {screen} = useAppState();
 
   if (screen !== 'timer' && screen !== 'alarms') {
@@ -162,12 +280,14 @@ function SharedPrimaryScreenAd() {
 
   return (
     <View style={styles.sharedAdFrame} testID="shared-primary-screen-ad">
-      <AdMobBanner />
+      {mobileAdsReady ? <AdMobBanner /> : null}
     </View>
   );
 }
 
 export default function App() {
+  const [mobileAdsReady, setMobileAdsReady] = React.useState(false);
+
   React.useEffect(() => {
     preloadMascotImages().catch(() => undefined);
   }, []);
@@ -177,7 +297,21 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
-    initializeMobileAds().catch(() => undefined);
+    let active = true;
+
+    initializeMobileAds()
+      .then(() => {
+        if (active) {
+          setMobileAdsReady(true);
+        }
+      })
+      .catch(error => {
+        recordAdDiagnosticLog('mobile_ads.init_error', error);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   React.useEffect(() => {
@@ -193,7 +327,8 @@ export default function App() {
           <View style={styles.screenHost}>
             <CurrentScreen />
           </View>
-          <SharedPrimaryScreenAd />
+          <SharedPrimaryScreenAd mobileAdsReady={mobileAdsReady} />
+          <SettingsTransitionEffects />
           <ActiveAlarmAlertPopup />
         </SafeAreaView>
       </AppStateProvider>
@@ -270,5 +405,45 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     paddingHorizontal: 6,
+  },
+  reviewModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(13, 20, 16, 0.58)',
+    padding: 18,
+  },
+  reviewModalPanel: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#1B1B1B',
+    padding: 22,
+    gap: 16,
+  },
+  reviewModalTitle: {
+    color: '#17201A',
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 32,
+    textAlign: 'center',
+  },
+  reviewModalText: {
+    color: '#4E5A52',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+  reviewModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reviewModalAction: {
+    flex: 1,
+    minHeight: 52,
   },
 });

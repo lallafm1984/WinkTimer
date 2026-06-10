@@ -95,6 +95,7 @@ const englishTranslations = {
   'alarm.openTimeSettings': 'Open alarm time settings',
   'alarm.play': 'PLAY',
   'alarm.preview': 'PREVIEW',
+  'alarm.stopPreview': 'STOP',
   'alarm.repeat': 'REPEAT',
   'alarm.repeatDaily': 'DAILY',
   'alarm.repeatDate': 'DATE',
@@ -123,6 +124,11 @@ const englishTranslations = {
   'alarm.weekday.thu': 'THU',
   'alarm.weekday.tue': 'TUE',
   'alarm.weekday.wed': 'WED',
+  'appReview.later': 'LATER',
+  'appReview.message':
+    'A quick rating helps more people find Wink Timer.',
+  'appReview.rate': 'RATE APP',
+  'appReview.title': 'Enjoying Wink Timer?',
   'calibration.eye.left': 'left eye',
   'calibration.eye.right': 'right eye',
   'calibration.failed.bothEyes':
@@ -215,6 +221,12 @@ const englishTranslations = {
   'notification.timerAlertsChannel': 'Timer alerts',
   'notification.timerTitle': 'Timer',
   'rewarded.accessLabel': 'Watch ad: 3 hours free',
+  'rewarded.lockedModeAccessibility': 'Locked. Watch an ad to unlock.',
+  'rewarded.noFillOneTimeMessage':
+    'No ad is available right now. This mode opened one time only.',
+  'rewarded.unlockMessage': 'Watch an ad to use all modes for 3 hours.',
+  'rewarded.unlockTitle': 'Mode access',
+  'rewarded.watchAdAction': 'Watch ad',
   'settings.adStatus': 'AD STATUS',
   'settings.alarmSounds': 'ALARM SOUNDS',
   'settings.alertLength': 'ALERT LENGTH',
@@ -980,7 +992,332 @@ function patch(base: TranslationMap, overrides: Partial<TranslationMap>) {
 }
 
 type AlarmTranslationKey = Extract<TranslationKey, `alarm.${string}`>;
+type AppReviewTranslationKey = Extract<TranslationKey, `appReview.${string}`>;
 type ModeTitleTranslationKey = Extract<TranslationKey, `mode.${string}.title`>;
+type RewardedUnlockTranslationKey = Extract<
+  TranslationKey,
+  | 'rewarded.lockedModeAccessibility'
+  | 'rewarded.noFillOneTimeMessage'
+  | 'rewarded.unlockMessage'
+  | 'rewarded.unlockTitle'
+  | 'rewarded.watchAdAction'
+>;
+
+const appReviewTranslationOverrides: Record<
+  NonDefaultAppLocale,
+  Record<AppReviewTranslationKey, string>
+> = {
+  'ko-KR': {
+    'appReview.later': '나중에',
+    'appReview.message':
+      '짧은 평점은 더 많은 사용자가 Wink Timer를 찾는 데 도움이 됩니다.',
+    'appReview.rate': '평가하기',
+    'appReview.title': 'Wink Timer가 마음에 드시나요?',
+  },
+  'es-MX': {
+    'appReview.later': 'DESPUES',
+    'appReview.message':
+      'Una calificacion rapida ayuda a que mas personas encuentren Wink Timer.',
+    'appReview.rate': 'CALIFICAR',
+    'appReview.title': 'Te gusta Wink Timer?',
+  },
+  'pt-BR': {
+    'appReview.later': 'DEPOIS',
+    'appReview.message':
+      'Uma avaliacao rapida ajuda mais pessoas a encontrar o Wink Timer.',
+    'appReview.rate': 'AVALIAR',
+    'appReview.title': 'Gosta do Wink Timer?',
+  },
+  'hi-IN': {
+    'appReview.later': 'बाद में',
+    'appReview.message':
+      'एक छोटी रेटिंग से और लोग Wink Timer ढूंढ पाएंगे।',
+    'appReview.rate': 'रेट करें',
+    'appReview.title': 'क्या Wink Timer पसंद है?',
+  },
+  'id-ID': {
+    'appReview.later': 'NANTI',
+    'appReview.message':
+      'Rating singkat membantu lebih banyak orang menemukan Wink Timer.',
+    'appReview.rate': 'BERI NILAI',
+    'appReview.title': 'Suka Wink Timer?',
+  },
+  'ja-JP': {
+    'appReview.later': 'あとで',
+    'appReview.message':
+      '短い評価で、より多くの人がWink Timerを見つけやすくなります。',
+    'appReview.rate': '評価する',
+    'appReview.title': 'Wink Timerは気に入りましたか?',
+  },
+  'de-DE': {
+    'appReview.later': 'SPAETER',
+    'appReview.message':
+      'Eine kurze Bewertung hilft mehr Menschen, Wink Timer zu finden.',
+    'appReview.rate': 'BEWERTEN',
+    'appReview.title': 'Gefaellt dir Wink Timer?',
+  },
+  'fr-FR': {
+    'appReview.later': 'PLUS TARD',
+    'appReview.message':
+      'Une courte note aide plus de personnes a trouver Wink Timer.',
+    'appReview.rate': 'NOTER',
+    'appReview.title': 'Vous aimez Wink Timer?',
+  },
+  'ar-SA': {
+    'appReview.later': 'لاحقا',
+    'appReview.message':
+      'يساعد تقييم قصير مزيدا من المستخدمين على العثور على Wink Timer.',
+    'appReview.rate': 'قيم التطبيق',
+    'appReview.title': 'هل يعجبك Wink Timer؟',
+  },
+  'tr-TR': {
+    'appReview.later': 'SONRA',
+    'appReview.message':
+      'Kisa bir puanlama daha fazla kisinin Wink Timer bulmasina yardimci olur.',
+    'appReview.rate': 'PUANLA',
+    'appReview.title': 'Wink Timer hosuna gitti mi?',
+  },
+  'vi-VN': {
+    'appReview.later': 'DE SAU',
+    'appReview.message':
+      'Mot danh gia nhanh giup nhieu nguoi tim thay Wink Timer hon.',
+    'appReview.rate': 'DANH GIA',
+    'appReview.title': 'Ban thich Wink Timer chu?',
+  },
+  'th-TH': {
+    'appReview.later': 'ภายหลัง',
+    'appReview.message':
+      'คะแนนสั้น ๆ ช่วยให้คนอื่นพบ Wink Timer มากขึ้น',
+    'appReview.rate': 'ให้คะแนน',
+    'appReview.title': 'ชอบ Wink Timer ไหม',
+  },
+  'fil-PH': {
+    'appReview.later': 'MAMAYA',
+    'appReview.message':
+      'Makakatulong ang mabilis na rating para mas maraming makakita ng Wink Timer.',
+    'appReview.rate': 'I-RATE',
+    'appReview.title': 'Gusto mo ba ang Wink Timer?',
+  },
+  'it-IT': {
+    'appReview.later': 'DOPO',
+    'appReview.message':
+      'Una breve valutazione aiuta piu persone a trovare Wink Timer.',
+    'appReview.rate': 'VALUTA',
+    'appReview.title': 'Ti piace Wink Timer?',
+  },
+  'nl-NL': {
+    'appReview.later': 'STRAKS',
+    'appReview.message':
+      'Een korte beoordeling helpt meer mensen Wink Timer te vinden.',
+    'appReview.rate': 'BEOORDEEL',
+    'appReview.title': 'Vind je Wink Timer fijn?',
+  },
+  'pl-PL': {
+    'appReview.later': 'POZNIEJ',
+    'appReview.message':
+      'Krotka ocena pomaga wiekszej liczbie osob znalezc Wink Timer.',
+    'appReview.rate': 'OCEN',
+    'appReview.title': 'Lubisz Wink Timer?',
+  },
+  'bn-BD': {
+    'appReview.later': 'পরে',
+    'appReview.message':
+      'একটি ছোট রেটিং আরও মানুষকে Wink Timer খুঁজে পেতে সাহায্য করে।',
+    'appReview.rate': 'রেট করুন',
+    'appReview.title': 'Wink Timer ভালো লাগছে?',
+  },
+  'ur-PK': {
+    'appReview.later': 'بعد میں',
+    'appReview.message':
+      'ایک مختصر ریٹنگ مزید لوگوں کو Wink Timer تلاش کرنے میں مدد دیتی ہے۔',
+    'appReview.rate': 'ریٹ کریں',
+    'appReview.title': 'کیا Wink Timer پسند ہے؟',
+  },
+};
+
+const rewardedUnlockTranslationOverrides: Record<
+  NonDefaultAppLocale,
+  Record<RewardedUnlockTranslationKey, string>
+> = {
+  'ko-KR': {
+    'rewarded.lockedModeAccessibility': '잠긴 모드입니다. 광고를 보고 해제하세요.',
+    'rewarded.noFillOneTimeMessage':
+      '지금은 볼 수 있는 광고가 없어 이 모드를 1회만 이용할 수 있어요.',
+    'rewarded.unlockMessage':
+      '광고를 보면 모든 모드를 3시간 이용할 수 있어요.',
+    'rewarded.unlockTitle': '모드 이용',
+    'rewarded.watchAdAction': '광고 보기',
+  },
+  'es-MX': {
+    'rewarded.lockedModeAccessibility':
+      'Bloqueado. Mira un anuncio para desbloquear.',
+    'rewarded.noFillOneTimeMessage':
+      'No hay anuncios disponibles ahora. Este modo se abrió solo una vez.',
+    'rewarded.unlockMessage':
+      'Mira un anuncio para usar todos los modos durante 3 horas.',
+    'rewarded.unlockTitle': 'Acceso a modos',
+    'rewarded.watchAdAction': 'Ver anuncio',
+  },
+  'pt-BR': {
+    'rewarded.lockedModeAccessibility':
+      'Bloqueado. Veja um anúncio para desbloquear.',
+    'rewarded.noFillOneTimeMessage':
+      'Nenhum anúncio disponível agora. Este modo abriu apenas uma vez.',
+    'rewarded.unlockMessage':
+      'Veja um anúncio para usar todos os modos por 3 horas.',
+    'rewarded.unlockTitle': 'Acesso aos modos',
+    'rewarded.watchAdAction': 'Ver anúncio',
+  },
+  'hi-IN': {
+    'rewarded.lockedModeAccessibility':
+      'लॉक है। अनलॉक करने के लिए विज्ञापन देखें।',
+    'rewarded.noFillOneTimeMessage':
+      'अभी कोई विज्ञापन उपलब्ध नहीं है। यह मोड केवल एक बार खुला है।',
+    'rewarded.unlockMessage':
+      'विज्ञापन देखकर सभी मोड 3 घंटे तक उपयोग करें।',
+    'rewarded.unlockTitle': 'मोड एक्सेस',
+    'rewarded.watchAdAction': 'विज्ञापन देखें',
+  },
+  'id-ID': {
+    'rewarded.lockedModeAccessibility':
+      'Terkunci. Tonton iklan untuk membuka.',
+    'rewarded.noFillOneTimeMessage':
+      'Belum ada iklan tersedia. Mode ini terbuka satu kali saja.',
+    'rewarded.unlockMessage':
+      'Tonton iklan untuk memakai semua mode selama 3 jam.',
+    'rewarded.unlockTitle': 'Akses mode',
+    'rewarded.watchAdAction': 'Tonton iklan',
+  },
+  'ja-JP': {
+    'rewarded.lockedModeAccessibility':
+      'ロック中です。広告を見ると解除できます。',
+    'rewarded.noFillOneTimeMessage':
+      '現在表示できる広告がないため、このモードを1回だけ利用できます。',
+    'rewarded.unlockMessage':
+      '広告を見ると、すべてのモードを3時間使えます。',
+    'rewarded.unlockTitle': 'モード利用',
+    'rewarded.watchAdAction': '広告を見る',
+  },
+  'de-DE': {
+    'rewarded.lockedModeAccessibility':
+      'Gesperrt. Anzeige ansehen, um zu entsperren.',
+    'rewarded.noFillOneTimeMessage':
+      'Derzeit ist keine Anzeige verfügbar. Dieser Modus wurde einmalig geöffnet.',
+    'rewarded.unlockMessage':
+      'Sieh dir eine Anzeige an, um alle Modi 3 Stunden zu nutzen.',
+    'rewarded.unlockTitle': 'Moduszugriff',
+    'rewarded.watchAdAction': 'Anzeige ansehen',
+  },
+  'fr-FR': {
+    'rewarded.lockedModeAccessibility':
+      'Verrouillé. Regardez une annonce pour déverrouiller.',
+    'rewarded.noFillOneTimeMessage':
+      'Aucune annonce disponible maintenant. Ce mode est ouvert une seule fois.',
+    'rewarded.unlockMessage':
+      'Regardez une annonce pour utiliser tous les modes pendant 3 heures.',
+    'rewarded.unlockTitle': 'Accès aux modes',
+    'rewarded.watchAdAction': 'Voir l’annonce',
+  },
+  'ar-SA': {
+    'rewarded.lockedModeAccessibility': 'مقفل. شاهد إعلانا لإلغاء القفل.',
+    'rewarded.noFillOneTimeMessage':
+      'لا يتوفر إعلان الآن. تم فتح هذا الوضع لمرة واحدة فقط.',
+    'rewarded.unlockMessage':
+      'شاهد إعلانا لاستخدام كل الأوضاع لمدة 3 ساعات.',
+    'rewarded.unlockTitle': 'استخدام الأوضاع',
+    'rewarded.watchAdAction': 'مشاهدة إعلان',
+  },
+  'tr-TR': {
+    'rewarded.lockedModeAccessibility':
+      'Kilitli. Kilidi açmak için reklam izle.',
+    'rewarded.noFillOneTimeMessage':
+      'Şu anda reklam yok. Bu mod yalnızca bir kez açıldı.',
+    'rewarded.unlockMessage':
+      'Reklam izleyerek tüm modları 3 saat kullanabilirsin.',
+    'rewarded.unlockTitle': 'Mod erişimi',
+    'rewarded.watchAdAction': 'Reklam izle',
+  },
+  'vi-VN': {
+    'rewarded.lockedModeAccessibility':
+      'Đang khóa. Xem quảng cáo để mở khóa.',
+    'rewarded.noFillOneTimeMessage':
+      'Hiện không có quảng cáo. Chế độ này chỉ mở một lần.',
+    'rewarded.unlockMessage':
+      'Xem quảng cáo để dùng mọi chế độ trong 3 giờ.',
+    'rewarded.unlockTitle': 'Quyền dùng chế độ',
+    'rewarded.watchAdAction': 'Xem quảng cáo',
+  },
+  'th-TH': {
+    'rewarded.lockedModeAccessibility':
+      'ล็อกอยู่ ดูโฆษณาเพื่อปลดล็อก',
+    'rewarded.noFillOneTimeMessage':
+      'ตอนนี้ไม่มีโฆษณา โหมดนี้เปิดให้ใช้ได้ครั้งเดียว',
+    'rewarded.unlockMessage':
+      'ดูโฆษณาเพื่อใช้ทุกโหมดได้ 3 ชั่วโมง',
+    'rewarded.unlockTitle': 'การใช้โหมด',
+    'rewarded.watchAdAction': 'ดูโฆษณา',
+  },
+  'fil-PH': {
+    'rewarded.lockedModeAccessibility':
+      'Naka-lock. Manood ng ad para ma-unlock.',
+    'rewarded.noFillOneTimeMessage':
+      'Walang available na ad ngayon. Nabuksan ang mode na ito nang isang beses lang.',
+    'rewarded.unlockMessage':
+      'Manood ng ad para magamit ang lahat ng mode nang 3 oras.',
+    'rewarded.unlockTitle': 'Access sa mode',
+    'rewarded.watchAdAction': 'Manood ng ad',
+  },
+  'it-IT': {
+    'rewarded.lockedModeAccessibility':
+      'Bloccato. Guarda un annuncio per sbloccare.',
+    'rewarded.noFillOneTimeMessage':
+      'Nessun annuncio disponibile ora. Questa modalità si è aperta una sola volta.',
+    'rewarded.unlockMessage':
+      'Guarda un annuncio per usare tutte le modalità per 3 ore.',
+    'rewarded.unlockTitle': 'Accesso modalità',
+    'rewarded.watchAdAction': 'Guarda annuncio',
+  },
+  'nl-NL': {
+    'rewarded.lockedModeAccessibility':
+      'Vergrendeld. Bekijk een advertentie om te ontgrendelen.',
+    'rewarded.noFillOneTimeMessage':
+      'Er is nu geen advertentie beschikbaar. Deze modus is eenmalig geopend.',
+    'rewarded.unlockMessage':
+      'Bekijk een advertentie om alle modi 3 uur te gebruiken.',
+    'rewarded.unlockTitle': 'Modustoegang',
+    'rewarded.watchAdAction': 'Advertentie bekijken',
+  },
+  'pl-PL': {
+    'rewarded.lockedModeAccessibility':
+      'Zablokowane. Obejrzyj reklamę, aby odblokować.',
+    'rewarded.noFillOneTimeMessage':
+      'Brak dostępnej reklamy. Ten tryb otwarto tylko jeden raz.',
+    'rewarded.unlockMessage':
+      'Obejrzyj reklamę, aby używać wszystkich trybów przez 3 godziny.',
+    'rewarded.unlockTitle': 'Dostęp do trybów',
+    'rewarded.watchAdAction': 'Obejrzyj reklamę',
+  },
+  'bn-BD': {
+    'rewarded.lockedModeAccessibility':
+      'লক করা। আনলক করতে বিজ্ঞাপন দেখুন।',
+    'rewarded.noFillOneTimeMessage':
+      'এখন কোনো বিজ্ঞাপন নেই। এই মোডটি শুধু একবার খোলা হয়েছে।',
+    'rewarded.unlockMessage':
+      'বিজ্ঞাপন দেখে সব মোড ৩ ঘণ্টা ব্যবহার করুন।',
+    'rewarded.unlockTitle': 'মোড ব্যবহার',
+    'rewarded.watchAdAction': 'বিজ্ঞাপন দেখুন',
+  },
+  'ur-PK': {
+    'rewarded.lockedModeAccessibility':
+      'لاک ہے۔ کھولنے کے لیے اشتہار دیکھیں۔',
+    'rewarded.noFillOneTimeMessage':
+      'اس وقت کوئی اشتہار دستیاب نہیں۔ یہ موڈ صرف ایک بار کھلا ہے۔',
+    'rewarded.unlockMessage':
+      'اشتہار دیکھ کر تمام موڈز 3 گھنٹے تک استعمال کریں۔',
+    'rewarded.unlockTitle': 'موڈ تک رسائی',
+    'rewarded.watchAdAction': 'اشتہار دیکھیں',
+  },
+};
 
 const alarmTranslationOverrides: Record<
   NonDefaultAppLocale,
@@ -1012,6 +1349,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': '알람 시간 설정 열기',
     'alarm.play': '재생',
     'alarm.preview': '미리 듣기',
+    'alarm.stopPreview': '멈춤',
     'alarm.repeat': '반복',
     'alarm.repeatDaily': '매일',
     'alarm.repeatDate': '날짜',
@@ -1067,6 +1405,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Abrir ajuste de hora de alarma',
     'alarm.play': 'REPRODUCIR',
     'alarm.preview': 'VISTA PREVIA',
+    'alarm.stopPreview': 'DETENER',
     'alarm.repeat': 'REPETIR',
     'alarm.repeatDaily': 'DIARIO',
     'alarm.repeatDate': 'FECHA',
@@ -1122,6 +1461,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Abrir ajuste de hora do alarme',
     'alarm.play': 'TOCAR',
     'alarm.preview': 'PRÉVIA',
+    'alarm.stopPreview': 'PARAR',
     'alarm.repeat': 'REPETIÇÃO',
     'alarm.repeatDaily': 'DIÁRIO',
     'alarm.repeatDate': 'DATA',
@@ -1177,6 +1517,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'अलार्म समय सेटिंग खोलें',
     'alarm.play': 'चलाएँ',
     'alarm.preview': 'पूर्वावलोकन',
+    'alarm.stopPreview': 'रोकें',
     'alarm.repeat': 'दोहराएँ',
     'alarm.repeatDaily': 'रोज़',
     'alarm.repeatDate': 'तारीख',
@@ -1232,6 +1573,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Buka pengaturan waktu alarm',
     'alarm.play': 'PUTAR',
     'alarm.preview': 'PRATINJAU',
+    'alarm.stopPreview': 'HENTI',
     'alarm.repeat': 'ULANGI',
     'alarm.repeatDaily': 'HARIAN',
     'alarm.repeatDate': 'TANGGAL',
@@ -1287,6 +1629,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'アラーム時刻設定を開く',
     'alarm.play': '再生',
     'alarm.preview': 'プレビュー',
+    'alarm.stopPreview': '停止',
     'alarm.repeat': '繰り返し',
     'alarm.repeatDaily': '毎日',
     'alarm.repeatDate': '日付',
@@ -1342,6 +1685,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Weckerzeit öffnen',
     'alarm.play': 'ABSPIELEN',
     'alarm.preview': 'VORSCHAU',
+    'alarm.stopPreview': 'STOPP',
     'alarm.repeat': 'WIEDERHOLEN',
     'alarm.repeatDaily': 'TÄGLICH',
     'alarm.repeatDate': 'DATUM',
@@ -1397,6 +1741,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': "Ouvrir l'heure de l'alarme",
     'alarm.play': 'LIRE',
     'alarm.preview': 'APERÇU',
+    'alarm.stopPreview': 'ARRÊT',
     'alarm.repeat': 'RÉPÉTER',
     'alarm.repeatDaily': 'QUOTIDIEN',
     'alarm.repeatDate': 'JOUR',
@@ -1452,6 +1797,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'فتح ضبط وقت المنبه',
     'alarm.play': 'تشغيل',
     'alarm.preview': 'معاينة',
+    'alarm.stopPreview': 'إيقاف',
     'alarm.repeat': 'تكرار',
     'alarm.repeatDaily': 'يومي',
     'alarm.repeatDate': 'تاريخ',
@@ -1507,6 +1853,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Alarm saati ayarını aç',
     'alarm.play': 'ÇAL',
     'alarm.preview': 'ÖNİZLEME',
+    'alarm.stopPreview': 'DUR',
     'alarm.repeat': 'TEKRAR',
     'alarm.repeatDaily': 'GÜNLÜK',
     'alarm.repeatDate': 'TARİH',
@@ -1562,6 +1909,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Mở cài đặt giờ báo thức',
     'alarm.play': 'PHÁT',
     'alarm.preview': 'NGHE THỬ',
+    'alarm.stopPreview': 'DỪNG',
     'alarm.repeat': 'LẶP LẠI',
     'alarm.repeatDaily': 'HẰNG NGÀY',
     'alarm.repeatDate': 'NGÀY',
@@ -1617,6 +1965,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'เปิดตั้งเวลาแจ้งปลุก',
     'alarm.play': 'เล่น',
     'alarm.preview': 'ฟังตัวอย่าง',
+    'alarm.stopPreview': 'หยุด',
     'alarm.repeat': 'ทำซ้ำ',
     'alarm.repeatDaily': 'รายวัน',
     'alarm.repeatDate': 'วันที่',
@@ -1672,6 +2021,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Buksan ang oras ng alarm',
     'alarm.play': 'PATUGTUGIN',
     'alarm.preview': 'PAKINGGAN',
+    'alarm.stopPreview': 'TIGIL',
     'alarm.repeat': 'ULITIN',
     'alarm.repeatDaily': 'ARAW-ARAW',
     'alarm.repeatDate': 'PETSA',
@@ -1727,6 +2077,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Apri impostazioni ora sveglia',
     'alarm.play': 'RIPRODUCI',
     'alarm.preview': 'ANTEPRIMA',
+    'alarm.stopPreview': 'FERMA',
     'alarm.repeat': 'RIPETI',
     'alarm.repeatDaily': 'GIORNALIERA',
     'alarm.repeatDate': 'DATA',
@@ -1782,6 +2133,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Wekkertijd openen',
     'alarm.play': 'AFSPELEN',
     'alarm.preview': 'VOORBEELD',
+    'alarm.stopPreview': 'STOPPEN',
     'alarm.repeat': 'HERHALEN',
     'alarm.repeatDaily': 'DAGELIJKS',
     'alarm.repeatDate': 'DATUMDAG',
@@ -1837,6 +2189,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'Otwórz ustawienie godziny alarmu',
     'alarm.play': 'ODTWÓRZ',
     'alarm.preview': 'PODGLĄD',
+    'alarm.stopPreview': 'PRZERWIJ',
     'alarm.repeat': 'POWTÓRZ',
     'alarm.repeatDaily': 'CODZIENNIE',
     'alarm.repeatDate': 'DATA',
@@ -1892,6 +2245,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'অ্যালার্ম সময় সেটিং খুলুন',
     'alarm.play': 'চালান',
     'alarm.preview': 'প্রিভিউ',
+    'alarm.stopPreview': 'থামান',
     'alarm.repeat': 'পুনরাবৃত্তি',
     'alarm.repeatDaily': 'দৈনিক',
     'alarm.repeatDate': 'তারিখ',
@@ -1947,6 +2301,7 @@ const alarmTranslationOverrides: Record<
     'alarm.openTimeSettings': 'الارم وقت کی ترتیب کھولیں',
     'alarm.play': 'چلائیں',
     'alarm.preview': 'پیش منظر',
+    'alarm.stopPreview': 'روکیں',
     'alarm.repeat': 'دہرائیں',
     'alarm.repeatDaily': 'روزانہ',
     'alarm.repeatDate': 'تاریخ',
@@ -5222,6 +5577,8 @@ const translations: Record<AppLocale, TranslationMap> = {
         localizedFrom(map, {
           ...modeTitleTranslationOverrides[appLocale],
           ...alarmTranslationOverrides[appLocale],
+          ...appReviewTranslationOverrides[appLocale],
+          ...rewardedUnlockTranslationOverrides[appLocale],
         }),
       ];
     }),

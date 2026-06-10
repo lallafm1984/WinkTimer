@@ -1,7 +1,6 @@
 import React from 'react';
 import { BackHandler, NativeModules, StyleSheet, Text } from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
-import { TIMER_ALERT_PREVIEW_DURATION_MS } from '../../alerts/timerAlert';
 import { getTodayIsoDate, type ScheduledAlarm } from '../../domain/alarm';
 import { AlarmsScreen } from '../AlarmsScreen';
 
@@ -135,6 +134,8 @@ describe('AlarmsScreen', () => {
         },
       ]),
       previewTimerAlertSound: jest.fn().mockResolvedValue(undefined),
+      playTimerAlertSoundPreview: jest.fn().mockResolvedValue(undefined),
+      stopTimerAlertSoundPreview: jest.fn().mockResolvedValue(undefined),
     };
     mockLocale = 'en-US';
   });
@@ -561,6 +562,45 @@ describe('AlarmsScreen', () => {
     );
   });
 
+  it('keeps Saturday date buttons inside a fixed calendar column', async () => {
+    const renderer = renderAlarmsScreen();
+
+    pressByTestID(renderer, 'add-alarm-button');
+    await flushReact();
+    pressByTestID(renderer, 'alarm-schedule-dates');
+
+    const saturdayButton = renderer.root
+      .findAll(
+        node =>
+          typeof node.props.testID === 'string' &&
+          node.props.testID.startsWith('alarm-calendar-day-'),
+      )
+      .find(node => {
+        const isoDate = node.props.testID.replace('alarm-calendar-day-', '');
+        const [year, month, day] = isoDate.split('-').map(Number);
+
+        return new Date(year, month - 1, day).getDay() === 6;
+      });
+
+    expect(saturdayButton).toBeTruthy();
+    expect(StyleSheet.flatten(saturdayButton!.parent!.props.style)).toEqual(
+      expect.objectContaining({
+        padding: 2,
+        width: '14.2857142857%',
+      }),
+    );
+    const saturdayButtonStyle =
+      typeof saturdayButton!.props.style === 'function'
+        ? saturdayButton!.props.style({ pressed: false })
+        : saturdayButton!.props.style;
+
+    expect(StyleSheet.flatten(saturdayButtonStyle)).toEqual(
+      expect.objectContaining({
+        width: '100%',
+      }),
+    );
+  });
+
   it('cancels date popup without changing the repeat selection', async () => {
     const renderer = renderAlarmsScreen();
 
@@ -613,11 +653,6 @@ describe('AlarmsScreen', () => {
 
     expect(getRenderedText(renderer)).toContain('Morning Xylophone');
 
-    pressByTestID(renderer, 'alarm-sound-preview-1');
-    expect(
-      NativeModules.NativeTimerAlert.previewTimerAlertSound,
-    ).toHaveBeenCalledWith(deviceAlarmSoundId, TIMER_ALERT_PREVIEW_DURATION_MS);
-
     pressByTestID(renderer, 'alarm-sound-select-1');
     pressByTestID(renderer, 'save-alarm-button');
 
@@ -630,6 +665,43 @@ describe('AlarmsScreen', () => {
         snoozeEnabled: false,
       }),
     );
+  });
+
+  it('keeps alarm sound preview playing until the localized stop button is pressed', async () => {
+    mockLocale = 'ko-KR';
+    const renderer = renderAlarmsScreen();
+
+    pressByTestID(renderer, 'add-alarm-button');
+    await flushReact();
+    pressByTestID(renderer, 'alarm-sound-open');
+    await flushReact();
+
+    pressByTestID(renderer, 'alarm-sound-preview-1');
+
+    expect(
+      NativeModules.NativeTimerAlert.playTimerAlertSoundPreview,
+    ).toHaveBeenCalledWith(deviceAlarmSoundId);
+    expect(
+      NativeModules.NativeTimerAlert.previewTimerAlertSound,
+    ).not.toHaveBeenCalled();
+    expect(
+      renderer.root.findByProps({
+        testID: 'alarm-sound-preview-1',
+      }).props.accessibilityLabel,
+    ).toBe('멈춤');
+    expect(
+      flattenText(
+        renderer.root.findByProps({
+          testID: 'alarm-sound-preview-1',
+        }).findByType(Text).props.children,
+      ),
+    ).toBe('■');
+
+    pressByTestID(renderer, 'alarm-sound-preview-1');
+
+    expect(
+      NativeModules.NativeTimerAlert.stopTimerAlertSoundPreview,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it('renders existing alarms with switch controls, badges, and delete confirmation', async () => {

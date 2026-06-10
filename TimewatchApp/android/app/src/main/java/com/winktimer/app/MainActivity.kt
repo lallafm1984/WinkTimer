@@ -24,7 +24,7 @@ class MainActivity : ReactActivity() {
 
   override fun onResume() {
     super.onResume()
-    TimerAlertService.stop(this)
+    TimerAlertService.stop(this, TimerAlertService.ALERT_OWNER_TIMER)
     TimekeepingNotification.hide(this)
   }
 }

@@ -13,6 +13,16 @@ import ReactTestRenderer from 'react-test-renderer';
 import type {AppStateStatus} from 'react-native';
 import {AppStateProvider, useAppState} from '../AppState';
 
+const mockRecordFunnelEvent = jest.fn<
+  Promise<void>,
+  [string, unknown?, unknown?]
+>();
+
+jest.mock('../../analytics/funnelAnalytics', () => ({
+  recordFunnelEvent: (...args: [string, unknown?, unknown?]) =>
+    mockRecordFunnelEvent(...args),
+}));
+
 type NativeGazeDetectionModuleForTest = {
   start: jest.Mock<Promise<void>, []>;
   stop: jest.Mock<Promise<void>, []>;
@@ -366,6 +376,20 @@ function AppStateHarness() {
       </Text>
       <Text
         accessibilityRole="button"
+        accessibilityLabel="temporary-look-pause-mode"
+        onPress={() => {
+          app.setTimerModeId('lookPause', {temporary: true});
+        }}>
+        temporary look pause
+      </Text>
+      <Text
+        accessibilityRole="button"
+        accessibilityLabel="clear-temporary-mode"
+        onPress={app.clearTemporaryTimerModeId}>
+        clear temporary
+      </Text>
+      <Text
+        accessibilityRole="button"
         accessibilityLabel="basic-mode"
         onPress={() => {
           app.setTimerModeId('basicTimer');
@@ -659,9 +683,10 @@ describe('AppStateProvider app flow', () => {
       .mockImplementation((_event, listener) => {
         appStateListeners.push(listener);
         return {remove: jest.fn()};
-      });
+    });
     nativeModules.I18nManager = {localeIdentifier: 'en_US'};
     delete nativeModules.SettingsManager;
+    mockRecordFunnelEvent.mockResolvedValue(undefined);
     await AsyncStorage.clear();
   });
 
@@ -795,6 +820,49 @@ describe('AppStateProvider app flow', () => {
       true,
     );
     expect(hasText(renderer, 'timerAlertActive:false')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('uses temporary timer modes without writing them to persisted settings', async () => {
+    const renderer = await renderHarness();
+
+    await press(renderer, 'temporary-look-pause-mode');
+    await ReactTestRenderer.act(async () => undefined);
+
+    const persistedSettings = JSON.parse(
+      (await AsyncStorage.getItem(SETTINGS_STORAGE_KEY)) ?? '{}',
+    );
+
+    expect(hasText(renderer, 'timerMode:lookPause')).toBe(true);
+    expect(persistedSettings.timerModeId).toBe('basicTimer');
+
+    await press(renderer, 'clear-temporary-mode');
+
+    expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('does not persist active sessions started from a temporary timer mode', async () => {
+    const renderer = await renderHarness();
+
+    await press(renderer, 'temporary-look-pause-mode');
+    nowMs = 1000;
+    await press(renderer, 'start');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'timerMode:lookPause')).toBe(true);
+    expect(hasText(renderer, 'phase:active')).toBe(true);
+    await expect(
+      AsyncStorage.getItem(ACTIVE_TIMEKEEPING_STORAGE_KEY),
+    ).resolves.toBeNull();
+
+    nowMs = 2000;
+    await press(renderer, 'reset');
+    await ReactTestRenderer.act(async () => undefined);
+
+    expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
 
     await unmount(renderer);
   });
@@ -2911,6 +2979,16 @@ describe('AppStateProvider app flow', () => {
     });
 
     expect(hasText(renderer, 'phase:active')).toBe(true);
+    expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+      'wt_camera_mode_start',
+      expect.objectContaining({
+        mode_id: 'smileMode',
+        timekeeping_mode: 'stopwatch',
+      }),
+      expect.objectContaining({
+        oncePerSessionKey: expect.stringContaining('smileMode'),
+      }),
+    );
 
     nowMs = 4100;
     await ReactTestRenderer.act(async () => {

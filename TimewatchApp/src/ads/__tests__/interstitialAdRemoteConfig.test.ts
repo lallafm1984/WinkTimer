@@ -13,6 +13,8 @@ function createRemoteConfigClient({
   enabled = true,
   dailyCap = 3,
   cooldownHours = 3,
+  settingsEntryEnabled = true,
+  settingsCloseReviewPromptEnabled = true,
   failDefaults = false,
   failFetch = false,
 } = {}) {
@@ -32,7 +34,17 @@ function createRemoteConfigClient({
 
       return true;
     }),
-    getBoolean: jest.fn(() => enabled),
+    getBoolean: jest.fn(key => {
+      if (key === 'ads_settings_entry_interstitial_enabled') {
+        return settingsEntryEnabled;
+      }
+
+      if (key === 'app_review_prompt_settings_close_enabled') {
+        return settingsCloseReviewPromptEnabled;
+      }
+
+      return enabled;
+    }),
     getNumber: jest.fn(key => {
       if (key === 'ads_interstitial_daily_cap') {
         return dailyCap;
@@ -80,6 +92,23 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: true,
       dailyCap: 2,
       cooldownMs: 4 * 60 * 60 * 1000,
+      settingsEntryEnabled: true,
+      settingsCloseReviewPromptEnabled: true,
+    });
+  });
+
+  it('reads setting-entry ad and settings-close review flags', async () => {
+    const client = createRemoteConfigClient({
+      settingsEntryEnabled: false,
+      settingsCloseReviewPromptEnabled: false,
+    });
+
+    await expect(
+      initializeInterstitialAdRemoteConfig({client}),
+    ).resolves.toEqual({
+      ...DEFAULT_INTERSTITIAL_AD_POLICY,
+      settingsEntryEnabled: false,
+      settingsCloseReviewPromptEnabled: false,
     });
   });
 
@@ -118,11 +147,15 @@ describe('interstitialAdRemoteConfig', () => {
         enabled: true,
         dailyCap: 99,
         cooldownHours: 99,
+        settingsEntryEnabled: false,
+        settingsCloseReviewPromptEnabled: false,
       }),
     ).toEqual({
       enabled: true,
       dailyCap: 6,
       cooldownMs: 24 * 60 * 60 * 1000,
+      settingsEntryEnabled: false,
+      settingsCloseReviewPromptEnabled: false,
     });
   });
 
@@ -139,6 +172,8 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: false,
       dailyCap: 4,
       cooldownMs: 2 * 60 * 60 * 1000,
+      settingsEntryEnabled: true,
+      settingsCloseReviewPromptEnabled: true,
     });
   });
 });

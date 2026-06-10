@@ -17,7 +17,7 @@ Wink Timer: Alarm i Timer
 ## 간단한 설명
 
 ```text
-Alarm, minutnik, stoper i sterowanie bez dotyku.
+Minutnik i stoper sterowane kamerą, plus alarm.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Odwróć, aby uruchomić
 ## 앱 설치 캠페인 설명
 
 ```text
-Używaj alarmów, minutnika i stopera z opcją spojrzenia, mrugnięcia i odwrócenia.
-Twórz alarmy codzienne, tygodniowe lub według daty z dźwiękiem, wibracją, głośnością i drzemką.
-Zarządzaj pobudką, treningiem, przerwami, gotowaniem i szybkimi okrążeniami stopera.
-Alarm, minutnik i stoper działają bez kamery; włącz sterowanie wspomagane, gdy chcesz.
-Dopasuj alerty minutnika i alarmy cykliczne przez dźwięk, głośność i wibracje.
+Steruj minutnikiem spojrzeniem, mrugnięciem lub uśmiechem; zapisuj okrążenia.
+Gdy masz mokre ręce albo trenujesz, steruj minutnikiem bez dotykania ekranu.
+Wybierz pauzę spojrzeniem, sterowanie mrugnięciem, uśmiechem albo odwrócony timer.
+Podczas gotowania, treningu, nauki lub pracy łatwiej utrzymasz działający minutnik.
+Kamera pomaga startować, pauzować, wznawiać i zapisywać z mniejszą liczbą dotknięć.
 ```
 
 ## 알람 중심 광고 소재

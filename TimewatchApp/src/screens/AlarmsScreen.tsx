@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import {
   loadTimerAlertSoundOptions,
-  previewTimerAlertSound,
+  playTimerAlertSoundPreview,
+  stopTimerAlertSoundPreview,
   timerAlertSoundOptions,
   type TimerAlertSoundOption,
 } from '../alerts/timerAlert';
@@ -41,6 +42,7 @@ const ALARM_VOLUME_MIN = 0.1;
 const ALARM_VOLUME_MAX = 1;
 const ACTIVE_SWITCH_COLOR = '#1D4D3A';
 const ACTIVE_SWITCH_TINT = '#E7F1EA';
+const CALENDAR_COLUMN_WIDTH = '14.2857142857%';
 type Translator = ReturnType<typeof createTranslator>;
 
 const weekdayLabelKeys: Record<AlarmWeekday, TranslationKey> = {
@@ -479,7 +481,7 @@ function AlarmDateCalendar({ dates, t, onChange }: AlarmDateCalendarProps) {
             return (
               <View
                 key={`empty-${index}`}
-                style={styles.calendarEmptyDay}
+                style={[styles.calendarCell, styles.calendarEmptyDay]}
                 testID="alarm-calendar-empty-day"
               />
             );
@@ -488,15 +490,16 @@ function AlarmDateCalendar({ dates, t, onChange }: AlarmDateCalendarProps) {
           const selected = selectedDates.has(date);
 
           return (
-            <PrimaryButton
-              key={date}
-              accessibilityState={{ selected }}
-              label={String(parseIsoDate(date).getDate())}
-              onPress={() => selectDate(date)}
-              testID={`alarm-calendar-day-${date}`}
-              variant={selected ? 'primary' : 'secondary'}
-              style={styles.calendarDayButton}
-            />
+            <View key={date} style={styles.calendarCell}>
+              <PrimaryButton
+                accessibilityState={{ selected }}
+                label={String(parseIsoDate(date).getDate())}
+                onPress={() => selectDate(date)}
+                testID={`alarm-calendar-day-${date}`}
+                variant={selected ? 'primary' : 'secondary'}
+                style={styles.calendarDayButton}
+              />
+            </View>
           );
         })}
       </View>
@@ -792,9 +795,17 @@ function AlarmSoundControl({
     () => [...timerAlertSoundOptions],
   );
   const [soundModalVisible, setSoundModalVisible] = useState(false);
+  const [playingPreviewSoundId, setPlayingPreviewSoundId] = useState<
+    string | null
+  >(null);
   const selectedOption =
     soundOptions.find(option => option.id === value) ??
     timerAlertSoundOptions.find(option => option.id === value);
+
+  const stopSoundPreview = React.useCallback(() => {
+    setPlayingPreviewSoundId(null);
+    stopTimerAlertSoundPreview().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -809,8 +820,23 @@ function AlarmSoundControl({
 
     return () => {
       mounted = false;
+      stopTimerAlertSoundPreview().catch(() => undefined);
     };
   }, []);
+
+  const toggleSoundPreview = (soundId: string) => {
+    if (playingPreviewSoundId === soundId) {
+      stopSoundPreview();
+      return;
+    }
+
+    setPlayingPreviewSoundId(soundId);
+    playTimerAlertSoundPreview(soundId).catch(() => {
+      setPlayingPreviewSoundId(current =>
+        current === soundId ? null : current,
+      );
+    });
+  };
 
   return (
     <View style={[styles.section, styles.secondarySettingSection]}>
@@ -844,7 +870,10 @@ function AlarmSoundControl({
       {soundModalVisible ? (
         <Modal
           animationType="fade"
-          onRequestClose={() => setSoundModalVisible(false)}
+          onRequestClose={() => {
+            stopSoundPreview();
+            setSoundModalVisible(false);
+          }}
           transparent
           visible={soundModalVisible}
         >
@@ -854,7 +883,10 @@ function AlarmSoundControl({
                 <Text style={styles.modalTitle}>{t('alarm.alertSound')}</Text>
                 <PrimaryButton
                   label={t('common.close')}
-                  onPress={() => setSoundModalVisible(false)}
+                  onPress={() => {
+                    stopSoundPreview();
+                    setSoundModalVisible(false);
+                  }}
                   testID="alarm-sound-close"
                   variant="secondary"
                   style={styles.soundHeaderButton}
@@ -875,6 +907,7 @@ function AlarmSoundControl({
                       accessibilityState={{ selected: value === option.id }}
                       label={formatAlarmSoundOptionLabel(option, t)}
                       onPress={() => {
+                        stopSoundPreview();
                         onChange(option.id);
                         setSoundModalVisible(false);
                       }}
@@ -883,15 +916,23 @@ function AlarmSoundControl({
                       style={styles.soundOptionSelectButton}
                     />
                     <PrimaryButton
-                      accessibilityLabel={t('alarm.preview')}
-                      label={t('alarm.play')}
+                      accessibilityLabel={
+                        playingPreviewSoundId === option.id
+                          ? t('alarm.stopPreview')
+                          : t('alarm.preview')
+                      }
+                      label={
+                        playingPreviewSoundId === option.id ? '■' : '▶'
+                      }
                       onPress={() => {
-                        previewTimerAlertSound(option.id).catch(
-                          () => undefined,
-                        );
+                        toggleSoundPreview(option.id);
                       }}
                       testID={getAlarmSoundOptionPreviewTestID(option, index)}
-                      variant="secondary"
+                      variant={
+                        playingPreviewSoundId === option.id
+                          ? 'primary'
+                          : 'secondary'
+                      }
                       style={styles.soundOptionPreviewButton}
                     />
                   </View>
@@ -2005,30 +2046,33 @@ const styles = StyleSheet.create({
   },
   calendarWeekdays: {
     flexDirection: 'row',
-    gap: 4,
   },
   calendarWeekdayLabel: {
     color: arcadeTheme.colors.mutedInk,
-    flex: 1,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0,
+    paddingHorizontal: 2,
     textAlign: 'center',
+    width: CALENDAR_COLUMN_WIDTH,
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
+  },
+  calendarCell: {
+    minHeight: 40,
+    padding: 2,
+    width: CALENDAR_COLUMN_WIDTH,
   },
   calendarDayButton: {
     minHeight: 36,
     paddingHorizontal: 0,
     paddingVertical: arcadeTheme.spacing.xs,
-    width: '13.4%',
+    width: '100%',
   },
   calendarEmptyDay: {
-    minHeight: 36,
-    width: '13.4%',
+    minHeight: 40,
   },
   editorActions: {
     flexDirection: 'row',

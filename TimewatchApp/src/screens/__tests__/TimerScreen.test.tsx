@@ -1,5 +1,5 @@
 import React from 'react';
-import {NativeModules, ScrollView, StyleSheet, Text} from 'react-native';
+import {Modal, NativeModules, ScrollView, StyleSheet, Text} from 'react-native';
 import ReactTestRenderer from 'react-test-renderer';
 import {
   recordAdDiagnosticLog,
@@ -38,6 +38,10 @@ const mockGrantRewardedModeAccess = jest.fn<
 const mockShowRewardedAdForAccess = jest.fn<Promise<void>, []>();
 const mockIsRewardedAdNoFillError = jest.fn<boolean, [unknown]>();
 const mockEnsureCameraPermission = jest.fn<Promise<boolean>, [unknown?]>();
+const mockRecordFunnelEvent = jest.fn<
+  Promise<void>,
+  [string, unknown?, unknown?]
+>();
 
 type NativeTimelineClipboardModuleForTest = {
   copyText: jest.Mock<Promise<void>, [string]>;
@@ -166,6 +170,11 @@ jest.mock('../../detection/GazeDetector', () => ({
     mockEnsureCameraPermission(options),
 }));
 
+jest.mock('../../analytics/funnelAnalytics', () => ({
+  recordFunnelEvent: (...args: [string, unknown?, unknown?]) =>
+    mockRecordFunnelEvent(...args),
+}));
+
 function flattenText(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map(flattenText).join('');
@@ -206,6 +215,22 @@ async function openModeMenuWithRewardedAccessCheck(
   });
 }
 
+function findRewardedLockIcons(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
+  return renderer.root.findAll(node => {
+    if (node.props.testID !== 'rewarded-mode-lock-icon') {
+      return false;
+    }
+    if (node.parent?.props.testID === 'rewarded-mode-lock-icon') {
+      return false;
+    }
+
+    const style = StyleSheet.flatten(node.props.style);
+    return style?.height === 24 && style?.width === 24;
+  });
+}
+
 function getRenderedText(renderer: ReactTestRenderer.ReactTestRenderer) {
   return renderer.root
     .findAllByType(Text)
@@ -237,6 +262,7 @@ describe('TimerScreen', () => {
     mockShowRewardedAdForAccess.mockResolvedValue(undefined);
     mockIsRewardedAdNoFillError.mockReturnValue(false);
     mockEnsureCameraPermission.mockResolvedValue(true);
+    mockRecordFunnelEvent.mockResolvedValue(undefined);
     resetAdDiagnosticLogsForTests();
     nativeModules.NativeTimelineClipboard = {
       copyText: mockCopyTimelineText,
@@ -474,7 +500,7 @@ describe('TimerScreen', () => {
     expect(modeMenuText).toContain('뒤집으면 시간이 흘러요');
     expect(modeMenuText).toContain('시작/일시정지/계속: 오른쪽 윙크');
     expect(modeMenuText).toContain('초기화/랩: 왼쪽 윙크');
-    expect(modeMenuText).toContain('광고 시청시 3시간 자유이용');
+    expect(modeMenuText).not.toContain('광고 시청시 3시간 자유이용');
     const lookModeDescription = renderer.root
       .findByProps({testID: 'mode-menu'})
       .findAllByType(Text)
@@ -754,7 +780,7 @@ describe('TimerScreen', () => {
     ).toBeTruthy();
   });
 
-  it('labels camera-assisted modes as three-hour ad unlock modes', async () => {
+  it('marks camera-assisted modes with lock icons when rewarded access is inactive', async () => {
     mockHasActiveRewardedModeAccess.mockResolvedValue(false);
     mockState = {
       ...baseState,
@@ -772,35 +798,26 @@ describe('TimerScreen', () => {
 
     await openModeMenuWithRewardedAccessCheck(renderer);
 
-    const rewardedLabels = renderer.root
-      .findAllByType(Text)
-      .filter(label => label.props.testID === 'rewarded-mode-access-label');
-
-    expect(rewardedLabels).toHaveLength(3);
     expect(
-      rewardedLabels.map(label => flattenText(label.props.children)),
-    ).toEqual([
-      'Watch ad: 3 hours free',
-      'Watch ad: 3 hours free',
-      'Watch ad: 3 hours free',
-    ]);
-    rewardedLabels.forEach(label => {
-      expect(StyleSheet.flatten(label.props.style)).toEqual(
+      renderer.root.findAllByProps({testID: 'rewarded-mode-access-label'}),
+    ).toHaveLength(0);
+    const lockIcons = findRewardedLockIcons(renderer);
+
+    expect(lockIcons).toHaveLength(3);
+    lockIcons.forEach(icon => {
+      expect(StyleSheet.flatten(icon.props.style)).toEqual(
         expect.objectContaining({
           alignSelf: 'center',
-          fontSize: 11,
-          lineHeight: 15,
-          textAlign: 'center',
+          justifyContent: 'center',
         }),
       );
     });
   });
 
-  it('lets Japanese rewarded ad labels use the full badge width', async () => {
+  it('shows lock icons without locale-dependent badge text', async () => {
     mockHasActiveRewardedModeAccess.mockResolvedValue(false);
     mockState = {
       ...baseState,
-      locale: 'ja-JP',
       timer: {
         ...baseTimer,
         phase: 'idle',
@@ -813,37 +830,17 @@ describe('TimerScreen', () => {
     };
     const renderer = renderTimerScreen();
 
-    await ReactTestRenderer.act(async () => {
-      renderer.root
-        .findByProps({accessibilityLabel: 'モードメニューを開く'})
-        .props.onPress();
-    });
+    await openModeMenuWithRewardedAccessCheck(renderer);
 
-    await ReactTestRenderer.act(async () => {
-      await flushAsyncWork();
-    });
-
-    const rewardedLabel = renderer.root
-      .findAllByType(Text)
-      .find(label => label.props.testID === 'rewarded-mode-access-label');
-
-    expect(rewardedLabel).toBeTruthy();
-    expect(flattenText(rewardedLabel!.props.children)).toBe(
-      '広告を見ると3時間利用できます',
-    );
-    expect(rewardedLabel!.props.numberOfLines).toBeUndefined();
-    expect(rewardedLabel!.props.adjustsFontSizeToFit).toBeUndefined();
-    expect(StyleSheet.flatten(rewardedLabel!.props.style)).toEqual(
-      expect.objectContaining({
-        width: '100%',
-      }),
-    );
     expect(
-      StyleSheet.flatten(rewardedLabel!.props.style).overflow,
-    ).toBeUndefined();
+      renderer.root.findAllByProps({testID: 'rewarded-mode-access-label'}),
+    ).toHaveLength(0);
+    expect(
+      findRewardedLockIcons(renderer),
+    ).toHaveLength(3);
   });
 
-  it('shows rewarded badges while access status is still being checked', () => {
+  it('shows rewarded lock icons while access status is still being checked', () => {
     mockHasActiveRewardedModeAccess.mockImplementation(
       () => new Promise<boolean>(() => {}),
     );
@@ -868,13 +865,11 @@ describe('TimerScreen', () => {
     });
 
     expect(
-      renderer.root
-        .findAllByType(Text)
-        .filter(label => label.props.testID === 'rewarded-mode-access-label'),
+      findRewardedLockIcons(renderer),
     ).toHaveLength(3);
   });
 
-  it('hides ad unlock labels on restart when local rewarded access is still active', async () => {
+  it('hides ad unlock locks on restart when local rewarded access is still active', async () => {
     mockHasActiveRewardedModeAccess.mockResolvedValue(true);
     mockState = {
       ...baseState,
@@ -894,13 +889,11 @@ describe('TimerScreen', () => {
 
     expect(mockHasActiveRewardedModeAccess).toHaveBeenCalledWith('lookPause');
     expect(
-      renderer.root
-        .findAllByType(Text)
-        .filter(label => label.props.testID === 'rewarded-mode-access-label'),
+      findRewardedLockIcons(renderer),
     ).toHaveLength(0);
   });
 
-  it('requests camera permission before entering a camera-assisted rewarded mode', async () => {
+  it('requests camera permission before entering a camera-assisted rewarded mode when access is active', async () => {
     mockHasActiveRewardedModeAccess.mockResolvedValue(true);
     mockState = {
       ...baseState,
@@ -932,7 +925,7 @@ describe('TimerScreen', () => {
     expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
   });
 
-  it('does not show an ad or enter a camera-assisted mode when camera permission is denied', async () => {
+  it('opens a rewarded ad opt-in popup before requesting camera permission for a locked mode', async () => {
     mockEnsureCameraPermission.mockResolvedValue(false);
     mockHasActiveRewardedModeAccess.mockResolvedValue(false);
     mockState = {
@@ -957,10 +950,111 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
-    expect(mockEnsureCameraPermission).toHaveBeenCalledWith({
-      openSettingsIfBlocked: true,
+    const popup = renderer.root.findByProps({
+      testID: 'rewarded-mode-access-popup',
     });
+    const modal = renderer.root.findByType(Modal);
+    const popupText = popup
+      .findAllByType(Text)
+      .map(node => flattenText(node.props.children))
+      .join(' ');
+
+    expect(modal.props.visible).toBe(true);
+    expect(popupText).toContain('Mode access');
+    expect(popupText).toContain(
+      'Watch an ad to use all modes for 3 hours.',
+    );
+    expect(popupText).toContain('Watch ad');
+    expect(mockEnsureCameraPermission).not.toHaveBeenCalled();
     expect(mockShowRewardedAdForAccess).not.toHaveBeenCalled();
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+    expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
+  });
+
+  it('records mode menu and rewarded opt-in funnel events', async () => {
+    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+      'wt_mode_menu_open',
+      expect.objectContaining({
+        active_mode_id: 'basicTimer',
+        timekeeping_mode: 'stopwatch',
+      }),
+    );
+    expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+      'wt_mode_select_attempt',
+      expect.objectContaining({
+        mode_id: 'lookPause',
+        current_mode_id: 'basicTimer',
+        is_camera_mode: true,
+        requires_reward: true,
+      }),
+    );
+    expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+      'wt_reward_prompt_show',
+      expect.objectContaining({
+        mode_id: 'lookPause',
+      }),
+    );
+  });
+
+  it('cancels the rewarded ad opt-in popup without changing mode or access', async () => {
+    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockState = {
+      ...baseState,
+      timer: {
+        ...baseTimer,
+        phase: 'idle',
+        startedAtMs: null,
+        focusDurationMs: 0,
+        detectionStatus: 'notLooking',
+        isLookPaused: false,
+      },
+      timerModeId: 'basicTimer',
+    };
+    const renderer = renderTimerScreen();
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
+
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'rewarded-mode-access-cancel-button'})
+        .props.onPress();
+    });
+
+    expect(
+      renderer.root.findAllByProps({testID: 'rewarded-mode-access-popup'}),
+    ).toHaveLength(0);
+    expect(mockShowRewardedAdForAccess).not.toHaveBeenCalled();
+    expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
     expect(mockResetTimerSession).not.toHaveBeenCalled();
     expect(mockSetTimerModeId).not.toHaveBeenCalled();
     expect(renderer.root.findByProps({testID: 'mode-menu'})).toBeTruthy();
@@ -969,7 +1063,8 @@ describe('TimerScreen', () => {
   it('records rewarded access but waits for another selection before entering a rewarded mode', async () => {
     let resolveRewardedAd: (() => void) | undefined;
     mockHasActiveRewardedModeAccess
-      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
     mockShowRewardedAdForAccess.mockImplementation(
@@ -994,9 +1089,24 @@ describe('TimerScreen', () => {
 
     await openModeMenuWithRewardedAccessCheck(renderer);
 
+    await ReactTestRenderer.act(async () => {
+      await renderer.root
+        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
+    expect(mockShowRewardedAdForAccess).not.toHaveBeenCalled();
+    expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
+    expect(mockResetTimerSession).not.toHaveBeenCalled();
+    expect(mockSetTimerModeId).not.toHaveBeenCalled();
+
     ReactTestRenderer.act(() => {
       renderer.root
-        .findByProps({accessibilityLabel: 'LOOK MODE mode'})
+        .findByProps({testID: 'rewarded-mode-access-confirm-button'})
         .props.onPress();
     });
 
@@ -1006,8 +1116,6 @@ describe('TimerScreen', () => {
 
     expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(1);
     expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
-    expect(mockResetTimerSession).not.toHaveBeenCalled();
-    expect(mockSetTimerModeId).not.toHaveBeenCalled();
 
     ReactTestRenderer.act(() => {
       renderer.root.findByProps({testID: 'settings-button'}).props.onPress();
@@ -1079,9 +1187,9 @@ describe('TimerScreen', () => {
     expect(getRenderedText(renderer)).toContain('01:01.04');
   });
 
-  it('stores one-hour access after a rewarded ad without entering the locked mode immediately', async () => {
+  it('stores three-hour access after a confirmed rewarded ad without entering the locked mode immediately', async () => {
     mockHasActiveRewardedModeAccess
-      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false);
     mockState = {
       ...baseState,
@@ -1105,6 +1213,16 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'rewarded-mode-access-confirm-button'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
     expect(mockHasActiveRewardedModeAccess).toHaveBeenCalledWith('lookPause');
     expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(1);
     expect(mockGrantRewardedModeAccess).toHaveBeenCalledWith(
@@ -1118,7 +1236,7 @@ describe('TimerScreen', () => {
   it('keeps the mode popup open and preserves time when rewarded ad loading fails', async () => {
     const loadError = new Error('Ad load failed');
     mockHasActiveRewardedModeAccess
-      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false);
     mockShowRewardedAdForAccess.mockRejectedValue(loadError);
     mockIsRewardedAdNoFillError.mockReturnValue(false);
@@ -1144,6 +1262,16 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'rewarded-mode-access-confirm-button'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
     const rewardedMessage = renderer.root.findByProps({
       testID: 'rewarded-ad-access-message',
     });
@@ -1159,10 +1287,10 @@ describe('TimerScreen', () => {
     );
   });
 
-  it('enters a rewarded mode on no-fill without recording rewarded access', async () => {
+  it('enters a rewarded mode temporarily on no-fill without recording three-hour access', async () => {
     const noFillError = new Error('No fill');
     mockHasActiveRewardedModeAccess
-      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false);
     mockShowRewardedAdForAccess.mockRejectedValue(noFillError);
     mockIsRewardedAdNoFillError.mockReturnValue(true);
@@ -1188,18 +1316,36 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'rewarded-mode-access-confirm-button'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
     expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(1);
     expect(mockIsRewardedAdNoFillError).toHaveBeenCalledWith(noFillError);
     expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
     expect(mockResetTimerSession).toHaveBeenCalledTimes(1);
-    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause', {
+      temporary: true,
+    });
     expect(renderer.root.findAllByProps({testID: 'mode-menu'})).toHaveLength(0);
+    expect(getRenderedText(renderer)).toContain(
+      'No ad is available right now. This mode opened one time only.',
+    );
   });
 
-  it('requests an ad again after a no-fill entry because no one-hour access was stored', async () => {
+  it('requests an ad again after the one-time no-fill entry is spent', async () => {
     const firstNoFillError = new Error('No fill 1');
     const secondNoFillError = new Error('No fill 2');
-    mockHasActiveRewardedModeAccess.mockResolvedValue(false);
+    mockHasActiveRewardedModeAccess
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false);
     mockShowRewardedAdForAccess
       .mockRejectedValueOnce(firstNoFillError)
       .mockRejectedValueOnce(secondNoFillError);
@@ -1228,9 +1374,15 @@ describe('TimerScreen', () => {
 
     ReactTestRenderer.act(() => {
       renderer.root
-        .findByProps({accessibilityLabel: 'Open mode menu'})
+        .findByProps({testID: 'rewarded-mode-access-confirm-button'})
         .props.onPress();
     });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
+    await openModeMenuWithRewardedAccessCheck(renderer);
 
     await ReactTestRenderer.act(async () => {
       await renderer.root
@@ -1238,10 +1390,22 @@ describe('TimerScreen', () => {
         .props.onPress();
     });
 
+    ReactTestRenderer.act(() => {
+      renderer.root
+        .findByProps({testID: 'rewarded-mode-access-confirm-button'})
+        .props.onPress();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      await flushAsyncWork();
+    });
+
     expect(mockShowRewardedAdForAccess).toHaveBeenCalledTimes(2);
     expect(mockGrantRewardedModeAccess).not.toHaveBeenCalled();
     expect(mockResetTimerSession).toHaveBeenCalledTimes(2);
-    expect(mockSetTimerModeId).toHaveBeenCalledWith('lookPause');
+    expect(mockSetTimerModeId).toHaveBeenLastCalledWith('lookPause', {
+      temporary: true,
+    });
   });
 
   it('enters a rewarded mode without showing an ad when local access is still active', async () => {

@@ -16,7 +16,7 @@ Wink Timer: Alarm & Timer
 ## 간단한 설명
 
 ```text
-Alarm, timer, stopwatch, plus no-touch controls.
+Camera-controllable timer and stopwatch, plus alarms.
 ```
 
 ## 전체 설명
@@ -63,11 +63,11 @@ Flip to Start Your Timer
 ## 앱 설치 캠페인 설명
 
 ```text
-Use alarms, timers, and stopwatch timing with optional look, wink, and flip controls.
-Set daily, weekday, and date alarms with sound, vibration, volume, and snooze.
-Manage wake-ups, workouts, breaks, cooking timers, and quick stopwatch laps.
-Use alarms, timers, and stopwatch without camera, then turn on assisted controls when needed.
-Match timer alerts and repeating alarms with sound, volume, and vibration settings.
+Control timers with your eyes, a wink, or a smile, and record stopwatch laps with a wink.
+When your hands are wet or you are working out, control timers without tapping the screen.
+Choose look pause, wink control, smile control, or flip timer for the moment.
+Keep timers going easily while cooking, exercising, studying, or working.
+Use camera detection to start, pause, resume, and record with fewer taps.
 ```
 
 ## 알람 중심 광고 소재

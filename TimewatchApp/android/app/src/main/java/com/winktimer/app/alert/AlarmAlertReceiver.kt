@@ -57,6 +57,13 @@ class AlarmAlertReceiver : BroadcastReceiver() {
   }
 
   private fun playWithoutService(context: Context, intent: Intent) {
+    TimerAlertService.setFallbackActiveAlarmAlert(
+      intent.getStringExtra(AlarmAlertScheduler.EXTRA_ALARM_ID),
+      intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TITLE)
+        ?: "Alarm",
+      intent.getStringExtra(TimerAlertScheduler.EXTRA_NOTIFICATION_TEXT)
+        ?: "Alarm",
+    )
     TimerAlertPlayback.play(
       context.applicationContext,
       intent.getStringExtra(TimerAlertScheduler.EXTRA_SOUND_ID) ?: "alarm",

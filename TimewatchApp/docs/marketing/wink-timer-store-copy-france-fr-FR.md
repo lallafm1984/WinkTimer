@@ -11,13 +11,13 @@
 ## 앱 이름
 
 ```text
-Wink Timer: Alarme et Minuteur
+Wink Timer: Alarme Minuteur
 ```
 
 ## 간단한 설명
 
 ```text
-Alarme, minuteur, chronomètre et contrôle sans toucher.
+Minuteur et chronomètre contrôlables par caméra, avec alarme.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Retournez pour démarrer
 ## 앱 설치 캠페인 설명
 
 ```text
-Utilisez alarmes, minuteur et chronomètre avec regard, clin d’œil et retournement en option.
-Créez des alarmes quotidiennes, hebdomadaires ou datées avec son, vibration, volume et snooze.
-Gérez réveil, sport, pauses, cuisine et tours rapides de chronomètre dans une seule app.
-Utilisez alarmes, minuteur et chronomètre sans caméra; activez les contrôles assistés au besoin.
-Réglez alertes du minuteur et alarmes répétées avec son, volume et vibration.
+Contrôlez le minuteur par regard, clin d’œil ou sourire; marquez les tours au clin d’œil.
+Mains mouillées ou en plein entraînement, contrôlez le minuteur sans toucher l’écran.
+Choisissez pause par le regard, contrôle au clin d’œil, au sourire ou minuteur retourné.
+Cuisine, sport, études ou travail: gardez le minuteur en cours facilement.
+Utilisez la caméra pour démarrer, mettre en pause, reprendre et enregistrer.
 ```
 
 ## 알람 중심 광고 소재

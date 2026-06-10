@@ -17,7 +17,7 @@ Wink Timer: Sveglia e Timer
 ## 간단한 설명
 
 ```text
-Sveglia, timer, cronometro e controlli senza tocco.
+Timer e cronometro controllabili con la fotocamera, più sveglia.
 ```
 
 ## 전체 설명
@@ -64,11 +64,11 @@ Capovolgi per avviare
 ## 앱 설치 캠페인 설명
 
 ```text
-Usa sveglia, timer e cronometro con controlli opzionali via sguardo, occhiolino e flip.
-Crea sveglie giornaliere, settimanali o per data con suono, vibrazione, volume e snooze.
-Gestisci risveglio, allenamento, pause, timer cucina e giri rapidi del cronometro.
-Usa sveglia, timer e cronometro senza fotocamera; attiva i controlli assistiti quando servono.
-Abbina avvisi del timer e sveglie ripetute a suono, volume e vibrazione.
+Controlla il timer con sguardo, occhiolino o sorriso; registra giri con un occhiolino.
+Con mani bagnate o in allenamento, controlla il timer senza toccare lo schermo.
+Scegli pausa con lo sguardo, occhiolino, sorriso o timer capovolto.
+In cucina, allenamento, studio o lavoro, usa il timer con più comodità.
+Usa la fotocamera per avviare, mettere in pausa, riprendere e registrare.
 ```
 
 ## 알람 중심 광고 소재

@@ -16,7 +16,7 @@ Wink Timer: Báo thức & Hẹn giờ
 ## 간단한 설명
 
 ```text
-Báo thức, hẹn giờ, bấm giờ và điều khiển không chạm.
+Hẹn giờ và bấm giờ có thể điều khiển bằng camera, kèm báo thức.
 ```
 
 ## 전체 설명
@@ -63,11 +63,11 @@ Lật máy để bắt đầu
 ## 앱 설치 캠페인 설명
 
 ```text
-Dùng báo thức, hẹn giờ và bấm giờ với tùy chọn nhìn, nháy mắt và lật máy.
-Tạo báo thức hằng ngày, theo ngày trong tuần hoặc theo ngày cụ thể với âm, rung và báo lại.
-Quản lý thức dậy, tập luyện, nghỉ giải lao, hẹn giờ nấu ăn và vòng bấm giờ nhanh.
-Dùng báo thức, hẹn giờ và bấm giờ không cần camera; bật điều khiển hỗ trợ khi cần.
-Tùy chỉnh cảnh báo hẹn giờ và báo thức lặp bằng âm thanh, âm lượng và rung.
+Điều khiển hẹn giờ bằng nhìn, nháy mắt hoặc nụ cười, và ghi vòng bấm giờ bằng nháy mắt.
+Khi tay ướt hoặc đang tập luyện, điều khiển hẹn giờ mà không cần chạm màn hình.
+Chọn tạm dừng bằng ánh nhìn, điều khiển bằng nháy mắt, nụ cười hoặc hẹn giờ lật máy.
+Khi nấu ăn, tập luyện, học tập hoặc làm việc, bạn có thể tiếp tục hẹn giờ dễ hơn.
+Dùng nhận diện camera để bắt đầu, tạm dừng, tiếp tục và ghi lại với ít thao tác chạm hơn.
 ```
 
 ## 알람 중심 광고 소재

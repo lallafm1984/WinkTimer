@@ -138,6 +138,7 @@ import {
   type AppLocale,
   type TranslationKey,
 } from '../i18n/localization';
+import { recordFunnelEvent } from '../analytics/funnelAnalytics';
 import type { SessionRepository } from '../storage/sessionRepository';
 import { createSessionRepository } from '../storage/sessionRepository';
 import type { AlarmRepository } from '../storage/alarmRepository';
@@ -235,7 +236,8 @@ type AppStateValue = {
   requestTimerTargetPopup(): void;
   consumeTimerTargetPopupRequest(requestId: number): void;
   timerModeId: TimerModeId;
-  setTimerModeId: React.Dispatch<React.SetStateAction<TimerModeId>>;
+  setTimerModeId: SetTimerModeId;
+  clearTemporaryTimerModeId(): void;
   timerAlertVibrationEnabled: boolean;
   setTimerAlertVibrationEnabled: React.Dispatch<
     React.SetStateAction<boolean>
@@ -317,6 +319,15 @@ type ActiveTimekeepingSession = {
   normalTimerMode: boolean;
   timer: TimerState;
 };
+
+type SetTimerModeIdOptions = {
+  temporary?: boolean;
+};
+
+type SetTimerModeId = (
+  action: React.SetStateAction<TimerModeId>,
+  options?: SetTimerModeIdOptions,
+) => void;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -1228,6 +1239,10 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   const timekeepingModeRef = useRef(timekeepingMode);
   const timerTargetDurationMsRef = useRef(timerTargetDurationMs);
   const timerModeIdRef = useRef(timerModeId);
+  const persistedTimerModeIdRef = useRef(timerModeId);
+  const temporaryTimerModeIdRef = useRef<TimerModeId | null>(null);
+  const temporaryTimerModeUsedRef = useRef(false);
+  const previousTimerPhaseRef = useRef(timer.phase);
   const lastTimerAlertKeyRef = useRef<string | null>(null);
   const scheduledTimerAlertKeyRef = useRef<string | null>(null);
   const scheduledTimerAlertTriggerAtMsRef = useRef<number | null>(null);
@@ -1434,6 +1449,11 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
 
   const persistCurrentActiveTimekeepingSession = useCallback(
     (nextTimer = timerRef.current, savedAtMs = Date.now()) => {
+      if (temporaryTimerModeIdRef.current !== null) {
+        clearPersistedActiveTimekeepingSession().catch(() => undefined);
+        return;
+      }
+
       persistActiveTimekeepingSession(
         createActiveTimekeepingSessionSnapshot(nextTimer),
         savedAtMs,
@@ -1608,6 +1628,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           });
           setTimerModeIdState(nextSettings.timerModeId);
           timerModeIdRef.current = nextSettings.timerModeId;
+          persistedTimerModeIdRef.current = nextSettings.timerModeId;
           setTimerAlertVibrationEnabled(
             nextSettings.timerAlertVibrationEnabled,
           );
@@ -1664,6 +1685,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
           normalTimerModeRef.current = activeSession.normalTimerMode;
           setTimerModeIdState(activeSession.timerModeId);
           timerModeIdRef.current = activeSession.timerModeId;
+          persistedTimerModeIdRef.current = activeSession.timerModeId;
           previousTimerForHistoryRef.current = restoredTimer;
 
           if (
@@ -1715,7 +1737,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       timekeepingMode,
       timerTargetDurationMs,
       recentTimerTargetDurationsMs,
-      timerModeId,
+      timerModeId: persistedTimerModeIdRef.current,
       timerAlertVibrationEnabled,
       timerAlertSoundEnabled,
       timerAlertSoundId,
@@ -1826,6 +1848,41 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   useEffect(() => {
     timerRef.current = timer;
   }, [timer]);
+
+  useEffect(() => {
+    if (
+      normalTimerMode ||
+      modeRunsWithoutGaze(timerModeId) ||
+      timer.phase !== 'active' ||
+      timer.startedAtMs === null
+    ) {
+      return;
+    }
+
+    recordFunnelEvent(
+      'wt_camera_mode_start',
+      {
+        mode_id: timerModeId,
+        timekeeping_mode: timekeepingMode,
+        target_set: timer.targetDurationMs !== null,
+      },
+      {
+        oncePerSessionKey: [
+          'camera-mode-start',
+          timerModeId,
+          timekeepingMode,
+          timer.startedAtMs,
+        ].join(':'),
+      },
+    );
+  }, [
+    normalTimerMode,
+    timekeepingMode,
+    timer.phase,
+    timer.startedAtMs,
+    timer.targetDurationMs,
+    timerModeId,
+  ]);
 
   useEffect(() => {
     screenRef.current = screen;
@@ -2219,6 +2276,47 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
   useEffect(() => {
     timerModeIdRef.current = timerModeId;
   }, [timerModeId]);
+
+  const clearTemporaryTimerModeId = useCallback(() => {
+    if (temporaryTimerModeIdRef.current === null) {
+      return;
+    }
+
+    temporaryTimerModeIdRef.current = null;
+    temporaryTimerModeUsedRef.current = false;
+
+    const nextModeId = persistedTimerModeIdRef.current;
+    if (timerModeIdRef.current === nextModeId) {
+      return;
+    }
+
+    setSessionHistory([]);
+    timerModeIdRef.current = nextModeId;
+    setTimerModeIdState(nextModeId);
+  }, []);
+
+  useEffect(() => {
+    const previousPhase = previousTimerPhaseRef.current;
+    const wasRunning =
+      previousPhase === 'active' || previousPhase === 'manualPaused';
+    const isRunning =
+      timer.phase === 'active' || timer.phase === 'manualPaused';
+
+    if (temporaryTimerModeIdRef.current !== null && isRunning) {
+      temporaryTimerModeUsedRef.current = true;
+    }
+
+    if (
+      temporaryTimerModeIdRef.current !== null &&
+      temporaryTimerModeUsedRef.current &&
+      wasRunning &&
+      !isRunning
+    ) {
+      clearTemporaryTimerModeId();
+    }
+
+    previousTimerPhaseRef.current = timer.phase;
+  }, [clearTemporaryTimerModeId, timer.phase]);
 
   useEffect(() => {
     gestureInputsBlockedRef.current = gestureInputsBlocked;
@@ -2762,20 +2860,30 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
     [setTimer],
   );
 
-  const setTimerModeId = useCallback<
-    React.Dispatch<React.SetStateAction<TimerModeId>>
-  >(action => {
+  const setTimerModeId = useCallback<SetTimerModeId>((action, options) => {
     const currentModeId = timerModeIdRef.current;
     const nextModeId =
       typeof action === 'function'
         ? (action as (value: TimerModeId) => TimerModeId)(currentModeId)
         : action;
+    const temporary = options?.temporary === true;
 
-    if (nextModeId === currentModeId) {
+    if (
+      nextModeId === currentModeId &&
+      temporaryTimerModeIdRef.current === (temporary ? nextModeId : null)
+    ) {
       return;
     }
 
     setSessionHistory([]);
+    if (temporary) {
+      temporaryTimerModeIdRef.current = nextModeId;
+      temporaryTimerModeUsedRef.current = false;
+    } else {
+      temporaryTimerModeIdRef.current = null;
+      temporaryTimerModeUsedRef.current = false;
+      persistedTimerModeIdRef.current = nextModeId;
+    }
     timerModeIdRef.current = nextModeId;
     setTimerModeIdState(nextModeId);
   }, []);
@@ -3013,6 +3121,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       consumeTimerTargetPopupRequest,
       timerModeId,
       setTimerModeId,
+      clearTemporaryTimerModeId,
       timerAlertVibrationEnabled,
       setTimerAlertVibrationEnabled,
       timerAlertSoundEnabled,
@@ -3069,6 +3178,7 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
       recentTimerTargetDurationsMs,
       timerTargetPopupRequestId,
       timerModeId,
+      clearTemporaryTimerModeId,
       timerAlertVibrationEnabled,
       timerAlertSoundEnabled,
       timerAlertSoundId,
