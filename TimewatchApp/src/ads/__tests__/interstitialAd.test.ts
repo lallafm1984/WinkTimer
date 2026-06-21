@@ -4,15 +4,19 @@ import {resetAdDiagnosticLogsForTests} from '../adDiagnosticLog';
 import {
   INTERSTITIAL_AD_COOLDOWN_MS,
   createInterstitialAdFrequencyRepository,
+  createModeSelectionInterstitialGraceRepository,
   getInterstitialAdDateKey,
+  initializeModeSelectionInterstitialGrace,
   type InterstitialAdFrequencySnapshot,
   showAlarmStopInterstitialIfEligible,
+  showModeSelectionInterstitialIfEligible,
   showSettingsEntryInterstitialIfEligible,
   showInterstitialAd,
   shouldShowSettingsEntryInterstitialAd,
   shouldShowInterstitialAd,
   type InterstitialAdForDisplay,
   type InterstitialAdFrequencyRepository,
+  type ModeSelectionInterstitialGraceRepository,
 } from '../interstitialAd';
 
 type FakeInterstitialAd = InterstitialAdForDisplay & {
@@ -46,6 +50,30 @@ function createFrequencyRepository(
   return {
     getFrequencySnapshot: jest.fn(async () => snapshot),
     recordShown: jest.fn(async () => undefined),
+  };
+}
+
+function createModeSelectionGraceRepository(
+  firstSeenAtMs: number,
+  existingUserModeSelectionSkipsRemaining = 0,
+): ModeSelectionInterstitialGraceRepository {
+  let state = {
+    firstSeenAtMs,
+    existingUserModeSelectionSkipsRemaining,
+  };
+
+  return {
+    getOrCreateState: jest.fn(async () => state),
+    consumeExistingUserModeSelectionSkip: jest.fn(async () => {
+      state = {
+        ...state,
+        existingUserModeSelectionSkipsRemaining: Math.max(
+          0,
+          state.existingUserModeSelectionSkipsRemaining - 1,
+        ),
+      };
+      return state.existingUserModeSelectionSkipsRemaining;
+    }),
   };
 }
 
@@ -165,6 +193,26 @@ describe('interstitialAd', () => {
     await expect(promise).resolves.toBeUndefined();
   });
 
+  it('does not time out after an interstitial loads while waiting for the user to close it', async () => {
+    jest.useFakeTimers();
+    const interstitialAd = createFakeInterstitialAd();
+    const promise = showInterstitialAd({
+      createInterstitialAd: () => interstitialAd,
+      timeoutMs: 1000,
+    }).then(
+      () => 'resolved',
+      error => `rejected:${String(error?.message ?? error)}`,
+    );
+
+    interstitialAd.emit(AdEventType.LOADED);
+    await Promise.resolve();
+    jest.advanceTimersByTime(1000);
+    await Promise.resolve();
+    interstitialAd.emit(AdEventType.CLOSED);
+
+    await expect(promise).resolves.toBe('resolved');
+  });
+
   it('records alarm-stop exposure only after an eligible ad is shown', async () => {
     const shownAtMs = 1_000_000;
     const repository = createFrequencyRepository(createFrequencySnapshot());
@@ -197,6 +245,164 @@ describe('interstitialAd', () => {
 
     expect(showAd).toHaveBeenCalledTimes(1);
     expect(repository.recordShown).toHaveBeenCalledWith(shownAtMs);
+  });
+
+  it('uses the remote-config cooldown policy for mode-selection interstitials', async () => {
+    const shownAtMs = 1_000_000;
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    const policy = {
+      enabled: true,
+      dailyCap: 3,
+      cooldownMs: twelveHoursMs,
+      modeSelectionGraceMs: 0,
+      settingsEntryEnabled: true,
+      settingsCloseReviewPromptEnabled: true,
+    };
+    const repositoryDuringCooldown = createFrequencyRepository(
+      createFrequencySnapshot({lastShownAtMs: shownAtMs}),
+    );
+    const skippedShowAd = jest.fn(async () => undefined);
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs: shownAtMs + twelveHoursMs - 1,
+        repository: repositoryDuringCooldown,
+        showAd: skippedShowAd,
+        getPolicy: () => policy,
+      }),
+    ).resolves.toBe(false);
+
+    expect(skippedShowAd).not.toHaveBeenCalled();
+    expect(repositoryDuringCooldown.recordShown).not.toHaveBeenCalled();
+
+    const repositoryAfterCooldown = createFrequencyRepository(
+      createFrequencySnapshot({lastShownAtMs: shownAtMs}),
+    );
+    const shownShowAd = jest.fn(async () => undefined);
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs: shownAtMs + twelveHoursMs,
+        repository: repositoryAfterCooldown,
+        showAd: shownShowAd,
+        getPolicy: () => policy,
+      }),
+    ).resolves.toBe(true);
+
+    expect(shownShowAd).toHaveBeenCalledTimes(1);
+    expect(repositoryAfterCooldown.recordShown).toHaveBeenCalledWith(
+      shownAtMs + twelveHoursMs,
+    );
+  });
+
+  it('skips mode-selection interstitials during the remote-config grace period', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const graceMs = 3 * 60 * 1000;
+    const nowMs = firstSeenAtMs + graceMs - 1;
+    const repository = createFrequencyRepository(createFrequencySnapshot());
+    const graceRepository = createModeSelectionGraceRepository(firstSeenAtMs);
+    const showAd = jest.fn(async () => undefined);
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs,
+        repository,
+        graceRepository,
+        showAd,
+        getPolicy: () => ({
+          enabled: true,
+          dailyCap: 3,
+          cooldownMs: INTERSTITIAL_AD_COOLDOWN_MS,
+          modeSelectionGraceMs: graceMs,
+          settingsEntryEnabled: true,
+          settingsCloseReviewPromptEnabled: true,
+        }),
+      }),
+    ).resolves.toBe(false);
+
+    expect(showAd).not.toHaveBeenCalled();
+    expect(repository.recordShown).not.toHaveBeenCalled();
+  });
+
+  it('shows mode-selection interstitials after the remote-config grace period', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const graceMs = 3 * 60 * 1000;
+    const nowMs = firstSeenAtMs + graceMs;
+    const repository = createFrequencyRepository(createFrequencySnapshot());
+    const graceRepository = createModeSelectionGraceRepository(firstSeenAtMs);
+    const showAd = jest.fn(async () => undefined);
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs,
+        repository,
+        graceRepository,
+        showAd,
+        getPolicy: () => ({
+          enabled: true,
+          dailyCap: 3,
+          cooldownMs: INTERSTITIAL_AD_COOLDOWN_MS,
+          modeSelectionGraceMs: graceMs,
+          settingsEntryEnabled: true,
+          settingsCloseReviewPromptEnabled: true,
+        }),
+      }),
+    ).resolves.toBe(true);
+
+    expect(showAd).toHaveBeenCalledTimes(1);
+    expect(repository.recordShown).toHaveBeenCalledWith(nowMs);
+  });
+
+  it('skips the first two mode-selection interstitials for existing users after migration', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const graceRepository = createModeSelectionGraceRepository(
+      firstSeenAtMs,
+      2,
+    );
+    const repository = createFrequencyRepository(createFrequencySnapshot());
+    const showAd = jest.fn(async () => undefined);
+    const getPolicy = () => ({
+      enabled: true,
+      dailyCap: 3,
+      cooldownMs: 0,
+      modeSelectionGraceMs: 0,
+      settingsEntryEnabled: true,
+      settingsCloseReviewPromptEnabled: true,
+    });
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs: firstSeenAtMs,
+        repository,
+        graceRepository,
+        showAd,
+        getPolicy,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs: firstSeenAtMs + 1,
+        repository,
+        graceRepository,
+        showAd,
+        getPolicy,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs: firstSeenAtMs + 2,
+        repository,
+        graceRepository,
+        showAd,
+        getPolicy,
+      }),
+    ).resolves.toBe(true);
+
+    expect(showAd).toHaveBeenCalledTimes(1);
+    expect(repository.recordShown).toHaveBeenCalledWith(firstSeenAtMs + 2);
+    expect(
+      graceRepository.consumeExistingUserModeSelectionSkip,
+    ).toHaveBeenCalledTimes(2);
   });
 
   it('skips alarm-stop exposure while the three-hour cooldown is active', async () => {
@@ -258,6 +464,85 @@ describe('interstitialAd', () => {
       lastShownAtMs: secondShownAtMs,
       dailyShownCount: 0,
       shownDateKey: getInterstitialAdDateKey(nextDayMs),
+    });
+  });
+
+  it('stores the first app launch timestamp for mode-selection grace without resetting it', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const laterLaunchAtMs = firstSeenAtMs + 10 * 60 * 1000;
+    const repository = createModeSelectionInterstitialGraceRepository();
+
+    await expect(
+      initializeModeSelectionInterstitialGrace({
+        nowMs: firstSeenAtMs,
+        graceRepository: repository,
+      }),
+    ).resolves.toBe(firstSeenAtMs);
+
+    await expect(
+      initializeModeSelectionInterstitialGrace({
+        nowMs: laterLaunchAtMs,
+        graceRepository: repository,
+      }),
+    ).resolves.toBe(firstSeenAtMs);
+
+    await expect(
+      repository.getOrCreateState(laterLaunchAtMs),
+    ).resolves.toEqual({
+      firstSeenAtMs,
+      existingUserModeSelectionSkipsRemaining: 0,
+    });
+  });
+
+  it('initializes existing users with two mode-selection interstitial skips', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const repository = createModeSelectionInterstitialGraceRepository();
+
+    await AsyncStorage.setItem('@winktimer:settings:v1', JSON.stringify({}));
+
+    await expect(
+      initializeModeSelectionInterstitialGrace({
+        nowMs: firstSeenAtMs,
+        graceRepository: repository,
+      }),
+    ).resolves.toBe(firstSeenAtMs);
+
+    await expect(repository.getOrCreateState(firstSeenAtMs)).resolves.toEqual({
+      firstSeenAtMs,
+      existingUserModeSelectionSkipsRemaining: 2,
+    });
+  });
+
+  it('does not add existing-user mode-selection skips for fresh installs', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const repository = createModeSelectionInterstitialGraceRepository();
+
+    await expect(
+      initializeModeSelectionInterstitialGrace({
+        nowMs: firstSeenAtMs,
+        graceRepository: repository,
+      }),
+    ).resolves.toBe(firstSeenAtMs);
+
+    await expect(repository.getOrCreateState(firstSeenAtMs)).resolves.toEqual({
+      firstSeenAtMs,
+      existingUserModeSelectionSkipsRemaining: 0,
+    });
+  });
+
+  it('migrates an existing first-seen record with legacy user mode-selection skips', async () => {
+    const firstSeenAtMs = 1_000_000;
+    const repository = createModeSelectionInterstitialGraceRepository();
+
+    await AsyncStorage.setItem('@winktimer:settings:v1', JSON.stringify({}));
+    await AsyncStorage.setItem(
+      '@winktimer:mode_selection_interstitial_grace:v1',
+      JSON.stringify({version: 1, firstSeenAtMs}),
+    );
+
+    await expect(repository.getOrCreateState(firstSeenAtMs)).resolves.toEqual({
+      firstSeenAtMs,
+      existingUserModeSelectionSkipsRemaining: 2,
     });
   });
 });

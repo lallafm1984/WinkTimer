@@ -13,6 +13,7 @@ function createRemoteConfigClient({
   enabled = true,
   dailyCap = 3,
   cooldownHours = 3,
+  modeSelectionGraceMinutes = 3,
   settingsEntryEnabled = true,
   settingsCloseReviewPromptEnabled = true,
   failDefaults = false,
@@ -54,6 +55,10 @@ function createRemoteConfigClient({
         return cooldownHours;
       }
 
+      if (key === 'ads_mode_selection_grace_minutes') {
+        return modeSelectionGraceMinutes;
+      }
+
       return 0;
     }),
   };
@@ -77,6 +82,7 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: true,
       dailyCap: 2,
       cooldownHours: 4,
+      modeSelectionGraceMinutes: 5,
     });
 
     const policy = await initializeInterstitialAdRemoteConfig({client});
@@ -92,6 +98,7 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: true,
       dailyCap: 2,
       cooldownMs: 4 * 60 * 60 * 1000,
+      modeSelectionGraceMs: 5 * 60 * 1000,
       settingsEntryEnabled: true,
       settingsCloseReviewPromptEnabled: true,
     });
@@ -139,6 +146,7 @@ describe('interstitialAdRemoteConfig', () => {
         enabled: true,
         dailyCap: Number.NaN,
         cooldownHours: Number.POSITIVE_INFINITY,
+        modeSelectionGraceMinutes: Number.NaN,
       }),
     ).toEqual(DEFAULT_INTERSTITIAL_AD_POLICY);
 
@@ -147,6 +155,7 @@ describe('interstitialAdRemoteConfig', () => {
         enabled: true,
         dailyCap: 99,
         cooldownHours: 99,
+        modeSelectionGraceMinutes: 99,
         settingsEntryEnabled: false,
         settingsCloseReviewPromptEnabled: false,
       }),
@@ -154,6 +163,7 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: true,
       dailyCap: 6,
       cooldownMs: 24 * 60 * 60 * 1000,
+      modeSelectionGraceMs: 60 * 60 * 1000,
       settingsEntryEnabled: false,
       settingsCloseReviewPromptEnabled: false,
     });
@@ -164,6 +174,7 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: false,
       dailyCap: 4,
       cooldownHours: 2,
+      modeSelectionGraceMinutes: 7,
     });
 
     const readPolicy = createInterstitialAdPolicyReader(client);
@@ -172,6 +183,7 @@ describe('interstitialAdRemoteConfig', () => {
       enabled: false,
       dailyCap: 4,
       cooldownMs: 2 * 60 * 60 * 1000,
+      modeSelectionGraceMs: 7 * 60 * 1000,
       settingsEntryEnabled: true,
       settingsCloseReviewPromptEnabled: true,
     });

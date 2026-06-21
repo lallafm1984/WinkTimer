@@ -12,6 +12,7 @@ import {PrimaryButton} from './components/PrimaryButton';
 import {preloadMascotImages} from './components/mascotImages';
 import {AdMobBanner} from './ads/AdMobBanner';
 import {
+  initializeModeSelectionInterstitialGrace,
   showAlarmStopInterstitialIfEligible,
   showSettingsEntryInterstitialIfEligible,
 } from './ads/interstitialAd';
@@ -315,6 +316,7 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
+    initializeModeSelectionInterstitialGrace().catch(() => undefined);
     initializeInterstitialAdRemoteConfig().catch(() => undefined);
   }, []);
 

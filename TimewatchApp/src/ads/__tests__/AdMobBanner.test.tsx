@@ -27,7 +27,7 @@ describe('AdMobBanner', () => {
       renderer = ReactTestRenderer.create(<AdMobBanner />);
     });
 
-    const banner = renderer.root.findByType(BannerAd);
+    const banner = renderer!.root.findByType(BannerAd);
 
     expect(typeof banner.props.onAdLoaded).toBe('function');
     expect(typeof banner.props.onAdFailedToLoad).toBe('function');

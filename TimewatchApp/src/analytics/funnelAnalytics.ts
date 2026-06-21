@@ -5,6 +5,7 @@ export type FunnelEventName =
   | 'wt_camera_permission_result'
   | 'wt_mode_enter'
   | 'wt_mode_menu_open'
+  | 'wt_mode_selection_interstitial_result'
   | 'wt_mode_select_attempt'
   | 'wt_reward_access_result'
   | 'wt_reward_prompt_cancel'

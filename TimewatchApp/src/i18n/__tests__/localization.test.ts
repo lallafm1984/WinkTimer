@@ -105,6 +105,8 @@ describe('localization', () => {
     expect(korean('alarm.snoozeOn')).toBe('다시 울림 켜짐');
     expect(english('settings.title')).toBe('SETTINGS');
     expect(english('alarm.setupTitle')).toBe('ALARM SETUP');
+    expect(english('timer.otherModes')).toBe('OTHER MODES');
+    expect(korean('timer.otherModes')).toBe('다른 모드 보기');
   });
 
   it('uses clear rewarded ad opt-in popup wording', () => {

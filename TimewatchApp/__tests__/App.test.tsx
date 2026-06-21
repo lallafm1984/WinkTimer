@@ -17,6 +17,10 @@ const mockShowSettingsEntryInterstitialIfEligible = jest.fn<
   Promise<boolean>,
   []
 >();
+const mockInitializeModeSelectionInterstitialGrace = jest.fn<
+  Promise<number>,
+  []
+>();
 const mockInitializeInterstitialAdRemoteConfig = jest.fn<Promise<unknown>, []>();
 const mockInitializeMobileAds = jest.fn<Promise<void>, []>();
 let mockSettingsCloseReviewPromptEnabled = true;
@@ -44,6 +48,8 @@ const nativeModules = NativeModules as MutableNativeModules;
 const originalNativeTimerAlert = nativeModules.NativeTimerAlert;
 
 jest.mock('../src/ads/interstitialAd', () => ({
+  initializeModeSelectionInterstitialGrace: () =>
+    mockInitializeModeSelectionInterstitialGrace(),
   showAlarmStopInterstitialIfEligible: () =>
     mockShowAlarmStopInterstitialIfEligible(),
   showSettingsEntryInterstitialIfEligible: () =>
@@ -90,6 +96,8 @@ beforeEach(async () => {
   mockShowAlarmStopInterstitialIfEligible.mockResolvedValue(false);
   mockShowSettingsEntryInterstitialIfEligible.mockReset();
   mockShowSettingsEntryInterstitialIfEligible.mockResolvedValue(false);
+  mockInitializeModeSelectionInterstitialGrace.mockReset();
+  mockInitializeModeSelectionInterstitialGrace.mockResolvedValue(1_000);
   mockInitializeInterstitialAdRemoteConfig.mockReset();
   mockInitializeInterstitialAdRemoteConfig.mockResolvedValue(undefined);
   mockInitializeMobileAds.mockReset();
@@ -373,6 +381,7 @@ test('initializes interstitial ad remote config on launch', async () => {
     renderer = ReactTestRenderer.create(<App />);
   });
 
+  expect(mockInitializeModeSelectionInterstitialGrace).toHaveBeenCalledTimes(1);
   expect(mockInitializeInterstitialAdRemoteConfig).toHaveBeenCalledTimes(1);
 
   await ReactTestRenderer.act(async () => {

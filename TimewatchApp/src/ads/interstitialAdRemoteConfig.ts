@@ -2,6 +2,7 @@ import remoteConfig from '@react-native-firebase/remote-config';
 import {recordAdDiagnosticLog} from './adDiagnosticLog';
 
 const HOURS_TO_MS = 60 * 60 * 1000;
+const MINUTES_TO_MS = 60 * 1000;
 
 export const INTERSTITIAL_AD_REMOTE_CONFIG_FETCH_INTERVAL_MS = 6 * HOURS_TO_MS;
 
@@ -9,6 +10,7 @@ export const INTERSTITIAL_AD_REMOTE_CONFIG_KEYS = {
   enabled: 'ads_interstitial_enabled',
   dailyCap: 'ads_interstitial_daily_cap',
   cooldownHours: 'ads_interstitial_cooldown_hours',
+  modeSelectionGraceMinutes: 'ads_mode_selection_grace_minutes',
   settingsEntryEnabled: 'ads_settings_entry_interstitial_enabled',
   settingsCloseReviewPromptEnabled: 'app_review_prompt_settings_close_enabled',
 } as const;
@@ -17,6 +19,7 @@ export const INTERSTITIAL_AD_REMOTE_CONFIG_DEFAULTS = {
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.enabled]: true,
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.dailyCap]: 3,
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.cooldownHours]: 3,
+  [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.modeSelectionGraceMinutes]: 3,
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsEntryEnabled]: true,
   [INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsCloseReviewPromptEnabled]: true,
 };
@@ -25,6 +28,7 @@ export type InterstitialAdPolicy = {
   enabled: boolean;
   dailyCap: number;
   cooldownMs: number;
+  modeSelectionGraceMs: number;
   settingsEntryEnabled: boolean;
   settingsCloseReviewPromptEnabled: boolean;
 };
@@ -45,6 +49,7 @@ export const DEFAULT_INTERSTITIAL_AD_POLICY: InterstitialAdPolicy = {
   enabled: true,
   dailyCap: 3,
   cooldownMs: 3 * HOURS_TO_MS,
+  modeSelectionGraceMs: 3 * MINUTES_TO_MS,
   settingsEntryEnabled: true,
   settingsCloseReviewPromptEnabled: true,
 };
@@ -53,6 +58,8 @@ const MIN_INTERSTITIAL_AD_DAILY_CAP = 0;
 const MAX_INTERSTITIAL_AD_DAILY_CAP = 6;
 const MIN_INTERSTITIAL_AD_COOLDOWN_HOURS = 1;
 const MAX_INTERSTITIAL_AD_COOLDOWN_HOURS = 24;
+const MIN_MODE_SELECTION_GRACE_MINUTES = 0;
+const MAX_MODE_SELECTION_GRACE_MINUTES = 60;
 
 let initializationPromise: Promise<InterstitialAdPolicy> | null = null;
 let activeInterstitialAdPolicy = DEFAULT_INTERSTITIAL_AD_POLICY;
@@ -80,12 +87,14 @@ export function sanitizeInterstitialAdPolicy({
   enabled,
   dailyCap,
   cooldownHours,
+  modeSelectionGraceMinutes,
   settingsEntryEnabled,
   settingsCloseReviewPromptEnabled,
 }: {
   enabled: unknown;
   dailyCap: unknown;
   cooldownHours: unknown;
+  modeSelectionGraceMinutes?: unknown;
   settingsEntryEnabled?: unknown;
   settingsCloseReviewPromptEnabled?: unknown;
 }): InterstitialAdPolicy {
@@ -101,11 +110,18 @@ export function sanitizeInterstitialAdPolicy({
     MIN_INTERSTITIAL_AD_COOLDOWN_HOURS,
     MAX_INTERSTITIAL_AD_COOLDOWN_HOURS,
   );
+  const normalizedModeSelectionGraceMinutes = normalizeInteger(
+    modeSelectionGraceMinutes,
+    DEFAULT_INTERSTITIAL_AD_POLICY.modeSelectionGraceMs / MINUTES_TO_MS,
+    MIN_MODE_SELECTION_GRACE_MINUTES,
+    MAX_MODE_SELECTION_GRACE_MINUTES,
+  );
 
   return {
     enabled: typeof enabled === 'boolean' ? enabled : true,
     dailyCap: normalizedDailyCap,
     cooldownMs: normalizedCooldownHours * HOURS_TO_MS,
+    modeSelectionGraceMs: normalizedModeSelectionGraceMinutes * MINUTES_TO_MS,
     settingsEntryEnabled:
       typeof settingsEntryEnabled === 'boolean'
         ? settingsEntryEnabled
@@ -125,6 +141,9 @@ function readInterstitialAdPolicyFromClient(
     dailyCap: client.getNumber(INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.dailyCap),
     cooldownHours: client.getNumber(
       INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.cooldownHours,
+    ),
+    modeSelectionGraceMinutes: client.getNumber(
+      INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.modeSelectionGraceMinutes,
     ),
     settingsEntryEnabled: client.getBoolean(
       INTERSTITIAL_AD_REMOTE_CONFIG_KEYS.settingsEntryEnabled,
@@ -176,6 +195,7 @@ export function initializeInterstitialAdRemoteConfig({
         enabled: activeInterstitialAdPolicy.enabled,
         dailyCap: activeInterstitialAdPolicy.dailyCap,
         cooldownMs: activeInterstitialAdPolicy.cooldownMs,
+        modeSelectionGraceMs: activeInterstitialAdPolicy.modeSelectionGraceMs,
         settingsEntryEnabled: activeInterstitialAdPolicy.settingsEntryEnabled,
         settingsCloseReviewPromptEnabled:
           activeInterstitialAdPolicy.settingsCloseReviewPromptEnabled,

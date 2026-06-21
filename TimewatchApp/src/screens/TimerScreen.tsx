@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Animated,
   Easing,
-  Modal,
   NativeModules,
   Pressable,
   ScrollView,
@@ -15,7 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import ClockIcon from 'react-native-heroicons/mini/ClockIcon';
-import LockClosedIcon from 'react-native-heroicons/mini/LockClosedIcon';
+import Squares2X2Icon from 'react-native-heroicons/mini/Squares2X2Icon';
 import {ArcadePanel} from '../components/ArcadePanel';
 import {
   GhostMascot,
@@ -25,14 +24,7 @@ import {
 import {PrimaryButton} from '../components/PrimaryButton';
 import {formatDuration, TimerDisplay} from '../components/TimerDisplay';
 import {TimekeepingModeBar} from '../components/TimekeepingModeBar';
-import {
-  isRewardedAdNoFillError,
-  showRewardedAdForAccess,
-} from '../ads/rewardedAdAccess';
-import {
-  createRewardedModeAccessRepository,
-  modeRequiresRewardedAd,
-} from '../ads/rewardedModeAccess';
+import {showModeSelectionInterstitialIfEligible} from '../ads/interstitialAd';
 import {recordFunnelEvent} from '../analytics/funnelAnalytics';
 import type {SessionHistoryEvent} from '../domain/sessionHistory';
 import {
@@ -69,7 +61,6 @@ const MODE_MENU_ULTRA_MAX_HEIGHT = 560;
 const MODE_MENU_MIN_HEIGHT = 360;
 const MODE_MENU_SCREEN_HEIGHT_RATIO = 0.56;
 const MODE_MENU_ULTRA_WINDOW_HEIGHT = 900;
-const REWARDED_MODE_ACCESS_PROBE_MODE_ID: TimerModeId = 'lookPause';
 const RESPONSIVE_LAYOUT_BASE_HEIGHT = 780;
 const RESPONSIVE_LAYOUT_MAX_SCALE = 1.2;
 const RESPONSIVE_LAYOUT_MIN_HEIGHT = 900;
@@ -80,23 +71,21 @@ const MODE_MENU_ITEM_MIN_HEIGHT = 76;
 
 type Translator = ReturnType<typeof createTranslator>;
 
-type RewardedAdAccessState = 'idle' | 'loading' | 'error' | 'noFill';
-type RewardedModeAccessAttempt =
-  | 'available'
-  | 'granted'
-  | 'oneTime'
-  | 'blocked';
-type RewardedModeAccessStatus = 'active' | 'inactive';
+type ModeSelectionInterstitialResult = 'shown' | 'skipped' | 'error';
 
 function modeUsesCamera(modeId: TimerModeId) {
   return !modeRunsWithoutGaze(modeId);
+}
+
+function modeRequiresSelectionInterstitial(modeId: TimerModeId) {
+  return modeId !== 'basicTimer';
 }
 
 function getModeFunnelParams(modeId: TimerModeId) {
   return {
     mode_id: modeId,
     is_camera_mode: modeUsesCamera(modeId),
-    requires_reward: modeRequiresRewardedAd(modeId),
+    requires_interstitial: modeRequiresSelectionInterstitial(modeId),
   };
 }
 
@@ -859,35 +848,16 @@ export function TimerScreen() {
   const [modeMenuOpen, setModeMenuOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [timerTargetPopupOpen, setTimerTargetPopupOpen] = React.useState(false);
+  const [
+    modeSelectionInterstitialPending,
+    setModeSelectionInterstitialPending,
+  ] = React.useState(false);
   const [timerTargetDraftDurationMs, setTimerTargetDraftDurationMsState] =
     React.useState(timer.targetDurationMs ?? timerTargetDurationMs);
   const [pendingTimekeepingMode, setPendingTimekeepingMode] =
     React.useState<TimekeepingMode | null>(null);
-  const [rewardedAccessPromptModeId, setRewardedAccessPromptModeId] =
-    React.useState<TimerModeId | null>(null);
-  const [rewardedAdAccessState, setRewardedAdAccessState] =
-    React.useState<RewardedAdAccessState>('idle');
-  const [rewardedModeAccessStatus, setRewardedModeAccessStatusState] =
-    React.useState<RewardedModeAccessStatus>('inactive');
-  const rewardedModeAccessStatusRef =
-    React.useRef<RewardedModeAccessStatus>('inactive');
   const timerTargetDraftDurationMsRef = React.useRef(
     timer.targetDurationMs ?? timerTargetDurationMs,
-  );
-  const rewardedModeAccessRepository = React.useMemo(
-    () => createRewardedModeAccessRepository(),
-    [],
-  );
-  const setRewardedModeAccessStatus = React.useCallback(
-    (status: RewardedModeAccessStatus) => {
-      if (rewardedModeAccessStatusRef.current === status) {
-        return;
-      }
-
-      rewardedModeAccessStatusRef.current = status;
-      setRewardedModeAccessStatusState(status);
-    },
-    [],
   );
 
   const selectedMode = getTimerModePreset(timerModeId);
@@ -970,15 +940,6 @@ export function TimerScreen() {
       timer.phase === 'ended');
   const canOpenTimerTargetPopup =
     showsTimerTargetControls && canAdjustTimerTarget;
-  const rewardedAdAccessPending = rewardedAdAccessState === 'loading';
-  const rewardedAdAccessMessage =
-    rewardedAdAccessState === 'loading'
-      ? t('timer.adLoading')
-      : rewardedAdAccessState === 'noFill'
-      ? t('rewarded.noFillOneTimeMessage')
-      : rewardedAdAccessState === 'error'
-      ? t('timer.adError')
-      : null;
   const modeMenuVisible = canChangeMode && modeMenuOpen;
   const setTimerTargetDraftDurationMs = React.useCallback(
     (durationMs: number) => {
@@ -1026,85 +987,6 @@ export function TimerScreen() {
 
     startTimerSession();
   }, [isTimerAlertActive, startTimerSession, stopTimerEndAlert]);
-  const canEnterAfterRewardedAccessAttempt = React.useCallback(
-    (result: RewardedModeAccessAttempt) =>
-      result === 'available' || result === 'oneTime',
-    [],
-  );
-  const ensureRewardedModeAccess = React.useCallback(
-    async (modeId = timerModeId): Promise<RewardedModeAccessAttempt> => {
-      if (!modeRequiresRewardedAd(modeId)) {
-        return 'available';
-      }
-
-      if (await rewardedModeAccessRepository.hasActiveAccess(modeId)) {
-        setRewardedModeAccessStatus('active');
-        setRewardedAdAccessState('idle');
-        recordFunnelEvent('wt_reward_access_result', {
-          ...getModeFunnelParams(modeId),
-          result: 'available',
-          no_fill: false,
-        });
-        return 'available';
-      }
-
-      setRewardedModeAccessStatus('inactive');
-      setRewardedAdAccessState('loading');
-
-      try {
-        await showRewardedAdForAccess();
-        await rewardedModeAccessRepository.grantAccess(Date.now());
-        setRewardedModeAccessStatus('active');
-        setRewardedAdAccessState('idle');
-        recordFunnelEvent('wt_reward_access_result', {
-          ...getModeFunnelParams(modeId),
-          result: 'granted',
-          no_fill: false,
-        });
-        return 'granted';
-      } catch (error) {
-        if (isRewardedAdNoFillError(error)) {
-          setRewardedModeAccessStatus('inactive');
-          setRewardedAdAccessState('noFill');
-          recordFunnelEvent('wt_reward_access_result', {
-            ...getModeFunnelParams(modeId),
-            result: 'oneTime',
-            no_fill: true,
-          });
-          return 'oneTime';
-        }
-
-        setRewardedModeAccessStatus('inactive');
-        setRewardedAdAccessState('error');
-        recordFunnelEvent('wt_reward_access_result', {
-          ...getModeFunnelParams(modeId),
-          result: 'blocked',
-          no_fill: false,
-        });
-        return 'blocked';
-      }
-    },
-    [rewardedModeAccessRepository, setRewardedModeAccessStatus, timerModeId],
-  );
-  const closeRewardedAccessPrompt = React.useCallback(() => {
-    if (rewardedAdAccessState === 'loading') {
-      return;
-    }
-
-    if (rewardedAccessPromptModeId !== null) {
-      recordFunnelEvent('wt_reward_prompt_cancel', {
-        ...getModeFunnelParams(rewardedAccessPromptModeId),
-      });
-    }
-    setRewardedAccessPromptModeId(null);
-  }, [rewardedAccessPromptModeId, rewardedAdAccessState]);
-  const openRewardedAccessPrompt = React.useCallback((modeId: TimerModeId) => {
-    setRewardedAdAccessState('idle');
-    recordFunnelEvent('wt_reward_prompt_show', {
-      ...getModeFunnelParams(modeId),
-    });
-    setRewardedAccessPromptModeId(modeId);
-  }, []);
   const ensureModeCameraPermission = React.useCallback(
     async (modeId: TimerModeId) => {
       if (!modeUsesCamera(modeId)) {
@@ -1121,22 +1003,11 @@ export function TimerScreen() {
     [],
   );
   const completeModeSelection = React.useCallback(
-    (
-      modeId: TimerModeId,
-      nextRewardedAdAccessState: RewardedAdAccessState = 'idle',
-      temporary = false,
-    ) => {
-      setRewardedAdAccessState(nextRewardedAdAccessState);
+    (modeId: TimerModeId) => {
       resetTimerSession();
-      if (temporary) {
-        setTimerModeId(modeId, {temporary: true});
-      } else {
-        setTimerModeId(modeId);
-      }
+      setTimerModeId(modeId);
       recordFunnelEvent('wt_mode_enter', {
         ...getModeFunnelParams(modeId),
-        temporary,
-        rewarded_access_state: nextRewardedAdAccessState,
         timekeeping_mode: timekeepingMode,
       });
       setModeMenuOpen(false);
@@ -1144,54 +1015,54 @@ export function TimerScreen() {
     [resetTimerSession, setTimerModeId, timekeepingMode],
   );
   const enterModeAfterCameraPermission = React.useCallback(
-    (
-      modeId: TimerModeId,
-      nextRewardedAdAccessState: RewardedAdAccessState = 'idle',
-      temporary = false,
-    ) => {
+    (modeId: TimerModeId) => {
       if (!modeUsesCamera(modeId)) {
-        completeModeSelection(modeId, nextRewardedAdAccessState, temporary);
+        completeModeSelection(modeId);
         return;
       }
 
       return ensureModeCameraPermission(modeId).then(hasCameraPermission => {
         if (hasCameraPermission) {
-          completeModeSelection(modeId, nextRewardedAdAccessState, temporary);
+          completeModeSelection(modeId);
         }
       });
     },
     [completeModeSelection, ensureModeCameraPermission],
   );
-  const handleConfirmRewardedAccess = React.useCallback(() => {
-    const modeId = rewardedAccessPromptModeId;
-    if (modeId === null || rewardedAdAccessState === 'loading') {
-      return;
-    }
+  const recordModeSelectionInterstitialResult = React.useCallback(
+    (modeId: TimerModeId, result: ModeSelectionInterstitialResult) => {
+      recordFunnelEvent('wt_mode_selection_interstitial_result', {
+        ...getModeFunnelParams(modeId),
+        result,
+      });
+    },
+    [],
+  );
+  const showModeSelectionInterstitialForMode = React.useCallback(
+    async (modeId: TimerModeId): Promise<ModeSelectionInterstitialResult> => {
+      setModeSelectionInterstitialPending(true);
 
-    recordFunnelEvent('wt_reward_prompt_confirm', {
-      ...getModeFunnelParams(modeId),
-    });
-    setRewardedAccessPromptModeId(null);
-
-    return ensureRewardedModeAccess(modeId).then(accessAttempt => {
-      if (accessAttempt === 'oneTime') {
-        return enterModeAfterCameraPermission(modeId, 'noFill', true);
+      try {
+        const shown = await showModeSelectionInterstitialIfEligible();
+        const result = shown ? 'shown' : 'skipped';
+        recordModeSelectionInterstitialResult(modeId, result);
+        return result;
+      } catch {
+        recordModeSelectionInterstitialResult(modeId, 'error');
+        return 'error';
+      } finally {
+        setModeSelectionInterstitialPending(false);
       }
-    });
-  }, [
-    ensureRewardedModeAccess,
-    enterModeAfterCameraPermission,
-    rewardedAccessPromptModeId,
-    rewardedAdAccessState,
-  ]);
+    },
+    [recordModeSelectionInterstitialResult],
+  );
   const handleOpenModeMenu = React.useCallback(() => {
     recordFunnelEvent('wt_mode_menu_open', {
       active_mode_id: timerModeId,
       timekeeping_mode: timekeepingMode,
-      rewarded_access_status: rewardedModeAccessStatus,
     });
     setModeMenuOpen(true);
-  }, [rewardedModeAccessStatus, timekeepingMode, timerModeId]);
+  }, [timekeepingMode, timerModeId]);
   const completeTimekeepingModeSelection = React.useCallback(
     (mode: TimekeepingMode) => {
       if (mode !== timekeepingMode) {
@@ -1269,43 +1140,14 @@ export function TimerScreen() {
   React.useEffect(() => {
     if (!canChangeMode && modeMenuOpen) {
       setModeMenuOpen(false);
-      setRewardedAccessPromptModeId(null);
     }
   }, [canChangeMode, modeMenuOpen]);
-
-  React.useEffect(() => {
-    if (!modeMenuOpen) {
-      return;
-    }
-
-    let cancelled = false;
-
-    rewardedModeAccessRepository
-      .hasActiveAccess(REWARDED_MODE_ACCESS_PROBE_MODE_ID)
-      .then(hasActiveAccess => {
-        if (cancelled) {
-          return;
-        }
-
-        setRewardedModeAccessStatus(hasActiveAccess ? 'active' : 'inactive');
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRewardedModeAccessStatus('inactive');
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [modeMenuOpen, rewardedModeAccessRepository, setRewardedModeAccessStatus]);
 
   React.useEffect(() => {
     const shouldBlockGestures =
       modeMenuOpen ||
       timerTargetPopupOpen ||
-      rewardedAccessPromptModeId !== null ||
-      rewardedAdAccessPending;
+      modeSelectionInterstitialPending;
 
     setGestureInputsBlocked(shouldBlockGestures);
 
@@ -1314,8 +1156,7 @@ export function TimerScreen() {
     };
   }, [
     modeMenuOpen,
-    rewardedAccessPromptModeId,
-    rewardedAdAccessPending,
+    modeSelectionInterstitialPending,
     setGestureInputsBlocked,
     timerTargetPopupOpen,
   ]);
@@ -1360,31 +1201,21 @@ export function TimerScreen() {
   ]);
 
   const handleSelectTimekeepingMode = (mode: TimekeepingMode) => {
-    if (rewardedAdAccessPending) {
+    if (modeSelectionInterstitialPending) {
       return;
     }
 
-    if (!modeRequiresRewardedAd(timerModeId)) {
-      completeTimekeepingModeSelection(mode);
-      return;
-    }
-
-    return ensureRewardedModeAccess().then(accessAttempt => {
-      if (canEnterAfterRewardedAccessAttempt(accessAttempt)) {
-        completeTimekeepingModeSelection(mode);
-      }
-    });
+    completeTimekeepingModeSelection(mode);
   };
 
   const handleSelectMode = (modeId: TimerModeId) => {
-    if (!canChangeMode || rewardedAdAccessPending) {
+    if (!canChangeMode || modeSelectionInterstitialPending) {
       return;
     }
 
     recordFunnelEvent('wt_mode_select_attempt', {
       ...getModeFunnelParams(modeId),
       current_mode_id: timerModeId,
-      rewarded_access_status: rewardedModeAccessStatus,
       timekeeping_mode: timekeepingMode,
     });
 
@@ -1393,26 +1224,13 @@ export function TimerScreen() {
       return;
     }
 
-    if (!modeRequiresRewardedAd(modeId)) {
+    if (!modeRequiresSelectionInterstitial(modeId)) {
       return enterModeAfterCameraPermission(modeId);
     }
 
-    return rewardedModeAccessRepository
-      .hasActiveAccess(modeId)
-      .then(hasActiveAccess => {
-        if (hasActiveAccess) {
-          setRewardedModeAccessStatus('active');
-          setRewardedAdAccessState('idle');
-          return enterModeAfterCameraPermission(modeId);
-        }
-
-        setRewardedModeAccessStatus('inactive');
-        openRewardedAccessPrompt(modeId);
-      })
-      .catch(() => {
-        setRewardedModeAccessStatus('inactive');
-        openRewardedAccessPrompt(modeId);
-      });
+    return showModeSelectionInterstitialForMode(modeId).then(() =>
+      enterModeAfterCameraPermission(modeId),
+    );
   };
 
   const setTimerTargetPartValue = (
@@ -1472,55 +1290,6 @@ export function TimerScreen() {
         </View>
       </View>
 
-      <Modal
-        animationType="fade"
-        accessibilityViewIsModal
-        onRequestClose={closeRewardedAccessPrompt}
-        transparent
-        visible={rewardedAccessPromptModeId !== null}>
-        <View style={styles.rewardedAccessModalBackdrop}>
-          <View
-            style={styles.rewardedAccessModalPanel}
-            testID="rewarded-mode-access-popup">
-            <Text style={styles.rewardedAccessModalTitle}>
-              {t('rewarded.unlockTitle')}
-            </Text>
-            <Text style={styles.rewardedAccessModalText}>
-              {t('rewarded.unlockMessage')}
-            </Text>
-            <View style={styles.rewardedAccessModalActions}>
-              <PrimaryButton
-                disabled={rewardedAdAccessPending}
-                label={t('common.cancel')}
-                onPress={closeRewardedAccessPrompt}
-                variant="secondary"
-                style={styles.rewardedAccessModalAction}
-                testID="rewarded-mode-access-cancel-button"
-              />
-              <PrimaryButton
-                disabled={rewardedAdAccessPending}
-                label={t('rewarded.watchAdAction')}
-                onPress={handleConfirmRewardedAccess}
-                style={styles.rewardedAccessModalAction}
-                testID="rewarded-mode-access-confirm-button"
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {!modeMenuVisible && rewardedAdAccessMessage ? (
-        <Text
-          style={[
-            styles.rewardedAdAccessMessage,
-            rewardedAdAccessState === 'error' &&
-              styles.rewardedAdAccessErrorMessage,
-          ]}
-          testID="rewarded-ad-access-message">
-          {rewardedAdAccessMessage}
-        </Text>
-      ) : null}
-
       {modeMenuVisible ? (
         <View style={styles.modeMenuArea} testID="mode-menu-area">
           <View
@@ -1548,9 +1317,6 @@ export function TimerScreen() {
               testID="mode-menu-scroll">
               {timerModePresets.map(mode => {
                 const active = mode.id === timerModeId;
-                const locked =
-                  modeRequiresRewardedAd(mode.id) &&
-                  rewardedModeAccessStatus === 'inactive';
                 const modeTitle = getLocalizedTimerModeTitle(locale, mode.id);
                 const modeDescription = getModeMenuDescription(mode, locale);
 
@@ -1559,9 +1325,6 @@ export function TimerScreen() {
                     accessibilityLabel={t('timer.modeAccessibility', {
                         mode: modeTitle,
                     })}
-                    accessibilityHint={
-                      locked ? t('rewarded.lockedModeAccessibility') : undefined
-                    }
                     accessibilityRole="button"
                     accessibilityState={{selected: active}}
                     key={mode.id}
@@ -1618,46 +1381,23 @@ export function TimerScreen() {
                       </Text>
                     </View>
                     <View style={styles.modeMenuState}>
-                      {!active && locked ? (
-                        <View
-                          style={styles.rewardedModeLockIcon}
-                          testID="rewarded-mode-lock-icon">
-                          <LockClosedIcon
-                            fill={arcadeTheme.colors.warning}
-                            pointerEvents="none"
-                            size={16}
-                          />
-                        </View>
-                      ) : (
-                        <View
-                          style={[
-                            styles.modeMenuDot,
-                            active && styles.activeModeMenuDot,
-                          ]}
-                          testID={
-                            active
-                              ? 'active-mode-indicator'
-                              : 'inactive-mode-indicator'
-                          }
-                        />
-                      )}
+                      <View
+                        style={[
+                          styles.modeMenuDot,
+                          active && styles.activeModeMenuDot,
+                        ]}
+                        testID={
+                          active
+                            ? 'active-mode-indicator'
+                            : 'inactive-mode-indicator'
+                        }
+                      />
                     </View>
                   </Pressable>
                 );
               })}
             </ScrollView>
           </View>
-          {rewardedAdAccessMessage ? (
-            <Text
-              style={[
-                styles.rewardedAdAccessMessage,
-                rewardedAdAccessState === 'error' &&
-                  styles.rewardedAdAccessErrorMessage,
-              ]}
-              testID="rewarded-ad-access-message">
-              {rewardedAdAccessMessage}
-            </Text>
-          ) : null}
         </View>
       ) : (
         <ArcadePanel style={styles.timerPanel}>
@@ -2019,13 +1759,27 @@ export function TimerScreen() {
               <Text style={styles.modeButtonLabel}>{t('timer.mode')}</Text>
               <Text style={styles.modeButtonTitle}>{selectedModeTitle}</Text>
             </View>
-            <Text style={styles.modeButtonCue}>{t('timer.change')}</Text>
+            <View style={styles.modeButtonCue} testID="mode-button-cue">
+              <Squares2X2Icon
+                fill={arcadeTheme.colors.accent}
+                pointerEvents="none"
+                size={13}
+                testID="mode-button-cue-icon"
+              />
+              <Text
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+                numberOfLines={1}
+                style={styles.modeButtonCueText}>
+                {t('timer.otherModes')}
+              </Text>
+            </View>
           </Pressable>
         )}
         <TimekeepingModeBar
           activeTarget={visibleTimekeepingMode}
           alarmLabel={t('alarm.modeTitle')}
-          disabled={!canChangeMode || rewardedAdAccessPending}
+          disabled={!canChangeMode || modeSelectionInterstitialPending}
           onSelectAlarm={() => {
             setModeMenuOpen(false);
             setScreen('alarms');
@@ -2391,6 +2145,7 @@ const styles = StyleSheet.create({
   modeButtonCopy: {
     flex: 1,
     gap: 2,
+    minWidth: 0,
   },
   modeButtonLabel: {
     ...arcadeTheme.typography.label,
@@ -2405,8 +2160,22 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   modeButtonCue: {
+    alignItems: 'center',
+    backgroundColor: arcadeTheme.colors.panelMuted,
+    borderColor: arcadeTheme.colors.accent,
+    borderRadius: arcadeTheme.radii.chip,
+    borderWidth: 1,
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: arcadeTheme.spacing.xs,
+    marginLeft: arcadeTheme.spacing.sm,
+    paddingHorizontal: arcadeTheme.spacing.sm,
+    paddingVertical: 3,
+  },
+  modeButtonCueText: {
     ...arcadeTheme.typography.label,
     color: arcadeTheme.colors.accent,
+    flexShrink: 1,
     lineHeight: 14,
   },
   pressedControl: {
@@ -2480,75 +2249,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'left',
   },
-  rewardedModeLockIcon: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: arcadeTheme.colors.panelMuted,
-    borderColor: arcadeTheme.colors.warning,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 24,
-    justifyContent: 'center',
-    width: 24,
-  },
   modeMenuSummary: {
     ...arcadeTheme.typography.label,
     color: arcadeTheme.colors.softInk,
     fontWeight: '700',
     lineHeight: 18,
-  },
-  rewardedAccessModalBackdrop: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(20, 20, 18, 0.36)',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    padding: arcadeTheme.spacing.lg,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 80,
-  },
-  rewardedAccessModalPanel: {
-    backgroundColor: arcadeTheme.colors.panel,
-    borderColor: arcadeTheme.colors.heavyLine,
-    borderRadius: arcadeTheme.radii.panel,
-    borderWidth: 2,
-    gap: arcadeTheme.spacing.md,
-    maxWidth: 420,
-    padding: arcadeTheme.spacing.lg,
-    width: '100%',
-  },
-  rewardedAccessModalTitle: {
-    color: arcadeTheme.colors.ink,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  rewardedAccessModalText: {
-    ...arcadeTheme.typography.body,
-    color: arcadeTheme.colors.softInk,
-    fontWeight: '700',
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  rewardedAccessModalActions: {
-    flexDirection: 'row',
-    gap: arcadeTheme.spacing.sm,
-  },
-  rewardedAccessModalAction: {
-    flex: 1,
-    minHeight: 44,
-  },
-  rewardedAdAccessMessage: {
-    ...arcadeTheme.typography.label,
-    color: arcadeTheme.colors.mutedInk,
-    textAlign: 'center',
-  },
-  rewardedAdAccessErrorMessage: {
-    color: arcadeTheme.colors.danger,
   },
   modeMenuState: {
     alignItems: 'center',
