@@ -1,16 +1,21 @@
 import analytics from '@react-native-firebase/analytics';
 
 export type FunnelEventName =
+  | 'wt_alarm_fire'
+  | 'wt_banner_load_result'
   | 'wt_camera_mode_start'
   | 'wt_camera_permission_result'
+  | 'wt_interstitial_show_result'
   | 'wt_mode_enter'
   | 'wt_mode_menu_open'
   | 'wt_mode_selection_interstitial_result'
   | 'wt_mode_select_attempt'
+  | 'wt_review_prompt_action'
   | 'wt_reward_access_result'
   | 'wt_reward_prompt_cancel'
   | 'wt_reward_prompt_confirm'
-  | 'wt_reward_prompt_show';
+  | 'wt_reward_prompt_show'
+  | 'wt_timer_start';
 
 export type FunnelEventValue = string | number | boolean | null | undefined;
 export type FunnelEventParams = Record<string, FunnelEventValue>;

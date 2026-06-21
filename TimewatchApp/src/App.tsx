@@ -31,6 +31,7 @@ import {
   recordAppReviewPromptShown,
   shouldShowAppReviewPrompt,
 } from './review/appReviewPrompt';
+import {recordFunnelEvent} from './analytics/funnelAnalytics';
 
 type SetScreen = React.Dispatch<React.SetStateAction<AppScreen>>;
 
@@ -250,15 +251,27 @@ function SettingsTransitionEffects() {
   }, [screen]);
 
   const handleLater = React.useCallback(() => {
+    recordFunnelEvent('wt_review_prompt_action', {
+      action: 'later',
+      source: 'settings_close',
+    });
     setReviewPromptVisible(false);
   }, []);
 
   const handleRate = React.useCallback(async () => {
     try {
       await openAppReviewPage();
+      await recordFunnelEvent('wt_review_prompt_action', {
+        action: 'store_opened',
+        source: 'settings_close',
+      });
       await recordAppReviewPromptRated();
       setReviewPromptVisible(false);
     } catch {
+      await recordFunnelEvent('wt_review_prompt_action', {
+        action: 'store_open_error',
+        source: 'settings_close',
+      });
       // Keep the prompt eligible if the store cannot be opened.
     }
   }, []);

@@ -14,6 +14,7 @@ class AlarmAlertReceiver : BroadcastReceiver() {
     if (!intent.getBooleanExtra(AlarmAlertScheduler.EXTRA_IS_SNOOZE, false)) {
       AlarmAlertScheduler.rescheduleNext(context, intent)
     }
+    AlarmAlertAnalytics.logAlarmFire(context.applicationContext, intent)
 
     val serviceIntent =
       TimerAlertService.createPlayIntent(

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import analytics from '@react-native-firebase/analytics';
 import {AdEventType} from 'react-native-google-mobile-ads';
 import {resetAdDiagnosticLogsForTests} from '../adDiagnosticLog';
 import {
@@ -89,7 +90,14 @@ function createFrequencySnapshot(
 }
 
 describe('interstitialAd', () => {
+  const mockedAnalytics = analytics as unknown as jest.Mock;
+  let logEvent: jest.Mock<Promise<void>, [string, Record<string, unknown>]>;
+
   beforeEach(async () => {
+    logEvent = jest
+      .fn<Promise<void>, [string, Record<string, unknown>]>()
+      .mockResolvedValue(undefined);
+    mockedAnalytics.mockReturnValue({logEvent});
     resetAdDiagnosticLogsForTests();
     await AsyncStorage.clear();
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -228,6 +236,60 @@ describe('interstitialAd', () => {
 
     expect(showAd).toHaveBeenCalledTimes(1);
     expect(repository.recordShown).toHaveBeenCalledWith(shownAtMs);
+    expect(logEvent).toHaveBeenCalledWith('wt_interstitial_show_result', {
+      placement: 'alarm_stop',
+      result: 'shown',
+    });
+  });
+
+  it('records skipped and failed mode-selection interstitial show results', async () => {
+    const nowMs = 1_000_000;
+    const skippedRepository = createFrequencyRepository(
+      createFrequencySnapshot(),
+    );
+    const skippedGraceRepository = createModeSelectionGraceRepository(nowMs, 1);
+    const skippedShowAd = jest.fn(async () => undefined);
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs,
+        repository: skippedRepository,
+        graceRepository: skippedGraceRepository,
+        showAd: skippedShowAd,
+      }),
+    ).resolves.toBe(false);
+
+    expect(skippedShowAd).not.toHaveBeenCalled();
+    expect(logEvent).toHaveBeenCalledWith('wt_interstitial_show_result', {
+      placement: 'mode_selection',
+      result: 'skipped',
+    });
+
+    const loadError = new Error('interstitial failed');
+
+    await expect(
+      showModeSelectionInterstitialIfEligible({
+        nowMs,
+        repository: createFrequencyRepository(createFrequencySnapshot()),
+        graceRepository: createModeSelectionGraceRepository(nowMs),
+        showAd: jest.fn(async () => {
+          throw loadError;
+        }),
+        getPolicy: () => ({
+          enabled: true,
+          dailyCap: 3,
+          cooldownMs: 0,
+          modeSelectionGraceMs: 0,
+          settingsEntryEnabled: true,
+          settingsCloseReviewPromptEnabled: true,
+        }),
+      }),
+    ).rejects.toThrow(loadError);
+
+    expect(logEvent).toHaveBeenCalledWith('wt_interstitial_show_result', {
+      placement: 'mode_selection',
+      result: 'error',
+    });
   });
 
   it('records settings-entry exposure only after an eligible ad is shown', async () => {

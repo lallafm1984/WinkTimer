@@ -686,6 +686,7 @@ describe('AppStateProvider app flow', () => {
     });
     nativeModules.I18nManager = {localeIdentifier: 'en_US'};
     delete nativeModules.SettingsManager;
+    mockRecordFunnelEvent.mockReset();
     mockRecordFunnelEvent.mockResolvedValue(undefined);
     await AsyncStorage.clear();
   });
@@ -840,6 +841,28 @@ describe('AppStateProvider app flow', () => {
     await press(renderer, 'clear-temporary-mode');
 
     expect(hasText(renderer, 'timerMode:basicTimer')).toBe(true);
+
+    await unmount(renderer);
+  });
+
+  it('records timer starts with mode and timekeeping context', async () => {
+    const renderer = await renderHarness();
+
+    await press(renderer, 'timer-function');
+    await press(renderer, 'target-one-minute');
+    await press(renderer, 'flip-mode');
+    nowMs = 1000;
+    await press(renderer, 'start');
+
+    expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+      'wt_timer_start',
+      expect.objectContaining({
+        mode_id: 'flipTimer',
+        is_camera_mode: false,
+        timekeeping_mode: 'timer',
+        target_set: true,
+      }),
+    );
 
     await unmount(renderer);
   });

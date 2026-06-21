@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {AdEventType, InterstitialAd} from 'react-native-google-mobile-ads';
+import {recordFunnelEvent} from '../analytics/funnelAnalytics';
 import {getInterstitialAdUnitId} from './adMobConfig';
 import {recordAdDiagnosticLog} from './adDiagnosticLog';
 import {
@@ -28,6 +29,8 @@ const EXISTING_USER_STORAGE_KEYS = [
 export const INTERSTITIAL_AD_COOLDOWN_MS = 3 * 60 * 60 * 1000;
 
 type InterstitialAdEventListener = (payload?: unknown) => void;
+type InterstitialPlacement = 'alarm_stop' | 'mode_selection' | 'settings_entry';
+type InterstitialShowResult = 'shown' | 'skipped' | 'error';
 
 export type InterstitialAdForDisplay = {
   addAdEventListener(
@@ -91,6 +94,16 @@ type InterstitialEligibilityChecker = (
   policy: InterstitialAdPolicy,
   nowMs: number,
 ) => boolean;
+
+function recordInterstitialShowResult(
+  placement: InterstitialPlacement,
+  result: InterstitialShowResult,
+) {
+  return recordFunnelEvent('wt_interstitial_show_result', {
+    placement,
+    result,
+  });
+}
 
 type InterstitialAdRecord = {
   version?: number;
@@ -520,14 +533,23 @@ async function showGatedInterstitialIfEligible(
     getPolicy = getInterstitialAdPolicy,
   }: GatedInterstitialOptions,
   shouldShow: InterstitialEligibilityChecker,
+  placement: InterstitialPlacement,
 ) {
   const policy = getPolicy();
   const snapshot = await repository.getFrequencySnapshot(nowMs);
   if (!shouldShow(snapshot, policy, nowMs)) {
+    await recordInterstitialShowResult(placement, 'skipped');
     return false;
   }
 
-  await showAd();
+  try {
+    await showAd();
+  } catch (error) {
+    await recordInterstitialShowResult(placement, 'error');
+    throw error;
+  }
+
+  await recordInterstitialShowResult(placement, 'shown');
   await repository.recordShown(nowMs);
   return true;
 }
@@ -541,6 +563,7 @@ export async function showAlarmStopInterstitialIfEligible({
   return showGatedInterstitialIfEligible(
     {nowMs, repository, showAd, getPolicy},
     shouldShowInterstitialAd,
+    'alarm_stop',
   );
 }
 
@@ -555,6 +578,7 @@ export async function showModeSelectionInterstitialIfEligible({
   const graceState = await graceRepository.getOrCreateState(nowMs);
   if (graceState.existingUserModeSelectionSkipsRemaining > 0) {
     await graceRepository.consumeExistingUserModeSelectionSkip(nowMs);
+    await recordInterstitialShowResult('mode_selection', 'skipped');
     return false;
   }
 
@@ -567,10 +591,18 @@ export async function showModeSelectionInterstitialIfEligible({
       nowMs,
     )
   ) {
+    await recordInterstitialShowResult('mode_selection', 'skipped');
     return false;
   }
 
-  await showAd();
+  try {
+    await showAd();
+  } catch (error) {
+    await recordInterstitialShowResult('mode_selection', 'error');
+    throw error;
+  }
+
+  await recordInterstitialShowResult('mode_selection', 'shown');
   await repository.recordShown(nowMs);
   return true;
 }
@@ -584,5 +616,6 @@ export async function showSettingsEntryInterstitialIfEligible({
   return showGatedInterstitialIfEligible(
     {nowMs, repository, showAd, getPolicy},
     shouldShowSettingsEntryInterstitialAd,
+    'settings_entry',
   );
 }

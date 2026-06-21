@@ -1,4 +1,5 @@
 import React from 'react';
+import analytics from '@react-native-firebase/analytics';
 import ReactTestRenderer from 'react-test-renderer';
 import {BannerAd} from 'react-native-google-mobile-ads';
 import {AdMobBanner} from '../AdMobBanner';
@@ -10,7 +11,14 @@ import {
 import {getBannerAdUnitId} from '../adMobConfig';
 
 describe('AdMobBanner', () => {
+  const mockedAnalytics = analytics as unknown as jest.Mock;
+  let logEvent: jest.Mock<Promise<void>, [string, Record<string, unknown>]>;
+
   beforeEach(() => {
+    logEvent = jest
+      .fn<Promise<void>, [string, Record<string, unknown>]>()
+      .mockResolvedValue(undefined);
+    mockedAnalytics.mockReturnValue({logEvent});
     resetAdDiagnosticLogsForTests();
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -49,6 +57,15 @@ describe('AdMobBanner', () => {
     expect(getAdDiagnosticLogText(getAdDiagnosticLogEntries())).toContain(
       'banner.load_error code=googleMobileAds/no-fill',
     );
+    expect(logEvent).toHaveBeenCalledWith('wt_banner_load_result', {
+      result: 'loaded',
+      ad_unit_type: 'banner',
+    });
+    expect(logEvent).toHaveBeenCalledWith('wt_banner_load_result', {
+      result: 'error',
+      ad_unit_type: 'banner',
+      error_code: 'googleMobileAds/no-fill',
+    });
 
     await ReactTestRenderer.act(async () => {
       renderer!.unmount();

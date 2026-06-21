@@ -2,6 +2,7 @@ import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {BannerAd, BannerAdSize} from 'react-native-google-mobile-ads';
 import {arcadeTheme} from '../theme/arcadeTheme';
+import {recordFunnelEvent} from '../analytics/funnelAnalytics';
 import {getBannerAdUnitId} from './adMobConfig';
 import {recordAdDiagnosticLog} from './adDiagnosticLog';
 
@@ -10,11 +11,21 @@ type BannerAdLoadError = Error & {
   userInfo?: unknown;
 };
 
+function getBannerErrorCode(error: BannerAdLoadError) {
+  return typeof error.code === 'string' || typeof error.code === 'number'
+    ? String(error.code)
+    : undefined;
+}
+
 export function AdMobBanner() {
   const adUnitId = getBannerAdUnitId();
 
   const handleAdLoaded = React.useCallback(() => {
     recordAdDiagnosticLog('banner.loaded', {adUnitId});
+    recordFunnelEvent('wt_banner_load_result', {
+      result: 'loaded',
+      ad_unit_type: 'banner',
+    });
   }, [adUnitId]);
 
   const handleAdFailedToLoad = React.useCallback(
@@ -24,6 +35,11 @@ export function AdMobBanner() {
         message: error.message,
         userInfo: error.userInfo,
         adUnitId,
+      });
+      recordFunnelEvent('wt_banner_load_result', {
+        result: 'error',
+        ad_unit_type: 'banner',
+        error_code: getBannerErrorCode(error),
       });
     },
     [adUnitId],

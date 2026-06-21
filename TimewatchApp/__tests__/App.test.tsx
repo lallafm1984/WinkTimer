@@ -23,6 +23,10 @@ const mockInitializeModeSelectionInterstitialGrace = jest.fn<
 >();
 const mockInitializeInterstitialAdRemoteConfig = jest.fn<Promise<unknown>, []>();
 const mockInitializeMobileAds = jest.fn<Promise<void>, []>();
+const mockRecordFunnelEvent = jest.fn<
+  Promise<void>,
+  [string, unknown?, unknown?]
+>();
 let mockSettingsCloseReviewPromptEnabled = true;
 
 type MutableNativeModules = typeof NativeModules & {
@@ -67,6 +71,11 @@ jest.mock('../src/ads/mobileAds', () => ({
   initializeMobileAds: () => mockInitializeMobileAds(),
 }));
 
+jest.mock('../src/analytics/funnelAnalytics', () => ({
+  recordFunnelEvent: (...args: [string, unknown?, unknown?]) =>
+    mockRecordFunnelEvent(...args),
+}));
+
 jest.mock('react-native-safe-area-context', () => {
   const ReactModule = require('react');
   const {View} = require('react-native');
@@ -102,6 +111,8 @@ beforeEach(async () => {
   mockInitializeInterstitialAdRemoteConfig.mockResolvedValue(undefined);
   mockInitializeMobileAds.mockReset();
   mockInitializeMobileAds.mockReturnValue(new Promise(() => undefined));
+  mockRecordFunnelEvent.mockReset();
+  mockRecordFunnelEvent.mockResolvedValue(undefined);
   mockSettingsCloseReviewPromptEnabled = true;
 });
 
@@ -445,6 +456,13 @@ test('shows a localized app rating prompt when closing settings if enabled', asy
   expect(openURL).toHaveBeenCalledWith(
     'https://play.google.com/store/apps/details?id=com.winktimer.app',
   );
+  expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+    'wt_review_prompt_action',
+    {
+      action: 'store_opened',
+      source: 'settings_close',
+    },
+  );
   expect(
     renderer!.root.findAllByProps({testID: 'app-review-prompt'}),
   ).toHaveLength(0);
@@ -525,6 +543,13 @@ test('keeps the app rating prompt eligible when opening the store fails', async 
   });
 
   expect(openURL).toHaveBeenCalledTimes(2);
+  expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+    'wt_review_prompt_action',
+    {
+      action: 'store_open_error',
+      source: 'settings_close',
+    },
+  );
   expect(
     renderer!.root.findByProps({testID: 'app-review-prompt'}),
   ).toBeTruthy();
@@ -567,6 +592,14 @@ test('does not show the settings-close app rating prompt more than once per day'
       .onPress();
     await Promise.resolve();
   });
+
+  expect(mockRecordFunnelEvent).toHaveBeenCalledWith(
+    'wt_review_prompt_action',
+    {
+      action: 'later',
+      source: 'settings_close',
+    },
+  );
 
   await ReactTestRenderer.act(async () => {
     renderer!.root.findByProps({testID: 'settings-button'}).props.onPress();

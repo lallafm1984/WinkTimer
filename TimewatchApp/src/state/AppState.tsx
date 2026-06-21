@@ -2928,12 +2928,22 @@ export function AppStateProvider({ children }: AppStateProviderProps) {
 
   const startTimerSession = useCallback(() => {
     const now = Date.now();
+    const activeTimekeepingMode = timekeepingModeRef.current;
+    const activeModeId = timerModeIdRef.current;
+    const activeNormalTimerMode = normalTimerModeRef.current;
     const targetDurationMs =
-      timekeepingModeRef.current === 'timer'
+      activeTimekeepingMode === 'timer'
         ? timerTargetDurationMsRef.current
         : undefined;
 
     setFinishError(null);
+    recordFunnelEvent('wt_timer_start', {
+      mode_id: activeModeId,
+      is_camera_mode:
+        !activeNormalTimerMode && !modeRunsWithoutGaze(activeModeId),
+      timekeeping_mode: activeTimekeepingMode,
+      target_set: targetDurationMs !== undefined,
+    });
     setTimer(startTimer(createInitialTimerState(now), now, targetDurationMs));
   }, [setTimer]);
 
