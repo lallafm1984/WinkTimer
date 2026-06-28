@@ -4,70 +4,95 @@
 
 - 국가 이름: 베트남
 - 언어/로케일: 베트남어 (vi-VN)
-- 주요 검색어: hẹn giờ, báo thức, bấm giờ
-- 보조 검색어: đồng hồ báo thức, báo thức lặp lại, báo thức báo lại, báo thức theo ngày, hẹn giờ không chạm
+- 주요 검색어: hẹn giờ, đếm ngược, bấm giờ, báo thức
+- 보조 검색어: hẹn giờ không chạm, hẹn giờ tập luyện, hẹn giờ nấu ăn, hẹn giờ học, flip timer
 
 ## 앱 이름
 
 ```text
-Wink Timer: Báo thức & Hẹn giờ
+Hẹn giờ không chạm
 ```
 
 ## 간단한 설명
 
 ```text
-Hẹn giờ và bấm giờ có thể điều khiển bằng camera, kèm báo thức.
+Hẹn giờ, bấm giờ và báo thức không chạm cho tập luyện, nấu ăn, học tập.
 ```
 
 ## 전체 설명
 
 ```text
-Wink Timer là ứng dụng thời gian hằng ngày cho báo thức, hẹn giờ và bấm giờ.
+Dùng hẹn giờ thoải mái hơn mà không cần chạm vào màn hình.
 
-Khi tay bạn đang bận, việc tạm dừng, tiếp tục và ghi lại thời gian vẫn phải thật dễ. Nếu đang nấu ăn với tay ướt hoặc tập luyện mà không thể chạm màn hình, hãy dùng nhìn, nháy mắt và lật điện thoại để điều khiển hẹn giờ và bấm giờ.
+Wink Timer là ứng dụng quản lý thời gian có hẹn giờ đếm ngược, bấm giờ và báo thức trong một nơi. Đặt thời gian như một bộ hẹn giờ thông thường, rồi khi tập luyện, nấu ăn, học tập hoặc làm việc, bạn có thể điều khiển bằng nháy mắt, ánh nhìn, nụ cười hoặc lật điện thoại mà không cần chạm màn hình.
 
-Đặt báo thức cho thức dậy, lớp học, cuộc họp, tập luyện, nghỉ giải lao và thói quen hằng ngày. Báo thức hỗ trợ lặp hằng ngày, ngày trong tuần, ngày cụ thể, âm thanh, âm lượng, rung và báo lại.
-
-Dùng hẹn giờ khi cần đếm ngược một khoảng thời gian. Dùng bấm giờ khi cần đo thời gian đã trôi qua và ghi vòng.
+Khi tay ướt, đang đeo găng, cần giữ tư thế tập luyện hoặc không muốn mất tập trung, hãy dùng hẹn giờ không chạm để quản lý thời gian.
 
 Tính năng chính
 
-- Hẹn giờ: bắt đầu, tạm dừng, tiếp tục và đặt lại bằng nút
-- Báo thức: lặp hằng ngày, ngày trong tuần, ngày cụ thể, âm thanh, âm lượng, rung và báo lại
-- Quản lý báo thức: tạo, bật, tắt, sửa và xóa nhiều báo thức
-- Màn hình báo thức: tắt báo thức hoặc chọn báo lại
-- Bấm giờ: đo thời gian trôi qua và ghi vòng
-- Cảnh báo hẹn giờ: âm thanh và rung khi đếm ngược kết thúc
-- Điều khiển không chạm: dùng nhìn, nháy mắt và lật thiết bị cho các thao tác được hỗ trợ
-- LOOK PAUSE: tạm dừng và tiếp tục dựa trên việc bạn có nhìn vào màn hình hay không
-- WINK CONTROL: dùng nháy mắt cho thao tác hẹn giờ và ghi vòng
-- FLIP TIMER: lật úp điện thoại để bắt đầu, lật ngửa để tạm dừng
-- SMILE MODE: điều khiển hẹn giờ bằng nhận diện nụ cười
-- Lịch sử: xem lại bản ghi thời gian gần đây và sự kiện dòng thời gian
+Hẹn giờ đếm ngược
 
-Wink Timer không phải ứng dụng chỉ dành cho tập trung hoặc học tập. Hãy dùng như đồng hồ báo thức, hẹn giờ nấu ăn, hẹn giờ tập luyện, hẹn giờ học, hẹn giờ làm việc, hẹn giờ nghỉ hoặc bấm giờ nhanh.
+- Đặt thời gian bạn muốn
+- Bắt đầu, tạm dừng, tiếp tục và đặt lại
+- Âm thanh và rung khi hết giờ
+- Hữu ích cho tập luyện, nấu ăn, học tập, nghỉ ngơi và thói quen hằng ngày
 
-Các tính năng dùng camera có thể khác nhau tùy hiệu năng thiết bị, ánh sáng, góc khuôn mặt và vị trí camera.
+Điều khiển không chạm
+
+- Chế độ nháy mắt: điều khiển hẹn giờ bằng một cái nháy mắt
+- Chế độ nhìn: tạm dừng khi bạn nhìn màn hình, tiếp tục khi bạn nhìn đi chỗ khác
+- Chế độ cười: điều khiển hẹn giờ bằng nhận diện nụ cười
+- Chế độ lật: điều khiển hẹn giờ bằng hướng của điện thoại
+
+Bấm giờ
+
+- Đo thời gian đã trôi qua
+- Ghi vòng
+- Hữu ích cho tập luyện, học tập, kiểm tra và công việc lặp lại
+
+Báo thức
+
+- Đặt báo thức thức dậy, lớp học, cuộc họp, tập luyện và nghỉ ngơi
+- Lặp hằng ngày, theo ngày trong tuần và theo ngày cụ thể
+- Âm báo, âm lượng, rung và báo lại
+- Tạo, sửa, bật, tắt và xóa nhiều báo thức
+
+Lịch sử
+
+- Xem các bản ghi hẹn giờ và bấm giờ gần đây
+- Kiểm tra luồng quản lý thời gian bạn thường dùng
+
+Dùng khi:
+
+- Khó chạm màn hình trong lúc tập luyện
+- Tay ướt khi đang nấu ăn
+- Muốn quản lý thời gian học hoặc làm việc mà không mất tập trung
+- Đo thời gian giãn cơ, thiền, nghỉ ngơi hoặc thói quen
+- Muốn dùng bấm giờ và báo thức trong cùng một ứng dụng
+- Cần đo nhanh các công việc lặp lại
+
+Wink Timer thêm điều khiển bằng nháy mắt, ánh nhìn, nụ cười và lật điện thoại vào bộ hẹn giờ đếm ngược, bấm giờ và báo thức cơ bản.
+
+Các tính năng không chạm dựa trên camera có thể thay đổi theo hiệu năng thiết bị, ánh sáng, góc khuôn mặt và vị trí camera.
 ```
 
 ## 앱 설치 캠페인 헤드라인
 
 ```text
-Báo thức, Hẹn giờ, Bấm giờ
-Điều khiển không chạm
-Báo thức lặp và báo lại
-Bấm giờ bằng nháy mắt
-Lật máy để bắt đầu
+Hẹn giờ đếm ngược không chạm
+Hẹn giờ tập luyện và nấu ăn
+Điều khiển bằng nháy mắt
+Điều khiển bằng nụ cười
+Lật điện thoại để hẹn giờ
 ```
 
 ## 앱 설치 캠페인 설명
 
 ```text
-Điều khiển hẹn giờ bằng nhìn, nháy mắt hoặc nụ cười, và ghi vòng bấm giờ bằng nháy mắt.
-Khi tay ướt hoặc đang tập luyện, điều khiển hẹn giờ mà không cần chạm màn hình.
-Chọn tạm dừng bằng ánh nhìn, điều khiển bằng nháy mắt, nụ cười hoặc hẹn giờ lật máy.
-Khi nấu ăn, tập luyện, học tập hoặc làm việc, bạn có thể tiếp tục hẹn giờ dễ hơn.
-Dùng nhận diện camera để bắt đầu, tạm dừng, tiếp tục và ghi lại với ít thao tác chạm hơn.
+Điều khiển hẹn giờ mà không chạm màn hình khi tập luyện, nấu ăn, học tập hoặc làm việc.
+Dùng nháy mắt, ánh nhìn, nụ cười và lật điện thoại để đếm ngược dễ hơn.
+Bộ hẹn giờ cơ bản, bấm giờ và báo thức nằm cùng trong một ứng dụng.
+Khi tay ướt, đang đeo găng hoặc bận tay, bạn vẫn quản lý thời gian dễ dàng.
 ```
 
 ## 알람 중심 광고 소재
@@ -75,38 +100,38 @@ Dùng nhận diện camera để bắt đầu, tạm dừng, tiếp tục và gh
 ### 헤드라인
 
 ```text
-Báo thức lặp có báo lại
-Báo thức theo ngày trong tuần
-Báo thức theo ngày cụ thể
-Báo thức có âm và rung
-Báo thức và hẹn giờ cùng app
-Báo thức sáng, tập, nghỉ
+Hẹn giờ và báo thức cùng nhau
+Báo thức lặp và báo lại
+Hẹn giờ tập luyện, nấu ăn
+Có bấm giờ đi kèm
+Báo thức theo ngày
 ```
 
 ### 설명
 
 ```text
-Đặt báo thức thức dậy, tập luyện, lớp học và nghỉ giải lao theo ngày, tuần hoặc ngày cụ thể.
-Chọn âm thanh, âm lượng, rung và báo lại, rồi quản lý nhiều báo thức trong một app.
-Khi báo thức reo, hãy tắt hoặc báo lại, rồi tiếp tục dùng hẹn giờ và bấm giờ.
+Quản lý hẹn giờ đếm ngược, bấm giờ và báo thức trong một nơi.
+Đặt báo thức thức dậy, lớp học, cuộc họp, tập luyện và nghỉ ngơi theo ngày hoặc lịch.
+Chọn âm báo, âm lượng, rung và báo lại, rồi quản lý nhiều báo thức.
 ```
 
 ## 스크린샷 문구
 
 ```text
-Báo thức, hẹn giờ, bấm giờ
-Báo thức lặp và báo lại
-Báo thức theo ngày hoặc lịch
-Điều khiển thời gian không chạm
-Hẹn giờ nhanh bằng nút
-Cảnh báo có âm thanh và rung
-Ghi vòng bằng nháy mắt
-Lật điện thoại để bắt đầu
+Hẹn giờ đếm ngược không chạm
+Hẹn giờ tập luyện, nấu ăn, học
+Nháy mắt để điều khiển hẹn giờ
+Điều khiển bằng nhận diện nụ cười
+Tạm dừng và tiếp tục bằng ánh nhìn
+Lật điện thoại để hẹn giờ
+Bấm giờ và ghi vòng
+Báo thức, báo lại, lặp
 ```
 
 ## 문구 기준
 
 - 앱을 포커스 전용 앱으로 표현하지 않습니다.
+- BASIC TIMER가 기본 타이머 경험임을 유지합니다.
 - 수익화 관련 표현을 사용하지 않습니다.
 - 카메라 인식이 항상 완벽하다고 약속하지 않습니다.
 - 알람이 모든 기기와 절전 설정에서 항상 정확히 울린다고 보장하지 않습니다.

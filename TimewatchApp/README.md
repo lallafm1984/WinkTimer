@@ -52,6 +52,8 @@ dist/android/winktimer-release.apk
 
 The debug APK at `android/app/build/outputs/apk/debug/app-debug.apk` is for React Native development and expects Metro or `adb reverse tcp:8081 tcp:8081`. If you install that file directly, Android can show `Unable to load script`.
 
+For the full APK/AAB local build format, signing boundary, and device-install loop, see `docs/android-local-build-format.md`.
+
 ## Wink Timer Design System
 
 The main timer screen uses the Arcade Ghost Console theme:

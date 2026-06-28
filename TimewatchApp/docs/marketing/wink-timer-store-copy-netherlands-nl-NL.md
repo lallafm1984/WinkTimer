@@ -3,72 +3,96 @@
 ## 국가 정보
 
 - 국가 이름: 네덜란드
-- 앱 내부 로케일: 네덜란드어/네덜란드 (nl-NL)
-- Google Play 스토어 로케일: 네덜란드어 (nl-NL)
-- 주요 검색어: timer, wekker, alarm, stopwatch
-- 보조 검색어: herhaalalarm, sluimeralarm, weekdagalarm, datumalarm, timer zonder tikken
+- 언어/로케일: 네덜란드어 (nl-NL)
+- 주요 검색어: timer, afteltimer, stopwatch, alarm
+- 보조 검색어: timer zonder tikken, sporttimer, kooktimer, studietimer, flip timer
 
 ## 앱 이름
 
 ```text
-Wink Timer: Alarm & Timer
+Timer - Aftellen zonder tik
 ```
 
 ## 간단한 설명
 
 ```text
-Timer en stopwatch met camerabediening, plus alarm.
+Timer, stopwatch en alarm zonder tikken voor sport, koken en studie.
 ```
 
 ## 전체 설명
 
 ```text
-Wink Timer is een tijd-app voor alarmen, timers en stopwatchmetingen in het dagelijks gebruik.
+Gebruik je timer makkelijker zonder het scherm aan te raken.
 
-Als je handen bezig zijn, moet je tijd nog steeds kunnen pauzeren, hervatten en vastleggen. Tijdens het koken met natte handen of tijdens een workout zonder het scherm aan te raken, bedien je timers en stopwatchacties met kijken, knipogen en je telefoon omdraaien.
+Wink Timer is een tijd-app met afteltimer, stopwatch en alarmen op één plek. Stel de tijd in zoals bij een gewone timer en bedien hem tijdens sporten, koken, studeren of werken met een knipoog, je blik, een glimlach of door je telefoon om te draaien.
 
-Stel alarmen in voor opstaan, lessen, vergaderingen, workouts, pauzes en routines. Alarmen ondersteunen dagelijks herhalen, weekdagen, datums, geluid, volume, trillen en sluimeren.
-
-Gebruik de timer voor een vaste tijdsduur. Gebruik de stopwatch voor verstreken tijd en rondes.
+Als je handen nat zijn, je handschoenen draagt, een sporthouding wilt vasthouden of je focus niet wilt verbreken, helpt de timer zonder tikken je om de tijd te beheren.
 
 Belangrijkste functies
 
-- Timer: starten, pauzeren, hervatten en resetten met knoppen
-- Alarmen: dagelijks herhalen, weekdagen, datums, geluid, volume, trillen en sluimeren
-- Alarmbeheer: meerdere alarmen maken, aanzetten, uitzetten, bewerken en verwijderen
-- Alarm scherm: stop een alarm of kies sluimeren
-- Stopwatch: meet verstreken tijd en sla rondes op
-- Timerwaarschuwingen: geluid en trillen aan het einde van de aftelling
-- Bediening zonder tikken: kijken, knipogen en toestel omdraaien voor ondersteunde tijdacties
-- LOOK PAUSE: pauzeren en hervatten op basis van kijken naar het scherm
-- WINK CONTROL: knipogen voor timeracties en rondes
-- FLIP TIMER: leg de telefoon met het scherm omlaag om te starten en omhoog om te pauzeren
-- SMILE MODE: timerbediening met glimlachdetectie
-- Geschiedenis: bekijk recente metingen en tijdlijngebeurtenissen
+Afteltimer
 
-Wink Timer is geen app alleen voor focus of studie. Gebruik hem als wekker, kooktimer, workouttimer, studietimer, werktimer, pauzetimer of snelle stopwatch.
+- Stel elke gewenste tijd in
+- Start, pauzeer, hervat en reset
+- Geluid en trilling wanneer de timer klaar is
+- Handig voor sport, koken, studie, pauzes en routines
 
-Camerafuncties kunnen verschillen door apparaatprestaties, licht, gezichtshoek en camerapositie.
+Bediening zonder tikken
+
+- Knipoogmodus: bedien de timer met een knipoog
+- Kijkmodus: pauzeert wanneer je naar het scherm kijkt en hervat wanneer je wegkijkt
+- Glimlachmodus: bedien de timer met glimlachdetectie
+- Flipmodus: bedien de timer met de stand van je telefoon
+
+Stopwatch
+
+- Meet verstreken tijd
+- Registreer rondetijden
+- Handig voor sport, studie, tests en terugkerende taken
+
+Alarmen
+
+- Stel alarmen in voor opstaan, lessen, vergaderingen, sport en pauzes
+- Dagelijkse herhaling, weekdagen en datumalarmen
+- Alarmgeluid, volume, trilling en snooze
+- Maak, bewerk, schakel in, schakel uit en verwijder meerdere alarmen
+
+Geschiedenis
+
+- Bekijk recente timer- en stopwatchrecords
+- Controleer de tijdstromen die je vaak gebruikt
+
+Gebruik Wink Timer wanneer:
+
+- Je tijdens het sporten moeilijk op het scherm kunt tikken
+- Je handen nat zijn tijdens het koken
+- Je studie- of werktijd wilt beheren zonder je focus te verliezen
+- Je stretching, meditatie, rust of routines timet
+- Je stopwatch en alarmen samen wilt gebruiken
+- Je terugkerende taken snel wilt meten
+
+Wink Timer voegt bediening met knipoog, blik, glimlach en telefoonflip toe aan een eenvoudige afteltimer, stopwatch en alarm-app.
+
+Cameragebaseerde functies zonder tikken kunnen verschillen door apparaatprestaties, licht, gezichtshoek en camerapositie.
 ```
 
 ## 앱 설치 캠페인 헤드라인
 
 ```text
-Alarm, Timer, Stopwatch
-Bedien tijd zonder tikken
-Alarmen met sluimeren
-Stopwatch met knipoog
-Draai om en start de timer
+Timer zonder tikken
+Timer voor sport en koken
+Bedien met een knipoog
+Bedien met een glimlach
+Draai je telefoon om te timen
 ```
 
 ## 앱 설치 캠페인 설명
 
 ```text
-Bedien timers met kijken, knipogen of glimlachen; sla rondes op met een knipoog.
-Met natte handen of tijdens het sporten bedien je de timer zonder op het scherm te tikken.
-Kies kijkpauze, knipoogbediening, glimlachbediening of flip-timer voor elke situatie.
-Tijdens koken, sporten, studeren of werken laat je de timer makkelijker doorlopen.
-Gebruik cameradetectie om te starten, pauzeren, hervatten en vast te leggen.
+Bedien je timer zonder het scherm aan te raken tijdens sporten, koken, studeren of werken.
+Gebruik knipoog, blik, glimlach en telefoonstand voor makkelijker aftellen.
+Een basistimer, stopwatch en alarmen staan samen in één app.
+Met natte, gehandschoende of drukke handen blijft tijd beheren eenvoudig.
 ```
 
 ## 알람 중심 광고 소재
@@ -76,38 +100,38 @@ Gebruik cameradetectie om te starten, pauzeren, hervatten en vast te leggen.
 ### 헤드라인
 
 ```text
-Herhaalalarmen met sluimeren
-Weekdagalarmen eenvoudig
-Datumalarmen in één app
-Alarmen met geluid en trillen
-Alarm en timer samen
-Alarmen voor ochtend en workout
+Timer en alarmen samen
+Herhaalalarmen en snooze
+Sport- en kooktimer
+Stopwatch inbegrepen
+Alarmen per dag en datum
 ```
 
 ### 설명
 
 ```text
-Stel alarmen in voor opstaan, workouts, lessen en pauzes per dag, weekdag of datum.
-Kies geluid, volume, trillen en sluimeren, en beheer meerdere alarmen in één app.
-Als het alarm gaat, stop of sluimer het en gebruik daarna timer en stopwatch verder.
+Beheer afteltimer, stopwatch en alarmen op één plek.
+Stel alarmen in voor opstaan, lessen, vergaderingen, sport en pauzes per dag of datum.
+Kies geluid, volume, trilling en snooze, en beheer meerdere alarmen.
 ```
 
 ## 스크린샷 문구
 
 ```text
-Alarm, timer en stopwatch
-Herhaalalarmen en sluimeren
-Alarmen per weekdag of datum
-Bedien tijd zonder tikken
-Timer snel met knoppen
-Timerwaarschuwingen met geluid
-Rondes opslaan met een knipoog
-Draai je telefoon om te starten
+Afteltimer zonder tikken
+Timer voor sport, koken, studie
+Bedien met een knipoog
+Bediening met glimlachdetectie
+Kijkpauze en hervatten
+Flip-timer met je telefoon
+Stopwatch en rondetijden
+Alarmen, snooze, herhaling
 ```
 
 ## 문구 기준
 
 - 앱을 포커스 전용 앱으로 표현하지 않습니다.
+- BASIC TIMER가 기본 타이머 경험임을 유지합니다.
 - 수익화 관련 표현을 사용하지 않습니다.
 - 카메라 인식이 항상 완벽하다고 약속하지 않습니다.
 - 알람이 모든 기기와 절전 설정에서 항상 정확히 울린다고 보장하지 않습니다.

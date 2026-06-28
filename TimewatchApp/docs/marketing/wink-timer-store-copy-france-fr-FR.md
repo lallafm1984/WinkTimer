@@ -3,72 +3,96 @@
 ## 국가 정보
 
 - 국가 이름: 프랑스
-- 앱 내부 로케일: 프랑스어/프랑스 (fr-FR)
-- Google Play 스토어 로케일: 프랑스어/프랑스 (fr-FR)
-- 주요 검색어: minuteur, alarme, réveil, chronomètre, timer
-- 보조 검색어: alarme répétée, alarme avec snooze, alarme par jour, alarme par date, minuteur sans toucher
+- 언어/로케일: 프랑스어 (fr-FR)
+- 주요 검색어: minuteur, timer, compte à rebours, chronomètre, alarme
+- 보조 검색어: minuteur sans toucher, minuteur sport, minuteur cuisine, minuteur étude, flip timer
 
 ## 앱 이름
 
 ```text
-Wink Timer: Alarme Minuteur
+Minuteur sans toucher
 ```
 
 ## 간단한 설명
 
 ```text
-Minuteur et chronomètre contrôlables par caméra, avec alarme.
+Minuteur, chronomètre et alarme sans toucher pour sport, cuisine et études.
 ```
 
 ## 전체 설명
 
 ```text
-Wink Timer est une app de mesure du temps pour utiliser alarmes, minuteur et chronomètre au quotidien.
+Utilisez votre minuteur plus facilement, sans toucher l'écran.
 
-Quand vos mains sont prises, vous devez quand même pouvoir mettre en pause, reprendre et enregistrer le temps. Si vous cuisinez avec les mains mouillées ou si vous vous entraînez sans pouvoir toucher l’écran, utilisez le regard, le clin d’œil ou le retournement du téléphone pour contrôler le minuteur et le chronomètre.
+Wink Timer réunit un minuteur avec compte à rebours, un chronomètre et des alarmes dans une seule app. Réglez une durée comme avec un minuteur classique, puis pendant le sport, la cuisine, les études ou le travail, contrôlez le minuteur avec un clin d'oeil, le regard, un sourire ou en retournant le téléphone.
 
-Réglez des alarmes pour le réveil, les cours, les réunions, l’entraînement, les pauses et les routines à ne pas oublier. Les alarmes prennent en charge la répétition quotidienne, les jours de la semaine, les dates précises, le son, le volume, la vibration et le snooze.
-
-Utilisez le minuteur pour compter une durée définie. Utilisez le chronomètre pour mesurer le temps écoulé et enregistrer des tours.
+Quand vos mains sont mouillées, quand vous portez des gants, quand vous gardez une posture d'entraînement ou quand vous ne voulez pas perdre votre concentration, utilisez le minuteur sans toucher.
 
 Fonctions principales
 
-- Minuteur: démarrer, mettre en pause, reprendre et réinitialiser avec des boutons
-- Alarmes: répétition quotidienne, jours de la semaine, dates, son, volume, vibration et snooze
-- Gestion des alarmes: créer, activer, désactiver, modifier et supprimer plusieurs alarmes
-- Écran d’alarme: arrêter une alarme ou choisir le snooze
-- Chronomètre: mesurer le temps écoulé et enregistrer des tours
-- Alertes du minuteur: son et vibration à la fin du compte à rebours
-- Contrôle sans toucher: regard, clin d’œil et retournement de l’appareil pour les actions compatibles
-- LOOK PAUSE: pause et reprise selon que vous regardez l’écran
-- WINK CONTROL: utiliser un clin d’œil pour les actions du minuteur et les tours
-- FLIP TIMER: retourner le téléphone face vers le bas pour démarrer, puis face vers le haut pour mettre en pause
-- SMILE MODE: contrôler le minuteur avec la détection du sourire
-- Historique: consulter les mesures récentes et les événements de la timeline
+Minuteur avec compte à rebours
 
-Wink Timer n’est pas une app réservée à la concentration ou aux études. Utilisez-la comme réveil, minuteur de cuisine, minuteur de sport, minuteur d’étude, minuteur de travail, minuteur de pause ou chronomètre rapide.
+- Réglez la durée souhaitée
+- Démarrer, mettre en pause, reprendre et réinitialiser
+- Son et vibration à la fin du minuteur
+- Utile pour sport, cuisine, études, pauses et routines
 
-Les fonctions avec caméra peuvent varier selon les performances de l’appareil, la luminosité, l’angle du visage et la position de la caméra.
+Contrôle sans toucher
+
+- Mode clin d'oeil : contrôlez le minuteur avec un clin d'oeil
+- Mode regard : pause quand vous regardez l'écran, reprise quand vous détournez le regard
+- Mode sourire : contrôlez le minuteur avec la détection du sourire
+- Mode retournement : contrôlez le minuteur avec l'orientation du téléphone
+
+Chronomètre
+
+- Mesurez le temps écoulé
+- Enregistrez les tours
+- Utile pour sport, études, tests et tâches répétées
+
+Alarmes
+
+- Réglez des alarmes pour le réveil, les cours, les réunions, le sport et les pauses
+- Répétition quotidienne, par jour de semaine et par date
+- Son, volume, vibration et rappel
+- Créez, modifiez, activez, désactivez et supprimez plusieurs alarmes
+
+Historique
+
+- Consultez les derniers minuteurs et chronomètres
+- Retrouvez vos habitudes de gestion du temps
+
+Utilisez Wink Timer quand :
+
+- Il est difficile de toucher l'écran pendant l'entraînement
+- Vos mains sont mouillées en cuisine
+- Vous voulez gérer votre temps d'étude ou de travail sans perdre le fil
+- Vous chronométrez étirements, méditation, repos ou routines
+- Vous voulez un chronomètre et des alarmes dans la même app
+- Vous mesurez rapidement des tâches répétées
+
+Wink Timer ajoute le contrôle par clin d'oeil, regard, sourire et retournement à un minuteur de base, un chronomètre et des alarmes.
+
+Les fonctions sans toucher basées sur la caméra peuvent varier selon les performances de l'appareil, la lumière, l'angle du visage et la position de la caméra.
 ```
 
 ## 앱 설치 캠페인 헤드라인
 
 ```text
-Alarme, Minuteur, Chronomètre
-Contrôlez sans toucher
-Alarmes répétées et snooze
-Chronomètre au clin d’œil
-Retournez pour démarrer
+Minuteur sans toucher
+Minuteur sport et cuisine
+Contrôle par clin d'oeil
+Contrôle par sourire
+Retournez pour minuter
 ```
 
 ## 앱 설치 캠페인 설명
 
 ```text
-Contrôlez le minuteur par regard, clin d’œil ou sourire; marquez les tours au clin d’œil.
-Mains mouillées ou en plein entraînement, contrôlez le minuteur sans toucher l’écran.
-Choisissez pause par le regard, contrôle au clin d’œil, au sourire ou minuteur retourné.
-Cuisine, sport, études ou travail: gardez le minuteur en cours facilement.
-Utilisez la caméra pour démarrer, mettre en pause, reprendre et enregistrer.
+Contrôlez le minuteur sans toucher l'écran pendant le sport, la cuisine, les études ou le travail.
+Utilisez clin d'oeil, regard, sourire et orientation du téléphone pour le compte à rebours.
+Gardez minuteur, chronomètre et alarmes dans une seule app simple.
+Quand vos mains sont mouillées, gantées ou occupées, gérez le temps plus facilement.
 ```
 
 ## 알람 중심 광고 소재
@@ -76,38 +100,38 @@ Utilisez la caméra pour démarrer, mettre en pause, reprendre et enregistrer.
 ### 헤드라인
 
 ```text
-Alarmes répétées avec snooze
-Alarmes par jour de semaine
-Alarmes par date
-Son et vibration d’alarme
-Alarmes et minuteur ensemble
-Réveil, sport, pause
+Minuteur et alarmes ensemble
+Alarmes répétées et rappel
+Minuteur sport et cuisine
+Chronomètre inclus
+Alarmes par jour et date
 ```
 
 ### 설명
 
 ```text
-Réglez réveil, sport, cours et pauses avec des alarmes quotidiennes, hebdomadaires ou datées.
-Choisissez son, volume, vibration et snooze, puis gérez plusieurs alarmes dans une app.
-Quand l’alarme sonne, arrêtez-la ou reportez-la, puis utilisez minuteur et chronomètre.
+Gérez compte à rebours, chronomètre et alarmes dans un seul endroit.
+Réglez des alarmes de réveil, cours, réunion, sport et pause par jour ou par date.
+Choisissez son, volume, vibration et rappel, puis gérez plusieurs alarmes.
 ```
 
 ## 스크린샷 문구
 
 ```text
-Alarme, minuteur, chronomètre
-Alarmes répétées et snooze
-Alarmes par jour ou par date
-Contrôlez sans toucher
-Minuteur rapide avec boutons
-Alertes avec son et vibration
-Enregistrez les tours au clin d’œil
-Retournez le téléphone pour démarrer
+Compte à rebours sans toucher
+Minuteur sport, cuisine, études
+Contrôlez par clin d'oeil
+Contrôle avec détection du sourire
+Pause et reprise par le regard
+Minuteur par retournement
+Chronomètre et tours
+Alarmes, rappel, répétition
 ```
 
 ## 문구 기준
 
 - 앱을 포커스 전용 앱으로 표현하지 않습니다.
+- BASIC TIMER가 기본 타이머 경험임을 유지합니다.
 - 수익화 관련 표현을 사용하지 않습니다.
 - 카메라 인식이 항상 완벽하다고 약속하지 않습니다.
 - 알람이 모든 기기와 절전 설정에서 항상 정확히 울린다고 보장하지 않습니다.

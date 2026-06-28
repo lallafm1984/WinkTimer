@@ -3,72 +3,96 @@
 ## 국가 정보
 
 - 국가 이름: 필리핀
-- 앱 내부 로케일: 필리핀어/필리핀 (fil-PH)
-- Google Play 스토어 로케일: 필리핀어 (fil)
-- 주요 검색어: timer, alarm, stopwatch
-- 보조 검색어: repeating alarm, snooze alarm, weekday alarm, date alarm, no-touch timer
+- 언어/로케일: 필리핀어 (fil)
+- 주요 검색어: timer, countdown timer, stopwatch, alarm
+- 보조 검색어: no-touch timer, workout timer, cooking timer, study timer, flip timer
 
 ## 앱 이름
 
 ```text
-Wink Timer: Alarm Timer
+Timer - No-Touch Countdown
 ```
 
 ## 간단한 설명
 
 ```text
-Timer at stopwatch na makokontrol gamit ang camera, may alarm.
+No-touch timer, stopwatch, at alarm para sa workout, luto, at pag-aaral.
 ```
 
 ## 전체 설명
 
 ```text
-Ang Wink Timer ay pang-araw-araw na app para sa alarm, timer, at stopwatch.
+Gamitin ang timer nang mas komportable nang hindi hinahawakan ang screen.
 
-Kapag busy ang mga kamay mo, dapat madali pa ring mag-pause, magpatuloy, at mag-record ng oras. Kung nagluluto ka na basa ang kamay o nagwo-workout na hindi mo ma-tap ang screen, gamitin ang tingin, kindat, at pagbaliktad ng phone para kontrolin ang timer at stopwatch.
+Ang Wink Timer ay app para sa countdown timer, stopwatch, at alarm sa iisang lugar. Mag-set ng oras tulad ng normal na timer, at kapag nagwo-workout, nagluluto, nag-aaral, o nagtatrabaho, kontrolin ito gamit ang wink, tingin, ngiti, o pagbaligtad ng phone nang hindi tina-tap ang screen.
 
-Mag-set ng alarm para sa paggising, klase, meeting, workout, pahinga, at routines. May daily repeat, weekdays, specific date, sound, volume, vibration, at snooze ang alarms.
+Kapag basa ang kamay, naka-gloves, kailangang manatili sa posisyon sa workout, o ayaw mong maputol ang focus, gamitin ang no-touch timer para sa oras mo.
 
-Gamitin ang timer kapag kailangan mong bilangin ang takdang oras. Gamitin ang stopwatch kapag kailangan mo ng elapsed time at lap records.
+Mga pangunahing feature
 
-Pangunahing features
+Countdown timer
 
-- Timer: start, pause, resume, at reset gamit ang buttons
-- Alarms: daily repeat, weekdays, dates, sound, volume, vibration, at snooze
-- Alarm management: gumawa, mag-enable, mag-disable, mag-edit, at mag-delete ng maraming alarm
-- Alarm ringing screen: ihinto ang alarm o pumili ng snooze
-- Stopwatch: sukatin ang elapsed time at mag-record ng laps
-- Timer alerts: sound at vibration kapag tapos ang countdown
-- No-touch controls: tingin, kindat, at phone flip para sa supported time actions
-- LOOK PAUSE: pause at resume depende kung nakatingin ka sa screen
-- WINK CONTROL: kindat para sa timer actions at lap records
-- FLIP TIMER: ibaliktad ang phone para magsimula, iharap pataas para mag-pause
-- SMILE MODE: kontrolin ang timer gamit ang smile detection
-- History: tingnan ang recent timing records at timeline events
+- Mag-set ng oras na kailangan mo
+- Start, pause, resume, at reset
+- Tunog at vibration kapag tapos ang timer
+- Para sa workout, pagluluto, pag-aaral, pahinga, at routine
 
-Hindi lang para sa focus o study sessions ang Wink Timer. Gamitin ito bilang alarm clock, cooking timer, workout timer, study timer, work timer, break timer, o quick stopwatch.
+No-touch controls
 
-Maaaring mag-iba ang camera-based features depende sa device performance, ilaw, angle ng mukha, at posisyon ng camera.
+- Wink mode: kontrolin ang timer gamit ang wink
+- Look mode: pause habang nakatingin sa screen, resume kapag umiwas ang tingin
+- Smile mode: kontrolin ang timer gamit ang smile detection
+- Flip mode: kontrolin ang timer gamit ang posisyon ng phone
+
+Stopwatch
+
+- Sukatin ang elapsed time
+- Mag-record ng laps
+- Para sa workout, pag-aaral, test, at paulit-ulit na gawain
+
+Alarm
+
+- Mag-set ng alarm para sa paggising, klase, meeting, workout, at pahinga
+- Daily repeat, weekday repeat, at date alarm
+- Alarm sound, volume, vibration, at snooze
+- Gumawa, mag-edit, i-on, i-off, at mag-delete ng maraming alarm
+
+History
+
+- Tingnan ang recent timer at stopwatch records
+- Balikan ang madalas mong timekeeping flow
+
+Gamitin kapag:
+
+- Mahirap i-tap ang screen habang nagwo-workout
+- Basa ang kamay habang nagluluto
+- Gusto mong pamahalaan ang study o work time nang hindi napuputol ang focus
+- Nagtatime ka ng stretching, meditation, pahinga, o routine
+- Gusto mong gamitin ang stopwatch at alarm sa iisang app
+- Kailangan mong mabilis na sukatin ang paulit-ulit na gawain
+
+Dinadagdagan ng Wink Timer ang basic countdown timer, stopwatch, at alarm ng wink, look, smile, at flip controls.
+
+Maaaring mag-iba ang resulta ng camera-based no-touch features depende sa performance ng device, ilaw, anggulo ng mukha, at posisyon ng camera.
 ```
 
 ## 앱 설치 캠페인 헤드라인
 
 ```text
-Alarm, Timer, Stopwatch
-Control time without tapping
-Repeating alarms with snooze
-Stopwatch with a wink
-Flip phone to start timer
+No-touch countdown timer
+Timer para sa workout at luto
+Kontrolin gamit ang wink
+Kontrolin gamit ang ngiti
+I-flip ang phone para mag-time
 ```
 
 ## 앱 설치 캠페인 설명
 
 ```text
-Kontrolin ang timer gamit ang tingin, kindat, o ngiti; mag-record ng laps sa kindat.
-Kapag basa ang kamay o nagwo-workout, kontrolin ang timer nang hindi tina-tap ang screen.
-Piliin ang pause sa tingin, kindat control, smile control, o flip timer ayon sa sitwasyon.
-Sa pagluluto, workout, pag-aaral, o trabaho, mas madali mong maitutuloy ang timer.
-Gamitin ang camera detection para mag-start, pause, resume, at record sa mas kaunting tap.
+Kontrolin ang timer nang hindi tina-tap ang screen habang nagwo-workout, nagluluto, nag-aaral, o nagtatrabaho.
+Gumamit ng wink, tingin, ngiti, at phone flip para mas madali ang countdown.
+Basic timer, stopwatch, at alarm sa iisang simple na app.
+Kapag basa, naka-gloves, o busy ang kamay, mas madali pa rin ang timing.
 ```
 
 ## 알람 중심 광고 소재
@@ -76,38 +100,38 @@ Gamitin ang camera detection para mag-start, pause, resume, at record sa mas kau
 ### 헤드라인
 
 ```text
-Repeating alarms with snooze
-Weekday alarms made easy
-Date alarms in one app
-Alarms with sound and vibration
-Alarm and timer together
-Wake, workout, break alarms
+Timer at alarm sa iisang app
+Repeating alarm at snooze
+Workout at cooking timer
+May kasamang stopwatch
+Alarm ayon sa araw at date
 ```
 
 ### 설명
 
 ```text
-Mag-set ng wake-up, workout, class, at break alarms na daily, weekly, o by date.
-Piliin ang sound, volume, vibration, at snooze, at i-manage ang maraming alarm sa isang app.
-Kapag tumunog ang alarm, ihinto o i-snooze ito, pagkatapos ay gamitin ang timer at stopwatch.
+Pamahalaan ang countdown timer, stopwatch, at alarm sa iisang lugar.
+Mag-set ng alarm para sa paggising, klase, meeting, workout, at pahinga ayon sa araw o date.
+Piliin ang sound, volume, vibration, at snooze, tapos pamahalaan ang maraming alarm.
 ```
 
 ## 스크린샷 문구
 
 ```text
-Alarm, timer, stopwatch
-Repeating alarms at snooze
-Weekday at date alarms
-Control time without tapping
-Timer buttons for quick use
-Alerts with sound and vibration
-Mag-record ng laps sa kindat
-Flip phone to start
+No-touch countdown timer
+Timer para sa workout, luto, aral
+Wink para kontrolin ang timer
+Kontrol gamit ang smile detection
+Look pause at resume
+Flip timer gamit ang phone
+Stopwatch at lap records
+Alarm, snooze, repeat settings
 ```
 
 ## 문구 기준
 
 - 앱을 포커스 전용 앱으로 표현하지 않습니다.
+- BASIC TIMER가 기본 타이머 경험임을 유지합니다.
 - 수익화 관련 표현을 사용하지 않습니다.
 - 카메라 인식이 항상 완벽하다고 약속하지 않습니다.
 - 알람이 모든 기기와 절전 설정에서 항상 정확히 울린다고 보장하지 않습니다.
